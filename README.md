@@ -2,9 +2,24 @@
 
 The backend is the secure source of business rules, persistence, document processing, AI orchestration, and the versioned `/api/v1` contract for CampusHire AI.
 
-## Current status
+## Local development
 
-Phase 0 establishes product and engineering governance. FastAPI, PostgreSQL, development services, tests, and CI are introduced in Phase 1.
+1. Copy `.env.example` to `.env`.
+2. Start PostgreSQL with `docker compose up -d postgres`.
+3. Create and activate a Python virtual environment.
+4. Install dependencies with `python -m pip install -e ".[dev]"`.
+5. Run migrations with `alembic upgrade head`.
+6. Start the API with `uvicorn app.main:app --reload`.
+
+The API is available at `http://localhost:8000`, with versioned routes under `/api/v1`.
+
+## Checks
+
+```text
+ruff check .
+mypy app
+pytest
+```
 
 ## Boundaries
 
