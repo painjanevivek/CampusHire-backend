@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -15,6 +15,7 @@ from app.modules.auth.dependencies import (
     require_roles,
     verify_authenticated_csrf,
 )
+from app.modules.resumes.builder import ResumeContent, generate_pdf, readiness_score
 from app.modules.resumes.service import (
     InvalidResumeError,
     resolve_storage_key,
@@ -24,6 +25,23 @@ from app.modules.resumes.service import (
 )
 
 router = APIRouter(prefix="/resumes", dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
+
+
+@router.post("/generate", dependencies=[Depends(verify_authenticated_csrf)])
+async def generate_resume(payload: ResumeContent, user: CurrentUser) -> Response:
+    data = generate_pdf(payload)
+    score, _ = readiness_score(payload)
+    return Response(
+        data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="campushire-{user.id}.pdf"',
+            "X-CampusHire-Readiness": str(score),
+            "X-CampusHire-Rubric": "resume-readiness-v1",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.post(
