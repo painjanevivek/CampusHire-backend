@@ -1,0 +1,21 @@
+import pytest
+
+from app.modules.matching.scoring import qdrant_payload, score_match
+
+
+def test_match_components_are_versioned_and_explainable() -> None:
+    result = score_match([1.0, 0.0], [0.8, 0.2], {"Python", "SQL"}, {"python", "sql"}, 0.8)
+    assert result.score >= 90
+    assert result.skill_coverage == 1.0
+    assert result.version == "match-v1"
+
+
+def test_vector_dimensions_must_match() -> None:
+    with pytest.raises(ValueError):
+        score_match([1.0], [1.0, 0.0], set(), set(), 0)
+
+
+def test_qdrant_metadata_always_carries_institution_boundary() -> None:
+    payload = qdrant_payload("inst-1", "student-1", "resume-3", "gemini-embedding-001")
+    assert payload["institution_id"] == "inst-1"
+    assert payload["resume_version"] == "resume-3"
