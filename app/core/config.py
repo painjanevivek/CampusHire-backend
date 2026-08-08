@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     session_cookie_name: str = "campushire_session"
     csrf_cookie_name: str = "campushire_csrf"
     session_ttl_hours: int = Field(default=12, ge=1, le=720)
+    resume_storage_path: str = ".data/resumes"
+    resume_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    resume_max_pages: int = Field(default=3, ge=1, le=20)
 
     @property
     def is_development(self) -> bool:
