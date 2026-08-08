@@ -12,10 +12,14 @@ class Settings(BaseSettings):
     app_host: str = "127.0.0.1"
     app_port: int = Field(default=8000, ge=1, le=65535)
     database_url: str = "postgresql+asyncpg://campushire:campushire@localhost:5432/campushire"
+    redis_url: str = "redis://localhost:6379/0"
     frontend_origins: list[AnyHttpUrl] = Field(
         default_factory=lambda: [AnyHttpUrl("http://localhost:3000")]
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    session_cookie_name: str = "campushire_session"
+    csrf_cookie_name: str = "campushire_csrf"
+    session_ttl_hours: int = Field(default=12, ge=1, le=720)
 
     @property
     def is_development(self) -> bool:
