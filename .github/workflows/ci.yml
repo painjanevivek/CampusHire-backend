@@ -22,6 +22,7 @@ jobs:
       - run: ruff check .
       - run: mypy app
       - run: pytest
+      - run: python scripts/smoke_phases.py
       - run: python -m pip check
       - run: alembic heads
       - name: Reject committed private keys

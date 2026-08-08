@@ -1,0 +1,1 @@
+{"institution":{"id":"00000000-0000-4000-8000-000000000001","name":"Campus Institute (Fictional)"},"student":{"name":"Asha Patil","email":"asha@example.edu","prn":"DEMO-CS-280","skills":["Python","SQL","React","FastAPI"],"target_role":"AI Engineer"},"role":{"company":"Northstar Labs (Fictional)","title":"Graduate Software Engineer","required_skills":["Python","SQL"]}}
