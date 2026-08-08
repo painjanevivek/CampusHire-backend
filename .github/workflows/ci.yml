@@ -22,3 +22,7 @@ jobs:
       - run: ruff check .
       - run: mypy app
       - run: pytest
+      - run: python -m pip check
+      - run: alembic heads
+      - name: Reject committed private keys
+        run: '! git grep -n -E "BEGIN (RSA|OPENSSH) PRIVATE KEY" -- .'
