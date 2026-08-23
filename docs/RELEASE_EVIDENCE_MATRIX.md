@@ -10,7 +10,8 @@ This matrix names executable evidence, not production approval. Human and hostin
 | FR-013–016 roadmap and notifications | roadmap/notification tests and phase smoke runner | dashboard, roadmap, notification, and safe-link tests | student UAT and accessibility review |
 | NFR security and privacy | auth/CSRF/CORS/upload/tenant tests, dependency checks, deletion tests | CSP/API-destination tests, dependency audit | separate Deep Scans and cross-boundary review |
 | NFR accessibility and responsive UX | semantic OpenAPI errors | Testing Library + axe shell checks, production build, manual browser matrix | screen-reader review with pilot users |
-| NFR reliability and recovery | PostgreSQL migration rehearsal, job lease/retry tests, provider fakes | contract check and failure-state tests | staging backup restore and worker kill drill |
-| NFR performance | deterministic evaluation metadata and request duration logs | bundle/build evidence | representative staging load baseline |
+| NFR reliability and recovery | `scripts/rehearse_postgres_recovery.ps1`, timed PostgreSQL 16 rollback/restore report, job lease/retry tests, provider fakes | contract check, release smoke, rollback guide, and failure-state tests | managed staging restore and vendor worker/dependency drills |
+| NFR performance | `scripts/measure_pilot_http.py`, measured local HTTP baseline, deterministic evaluation metadata, request duration logs | production build and public-route release smoke | representative staging load, approved SLOs/cost ceilings, and worker throughput |
+| Pilot acceptance | backend scenario pack and known-limitations register | student/admin UAT, keyboard/mobile/reduced-motion browser matrix | named stakeholder, accessibility, privacy, and security approvals |
 
 No flaky test is quarantined. A future quarantine must identify an owner, reason, issue, and expiry date in the same change.
