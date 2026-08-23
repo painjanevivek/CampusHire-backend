@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     resume_max_versions: int = Field(default=25, ge=1, le=100)
     resume_job_max_attempts: int = Field(default=3, ge=1, le=10)
     resume_worker_poll_seconds: float = Field(default=2.0, ge=0.2, le=30)
+    resume_worker_lease_seconds: int = Field(default=300, ge=30, le=3_600)
     malware_scanner: Literal["marker", "clamav"] = "marker"
     clamav_host: str = "127.0.0.1"
     clamav_port: int = Field(default=3310, ge=1, le=65535)

@@ -18,7 +18,7 @@ from app.models.resume import (
     SuggestionStatus,
 )
 from app.modules.resumes.builder import ResumeContent, generate_pdf, suggestion_is_supported
-from app.modules.resumes.pipeline import RETRYABLE_ERRORS
+from app.modules.resumes.pipeline import RETRYABLE_ERRORS, record_job_event
 from app.modules.resumes.schemas import (
     ExtractionReviewRequest,
     ResumeJobResponse,
@@ -75,6 +75,16 @@ def _job_response(job: ResumeProcessingJob | None) -> ResumeJobResponse | None:
         retryable=bool(
             job.safe_error_code in RETRYABLE_ERRORS and job.attempts < job.max_attempts
         ),
+        cancellable=job.status
+        in {
+            JobStatus.QUEUED.value,
+            JobStatus.PROCESSING.value,
+            JobStatus.CANCELLATION_REQUESTED.value,
+            JobStatus.FAILED.value,
+        },
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        duration_ms=job.duration_ms,
     )
 
 
@@ -162,6 +172,8 @@ async def create_uploaded_version(
             max_attempts=settings.resume_job_max_attempts,
         )
         db.add(job)
+        await db.flush()
+        record_job_event(db, job, "queued")
         await db.commit()
         await db.refresh(job)
     except Exception:
@@ -367,6 +379,12 @@ async def retry_job(db: AsyncSession, *, user_id: UUID, version_id: UUID) -> Res
     job.status = JobStatus.QUEUED.value
     job.available_at = datetime.now(UTC)
     job.finished_at = None
+    job.duration_ms = None
+    job.cancellation_requested_at = None
+    job.claimed_by = None
+    job.lease_expires_at = None
     version.status = ResumeStatus.QUEUED.value
+    version.safe_error_code = None
+    record_job_event(db, job, "student_retry_queued")
     await db.commit()
     return await get_owned_version(db, user_id, version_id)

@@ -19,7 +19,13 @@ from app.models.recruitment import (
     PlacementRole,
     SavedOpportunity,
 )
-from app.models.resume import Resume, ResumeProcessingJob, ResumeSuggestion, ResumeVersion
+from app.models.resume import (
+    Resume,
+    ResumeJobEvent,
+    ResumeProcessingJob,
+    ResumeSuggestion,
+    ResumeVersion,
+)
 
 __all__ = [
     "AuditEvent",
@@ -41,6 +47,7 @@ __all__ = [
     "PlacementDrive",
     "PlacementRole",
     "Resume",
+    "ResumeJobEvent",
     "ResumeProcessingJob",
     "ResumeSuggestion",
     "ResumeVersion",

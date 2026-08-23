@@ -20,6 +20,7 @@ class ResumeStatus(StrEnum):
     REVIEW_REQUIRED = "review_required"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class ScanStatus(StrEnum):
@@ -32,8 +33,10 @@ class ScanStatus(StrEnum):
 class JobStatus(StrEnum):
     QUEUED = "queued"
     PROCESSING = "processing"
+    CANCELLATION_REQUESTED = "cancellation_requested"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class SuggestionStatus(StrEnum):
@@ -120,9 +123,41 @@ class ResumeProcessingJob(Base, TimestampMixin):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    claimed_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    cancellation_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     safe_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     resume_version: Mapped[ResumeVersion] = relationship(back_populates="processing_job")
+    events: Mapped[list["ResumeJobEvent"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+
+
+class ResumeJobEvent(Base):
+    """Append-only, PII-minimized operational history for a resume job."""
+
+    __tablename__ = "resume_job_events"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resume_processing_jobs.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(24), index=True)
+    attempt: Mapped[int] = mapped_column(Integer)
+    worker_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    safe_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    job: Mapped[ResumeProcessingJob] = relationship(back_populates="events")
 
 
 class ResumeSuggestion(Base, TimestampMixin):

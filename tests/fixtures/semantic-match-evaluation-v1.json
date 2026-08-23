@@ -1,0 +1,46 @@
+{
+  "dataset_version": "semantic-match-evaluation-v1",
+  "scoring_version": "match-v1",
+  "cases": [
+    {
+      "id": "strong-alignment",
+      "resume_vector": [1.0, 0.0],
+      "role_vector": [0.98, 0.02],
+      "student_skills": ["Python", "SQL"],
+      "required_skills": ["python", "sql"],
+      "project_evidence": 1.0,
+      "minimum_score": 95,
+      "maximum_score": 100
+    },
+    {
+      "id": "partial-alignment",
+      "resume_vector": [0.7, 0.7],
+      "role_vector": [1.0, 0.0],
+      "student_skills": ["Python"],
+      "required_skills": ["Python", "SQL"],
+      "project_evidence": 0.5,
+      "minimum_score": 60,
+      "maximum_score": 70
+    },
+    {
+      "id": "no-evidence",
+      "resume_vector": [0.0, 1.0],
+      "role_vector": [1.0, 0.0],
+      "student_skills": [],
+      "required_skills": ["Python"],
+      "project_evidence": 0.0,
+      "minimum_score": 0,
+      "maximum_score": 0
+    },
+    {
+      "id": "bounded-inputs",
+      "resume_vector": [1.0, 0.0],
+      "role_vector": [1.0, 0.0],
+      "student_skills": [],
+      "required_skills": [],
+      "project_evidence": 4.0,
+      "minimum_score": 100,
+      "maximum_score": 100
+    }
+  ]
+}

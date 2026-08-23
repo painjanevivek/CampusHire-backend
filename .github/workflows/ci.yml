@@ -27,6 +27,7 @@ jobs:
           python scripts/export_openapi.py
           git diff --exit-code -- openapi/campushire.openapi.json
       - run: python scripts/smoke_phases.py
+      - run: python scripts/evaluate_matching.py
       - run: python -m pip check
       - run: alembic heads
       - name: Reject committed private keys

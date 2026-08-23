@@ -8,6 +8,7 @@ from app.api.v1.routes.health import router as health_router
 from app.api.v1.routes.institutions import router as institutions_router
 from app.api.v1.routes.intelligence import admin_router as admin_intelligence_router
 from app.api.v1.routes.intelligence import student_router as student_intelligence_router
+from app.api.v1.routes.operations import router as operations_router
 from app.api.v1.routes.opportunities import router as opportunities_router
 from app.api.v1.routes.profiles import router as profiles_router
 from app.api.v1.routes.resumes import router as resumes_router
@@ -24,3 +25,4 @@ api_router.include_router(student_intelligence_router, tags=["semantic relevance
 api_router.include_router(admin_recruitment_router, tags=["placement administration"])
 api_router.include_router(admin_intelligence_router, tags=["reviewed intelligence"])
 api_router.include_router(admin_engagement_router, tags=["placement communication"])
+api_router.include_router(operations_router, tags=["operations"])

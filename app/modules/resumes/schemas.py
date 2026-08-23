@@ -12,6 +12,10 @@ class ResumeJobResponse(BaseModel):
     max_attempts: int
     safe_error_code: str | None
     retryable: bool
+    cancellable: bool
+    started_at: datetime | None
+    finished_at: datetime | None
+    duration_ms: int | None
 
 
 class ResumeSuggestionResponse(BaseModel):

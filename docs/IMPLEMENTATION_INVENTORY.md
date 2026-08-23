@@ -1,6 +1,6 @@
 # Backend Implementation Inventory
 
-This inventory maps backend capability through Phase 5 without treating domain-only code as an integrated API.
+This inventory maps backend capability through Phase 6 without treating domain-only code as an integrated API.
 
 | Domain | Current disposition | Owner phase |
 | --- | --- | --- |
@@ -13,9 +13,10 @@ This inventory maps backend capability through Phase 5 without treating domain-o
 | Recruitment and eligibility | Institution-scoped companies, drives, roles, rules, opportunities, immutable applications and accountable review are integrated | Complete in 3 |
 | Matching and policy | Privacy-minimized, versioned relevance evidence and reviewed role/policy APIs degrade safely when providers are unavailable | Complete in 4 |
 | Roadmaps and notifications | Eight curated versioned DAG paths, prerequisite-safe progress, deterministic next action, deduplicated safe-link notifications and application update hooks | Complete in 5 |
+| Jobs and observability | Leased, cancellable resume jobs with terminal stale recovery, tenant-scoped operator controls, immutable job events, redacted structured request logs and a versioned semantic evaluation fixture | Complete in 6 |
 
 The backend OpenAPI document is authoritative. Run `.venv/Scripts/python.exe scripts/export_openapi.py` on Windows or `python scripts/export_openapi.py` in CI, then review `openapi/campushire.openapi.json`.
 
-## Phase 2 operational boundary
+## Operational boundary
 
-`python -m app.worker` runs the supervised resume worker separately from the API. Development may use the deterministic marker scanner; staging and production require ClamAV. Redis is an optional wake-up signal only: durable job state, retry scheduling, heartbeats and recovery remain authoritative in PostgreSQL. See `docs/RESUME_PIPELINE.md` for the failure model.
+`python -m app.worker` runs the supervised resume worker separately from the API. Development may use the deterministic marker scanner; staging and production require ClamAV. Redis is an optional wake-up signal only: durable job state, retry scheduling, leases, heartbeats and recovery remain authoritative in PostgreSQL. See `docs/RESUME_PIPELINE.md` and `docs/OPERATIONS_AND_OBSERVABILITY.md` for the failure and operator models.

@@ -33,3 +33,23 @@ def test_policy_graph_does_not_invent_missing_evidence() -> None:
         {"question": "unknown rule", "chunks": [], "citations": [], "answer": "", "iterations": 0}
     )
     assert result["answer"] == "Policy evidence not found."
+
+
+def test_policy_retrieval_normalizes_punctuation() -> None:
+    result = policy_graph.invoke(
+        {
+            "question": "backlog",
+            "chunks": [
+                {
+                    "text": "No active backlog.",
+                    "section": "Eligibility 4.2",
+                    "page": 3,
+                    "approved": True,
+                }
+            ],
+            "citations": [],
+            "answer": "",
+            "iterations": 0,
+        }
+    )
+    assert result["citations"] == ["Eligibility 4.2 · page 3"]

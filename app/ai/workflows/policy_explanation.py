@@ -1,3 +1,4 @@
+import re
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -19,9 +20,15 @@ class PolicyState(TypedDict):
 
 
 def retrieve(state: PolicyState) -> dict[str, object]:
-    terms = set(state["question"].casefold().split())
+    terms = set(re.findall(r"[a-z0-9]+", state["question"].casefold()))
     approved = [chunk for chunk in state["chunks"] if chunk["approved"]]
-    scored = [(len(terms & set(chunk["text"].casefold().split())), chunk) for chunk in approved]
+    scored = [
+        (
+            len(terms & set(re.findall(r"[a-z0-9]+", chunk["text"].casefold()))),
+            chunk,
+        )
+        for chunk in approved
+    ]
     ranked = [
         chunk
         for score, chunk in sorted(scored, key=lambda item: item[0], reverse=True)

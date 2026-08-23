@@ -23,6 +23,7 @@ ruff check .
 mypy app
 pytest
 python scripts/export_openapi.py
+python scripts/evaluate_matching.py
 ```
 
 ## Boundaries

@@ -10,6 +10,6 @@ The worker performs these ordered gates:
 4. Create conservative wording suggestions that add no metrics or outcomes.
 5. Expose the version as `review_required`; never update profile or matching facts automatically.
 
-Job states are `queued`, `processing`, `completed`, and `failed`. Storage/scanner outages retry with bounded backoff; malformed, encrypted, oversized, or infected files fail closed. Repeated processing is idempotent because each upload checksum and each version job are unique.
+Job states are `queued`, `processing`, `cancellation_requested`, `completed`, `failed`, and `cancelled`. Claims carry a random worker identity and bounded lease; storage/scanner boundaries refresh the heartbeat. Expired leases requeue within the retry budget and become inspectable terminal failures after exhaustion. Storage/scanner outages retry with bounded backoff; malformed, encrypted, oversized, or infected files fail closed. Repeated processing is idempotent because each upload checksum and each version job are unique.
 
 Development uses `LocalObjectStore` and `MarkerScanner`. Before staging, provide an S3-compatible adapter behind the `ObjectStore` protocol and set `MALWARE_SCANNER=clamav`. Downloads require ownership, a clean scan, private no-store caching, and safe `Content-Disposition` metadata.
