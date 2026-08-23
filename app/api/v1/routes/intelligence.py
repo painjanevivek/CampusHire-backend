@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.ai.providers.gemini import GeminiProvider
 from app.core.config import get_settings
+from app.core.rate_limit import enforce_fixed_window_limit
 from app.models.auth import UserRole
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
@@ -62,10 +63,22 @@ def _provider() -> GeminiProvider | None:
         return None
 
 
-@student_router.get("/opportunities/{role_id}/match", response_model=SemanticMatchResponse)
+@student_router.post(
+    "/opportunities/{role_id}/match",
+    response_model=SemanticMatchResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
 async def read_semantic_match(
-    role_id: UUID, db: Database, tenant: CurrentTenant
+    role_id: UUID, request: Request, db: Database, tenant: CurrentTenant
 ) -> SemanticMatchResponse:
+    settings = get_settings()
+    await enforce_fixed_window_limit(
+        request,
+        namespace="semantic-match",
+        identity=f"{tenant.institution_id}:{tenant.user_id}",
+        limit=settings.semantic_match_requests_per_minute,
+        unavailable_detail="Semantic matching is temporarily unavailable",
+    )
     try:
         response = await semantic_match(
             db,

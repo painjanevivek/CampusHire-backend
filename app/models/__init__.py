@@ -7,6 +7,7 @@ from app.models.engagement import (
     StudentRoadmap,
 )
 from app.models.intelligence import PolicyDocument, RoleExtractionProposal, SemanticMatchEvidence
+from app.models.privacy import DataDeletionRequest
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
@@ -40,6 +41,7 @@ __all__ = [
     "RoadmapTemplate",
     "SemanticMatchEvidence",
     "Company",
+    "DataDeletionRequest",
     "EligibilityEvaluation",
     "EligibilityRuleSet",
     "Institution",

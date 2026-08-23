@@ -1,4 +1,5 @@
 from google import genai
+from google.genai import types
 
 from app.core.config import get_settings
 
@@ -8,7 +9,10 @@ class GeminiProvider:
         settings = get_settings()
         if not settings.gemini_api_key:
             raise RuntimeError("Gemini is not configured")
-        self._client = genai.Client(api_key=settings.gemini_api_key)
+        self._client = genai.Client(
+            api_key=settings.gemini_api_key,
+            http_options=types.HttpOptions(timeout=settings.gemini_timeout_ms),
+        )
         self._embedding_model = settings.gemini_embedding_model
 
     def embed(self, text: str) -> list[float]:

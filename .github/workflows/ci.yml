@@ -11,6 +11,23 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: campushire
+          POSTGRES_PASSWORD: campushire
+          POSTGRES_DB: campushire_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campushire -d campushire_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://campushire:campushire@127.0.0.1:5432/campushire_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,6 +46,11 @@ jobs:
       - run: python scripts/smoke_phases.py
       - run: python scripts/evaluate_matching.py
       - run: python -m pip check
-      - run: alembic heads
+      - name: Rehearse the latest PostgreSQL migration
+        run: |
+          alembic upgrade head
+          alembic downgrade 20260824_0009
+          alembic upgrade head
+          test "$(alembic current | awk '{print $1}')" = "20260824_0010"
       - name: Reject committed private keys
         run: '! git grep -n -E "BEGIN (RSA|OPENSSH) PRIVATE KEY" -- .'

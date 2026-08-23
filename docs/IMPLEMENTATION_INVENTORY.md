@@ -14,6 +14,7 @@ This inventory maps backend capability through Phase 6 without treating domain-o
 | Matching and policy | Privacy-minimized, versioned relevance evidence and reviewed role/policy APIs degrade safely when providers are unavailable | Complete in 4 |
 | Roadmaps and notifications | Eight curated versioned DAG paths, prerequisite-safe progress, deterministic next action, deduplicated safe-link notifications and application update hooks | Complete in 5 |
 | Jobs and observability | Leased, cancellable resume jobs with terminal stale recovery, tenant-scoped operator controls, immutable job events, redacted structured request logs and a versioned semantic evaluation fixture | Complete in 6 |
+| Privacy deletion | Exact-confirmation student deletion, explicit application retention hold, transactional record removal, and leased private-object cleanup with bounded retries | Complete in 6; institutional retention approval remains a pilot gate |
 
 The backend OpenAPI document is authoritative. Run `.venv/Scripts/python.exe scripts/export_openapi.py` on Windows or `python scripts/export_openapi.py` in CI, then review `openapi/campushire.openapi.json`.
 

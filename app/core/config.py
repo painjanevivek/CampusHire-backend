@@ -27,12 +27,16 @@ class Settings(BaseSettings):
     resume_job_max_attempts: int = Field(default=3, ge=1, le=10)
     resume_worker_poll_seconds: float = Field(default=2.0, ge=0.2, le=30)
     resume_worker_lease_seconds: int = Field(default=300, ge=30, le=3_600)
+    privacy_cleanup_max_attempts: int = Field(default=5, ge=1, le=20)
+    privacy_cleanup_lease_seconds: int = Field(default=300, ge=30, le=3_600)
     malware_scanner: Literal["marker", "clamav"] = "marker"
     clamav_host: str = "127.0.0.1"
     clamav_port: int = Field(default=3310, ge=1, le=65535)
     clamav_timeout_seconds: float = Field(default=15.0, ge=1, le=120)
     gemini_api_key: str | None = None
     gemini_embedding_model: str = "gemini-embedding-001"
+    gemini_timeout_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    semantic_match_requests_per_minute: int = Field(default=10, ge=1, le=100)
     qdrant_url: str = "http://localhost:6333"
 
     @model_validator(mode="after")

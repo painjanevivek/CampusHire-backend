@@ -19,3 +19,11 @@ Stop writes, capture the incident timestamp, restore the latest verified Postgre
 ## Policy or matching incident
 
 Disable the affected institution feature flag, preserve rule, prompt, and model versions and audit evidence, notify the named TNP owner, and revert to deterministic rules and manual review. Do not silently recalculate historical decisions.
+
+## Security or privacy incident
+
+Classify severity using affected tenants, data sensitivity, privilege gained, and active exploitation. Contain first: revoke affected sessions and credentials, disable the narrow route/provider/worker, and preserve immutable request IDs, audit events, deployment identifiers, and database/object-store evidence. Do not copy resume contents or secrets into tickets or chat. The named incident lead decides whether institutional and data-subject notification is required with qualified legal/privacy stakeholders. Recover from verified artifacts, validate tenant boundaries, rotate exposed credentials, monitor for recurrence, and complete a blameless retrospective with owned follow-up dates.
+
+## Private-object deletion backlog
+
+Inspect pseudonymous deletion request IDs, status, attempt count, safe error code, and oldest `available_at`. Restore the object-store dependency before scaling workers. Expired `processing` leases are recoverable and delete is idempotent; do not reconstruct deleted account records. A terminal `failed` record requires an authorized operator procedure and evidence that the opaque keys were removed before the request is closed.

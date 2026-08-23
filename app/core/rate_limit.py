@@ -10,11 +10,17 @@ from app.core.config import get_settings
 _fallback: dict[str, tuple[int, int]] = defaultdict(lambda: (0, 0))
 
 
-async def enforce_auth_rate_limit(request: Request) -> None:
+async def enforce_fixed_window_limit(
+    request: Request,
+    *,
+    namespace: str,
+    identity: str,
+    limit: int,
+    unavailable_detail: str,
+) -> None:
     settings = get_settings()
-    identity = request.client.host if request.client else "unknown"
     digest = hashlib.sha256(f"{identity}:{request.url.path}".encode()).hexdigest()
-    key = f"rate:auth:{digest}"
+    key = f"rate:{namespace}:{digest}"
     try:
         client = Redis.from_url(
             settings.redis_url,
@@ -30,14 +36,24 @@ async def enforce_auth_rate_limit(request: Request) -> None:
         if not settings.is_development:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Authentication is temporarily unavailable",
+                detail=unavailable_detail,
             ) from error
         minute = int(datetime.now(UTC).timestamp() // 60)
         stored_minute, stored_count = _fallback[key]
         count = stored_count + 1 if stored_minute == minute else 1
         _fallback[key] = (minute, count)
-    if count > 10:
+    if count > limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts. Try again shortly",
         )
+
+
+async def enforce_auth_rate_limit(request: Request) -> None:
+    await enforce_fixed_window_limit(
+        request,
+        namespace="auth",
+        identity=request.client.host if request.client else "unknown",
+        limit=10,
+        unavailable_detail="Authentication is temporarily unavailable",
+    )

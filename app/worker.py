@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.logging import configure_logging
+from app.modules.privacy.service import process_next_deletion_cleanup
 from app.modules.resumes.pipeline import claim_next_job, process_job, recover_stale_jobs
 from app.modules.resumes.scanner import build_scanner
 from app.modules.resumes.storage import LocalObjectStore
@@ -23,6 +24,24 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
         extra={"event": "resume_worker_started", "worker_id": worker_identity},
     )
     while True:
+        async with SessionFactory() as db:
+            deletion_id = await process_next_deletion_cleanup(
+                db,
+                store=store,
+                lease_seconds=settings.privacy_cleanup_lease_seconds,
+            )
+        if deletion_id is not None:
+            logger.info(
+                "private_object_cleanup_processed",
+                extra={
+                    "event": "private_object_cleanup_processed",
+                    "resource_id": str(deletion_id),
+                    "worker_id": worker_identity,
+                },
+            )
+            if once:
+                return
+            continue
         async with SessionFactory() as db:
             recovered = await recover_stale_jobs(
                 db, stale_after_seconds=settings.resume_worker_lease_seconds

@@ -527,6 +527,50 @@
         "title": "DashboardResponse",
         "type": "object"
       },
+      "DataDeletionCreate": {
+        "properties": {
+          "confirmation": {
+            "const": "DELETE MY CAMPUSHIRE DATA",
+            "title": "Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "DataDeletionCreate",
+        "type": "object"
+      },
+      "DataDeletionResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "requested_at",
+          "message"
+        ],
+        "title": "DataDeletionResponse",
+        "type": "object"
+      },
       "DriveCreate": {
         "properties": {
           "company_id": {
@@ -6867,8 +6911,8 @@
       }
     },
     "/api/v1/opportunities/{role_id}/match": {
-      "get": {
-        "operationId": "read_semantic_match_api_v1_opportunities__role_id__match_get",
+      "post": {
+        "operationId": "read_semantic_match_api_v1_opportunities__role_id__match_post",
         "parameters": [
           {
             "in": "path",
@@ -6981,6 +7025,65 @@
         "summary": "Save Opportunity",
         "tags": [
           "opportunities and applications"
+        ]
+      }
+    },
+    "/api/v1/privacy/deletion-requests": {
+      "post": {
+        "operationId": "create_deletion_request_api_v1_privacy_deletion_requests_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataDeletionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Deletion Request",
+        "tags": [
+          "privacy"
         ]
       }
     },
