@@ -1,6 +1,6 @@
 # Backend Implementation Inventory
 
-This inventory maps backend capability through Phase 4 without treating domain-only code as an integrated API.
+This inventory maps backend capability through Phase 5 without treating domain-only code as an integrated API.
 
 | Domain | Current disposition | Owner phase |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ This inventory maps backend capability through Phase 4 without treating domain-o
 | Resume | Private quarantine, mandatory scanning, PostgreSQL-authoritative jobs, reviewed extraction/suggestions, immutable versions and owner-only downloads | Complete in 2 |
 | Recruitment and eligibility | Institution-scoped companies, drives, roles, rules, opportunities, immutable applications and accountable review are integrated | Complete in 3 |
 | Matching and policy | Privacy-minimized, versioned relevance evidence and reviewed role/policy APIs degrade safely when providers are unavailable | Complete in 4 |
-| Roadmaps and notifications | Domain validation and safety rules exist; persistence and user/admin APIs remain | 5 |
+| Roadmaps and notifications | Eight curated versioned DAG paths, prerequisite-safe progress, deterministic next action, deduplicated safe-link notifications and application update hooks | Complete in 5 |
 
 The backend OpenAPI document is authoritative. Run `.venv/Scripts/python.exe scripts/export_openapi.py` on Windows or `python scripts/export_openapi.py` in CI, then review `openapi/campushire.openapi.json`.
 

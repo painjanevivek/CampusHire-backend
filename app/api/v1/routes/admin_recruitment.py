@@ -11,6 +11,7 @@ from app.modules.auth.dependencies import (
     require_roles,
     verify_authenticated_csrf,
 )
+from app.modules.engagement.service import upsert_notification
 from app.modules.recruitment.schemas import (
     AdminApplicationPage,
     ApplicationOverrideCreate,
@@ -453,6 +454,16 @@ async def change_application_status(
         reason=payload.reason,
         details={"status": payload.status},
     )
+    await upsert_notification(
+        db,
+        institution_id=application.institution_id,
+        recipient_user_id=application.student_user_id,
+        event_key=f"application:{application.id}:{payload.status}",
+        title=f"Application {payload.status.replace('_', ' ')}",
+        body=payload.reason or "Your placement application status has changed.",
+        deep_link=f"/opportunities/{application.role_id}",
+        created_by_user_id=principal.user.id,
+    )
     await db.commit()
     return response
 
@@ -488,6 +499,16 @@ async def override_application_decision(
             "status": payload.status,
             "policy_reference": payload.policy_reference or "not_provided",
         },
+    )
+    await upsert_notification(
+        db,
+        institution_id=application.institution_id,
+        recipient_user_id=application.student_user_id,
+        event_key=f"application:{application.id}:override:{payload.status}",
+        title=f"Application {payload.status.replace('_', ' ')}",
+        body=payload.reason,
+        deep_link=f"/opportunities/{application.role_id}",
+        created_by_user_id=principal.user.id,
     )
     await db.commit()
     return response

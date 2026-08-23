@@ -1,5 +1,11 @@
 from app.models.auth import AuditEvent, Institution, InstitutionMembership, Session, User
 from app.models.base import Base
+from app.models.engagement import (
+    InAppNotification,
+    RoadmapProgress,
+    RoadmapTemplate,
+    StudentRoadmap,
+)
 from app.models.intelligence import PolicyDocument, RoleExtractionProposal, SemanticMatchEvidence
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
@@ -21,8 +27,11 @@ __all__ = [
     "ApplicationOverride",
     "ApplicationStatusEvent",
     "Base",
+    "InAppNotification",
     "PolicyDocument",
     "RoleExtractionProposal",
+    "RoadmapProgress",
+    "RoadmapTemplate",
     "SemanticMatchEvidence",
     "Company",
     "EligibilityEvaluation",
@@ -38,5 +47,6 @@ __all__ = [
     "SavedOpportunity",
     "Session",
     "StudentProfile",
+    "StudentRoadmap",
     "User",
 ]
