@@ -22,10 +22,18 @@ def sanitize_filename(value: str) -> str:
 
 
 def validate_pdf(data: bytes, declared_type: str, max_bytes: int, max_pages: int) -> ParsedResume:
+    validate_upload_envelope(data, declared_type, max_bytes)
+    return parse_pdf(data, max_pages)
+
+
+def validate_upload_envelope(data: bytes, declared_type: str, max_bytes: int) -> None:
     if len(data) > max_bytes:
         raise InvalidResumeError("resume_too_large")
     if declared_type != "application/pdf" or not data.startswith(b"%PDF-"):
         raise InvalidResumeError("resume_not_pdf")
+
+
+def parse_pdf(data: bytes, max_pages: int) -> ParsedResume:
     try:
         document = pymupdf.open(stream=data, filetype="pdf")  # type: ignore[no-untyped-call]
         if document.needs_pass:

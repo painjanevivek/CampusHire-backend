@@ -1,9 +1,35 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
 from app.models.profile import StudentProfile
-from app.modules.profiles.schemas import ProfileResponse, ProfileUpdate, ReadinessItem
+from app.modules.profiles.schemas import (
+    EducationUpdate,
+    IdentityUpdate,
+    LinksUpdate,
+    PreferencesUpdate,
+    ProfileResponse,
+    ProfileUpdate,
+    ReadinessItem,
+    SkillsUpdate,
+)
+
+ProfilePayload = (
+    ProfileUpdate
+    | IdentityUpdate
+    | EducationUpdate
+    | SkillsUpdate
+    | PreferencesUpdate
+    | LinksUpdate
+)
+
+
+class ProfileConflictError(RuntimeError):
+    def __init__(self, current_revision: int) -> None:
+        super().__init__("profile_revision_conflict")
+        self.current_revision = current_revision
 
 
 def readiness(profile: StudentProfile) -> tuple[int, bool, list[ReadinessItem]]:
@@ -36,19 +62,40 @@ def readiness(profile: StudentProfile) -> tuple[int, bool, list[ReadinessItem]]:
     return score, complete, items
 
 
-async def get_or_create(db: AsyncSession, user: User) -> StudentProfile:
-    profile = await db.scalar(select(StudentProfile).where(StudentProfile.user_id == user.id))
+async def get_or_create(
+    db: AsyncSession,
+    user: User,
+    institution_id: UUID | None = None,
+    *,
+    lock: bool = False,
+) -> StudentProfile:
+    query = select(StudentProfile).where(StudentProfile.user_id == user.id)
+    if lock:
+        query = query.with_for_update()
+    profile = await db.scalar(query)
     if profile is None:
-        profile = StudentProfile(user_id=user.id)
+        profile = StudentProfile(user_id=user.id, institution_id=institution_id)
         db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+    elif profile.institution_id is None and institution_id is not None:
+        profile.institution_id = institution_id
         await db.commit()
         await db.refresh(profile)
     return profile
 
 
-async def update_profile(db: AsyncSession, user: User, payload: ProfileUpdate) -> StudentProfile:
-    profile = await get_or_create(db, user)
+async def update_profile(
+    db: AsyncSession,
+    user: User,
+    payload: ProfilePayload,
+    institution_id: UUID | None = None,
+) -> StudentProfile:
+    profile = await get_or_create(db, user, institution_id, lock=True)
     data = payload.model_dump(exclude_unset=True)
+    expected_revision = data.pop("expected_revision", None)
+    if expected_revision is not None and expected_revision != profile.revision:
+        raise ProfileConflictError(profile.revision)
     links = dict(profile.external_links)
     for key in ("github_url", "portfolio_url"):
         if key in data:
@@ -63,6 +110,7 @@ async def update_profile(db: AsyncSession, user: User, payload: ProfileUpdate) -
         setattr(profile, key, value)
     profile.external_links = links
     profile.readiness, profile.is_complete, _ = readiness(profile)
+    profile.revision += 1
     await db.commit()
     await db.refresh(profile)
     return profile
@@ -71,6 +119,8 @@ async def update_profile(db: AsyncSession, user: User, payload: ProfileUpdate) -
 def to_response(profile: StudentProfile) -> ProfileResponse:
     score, complete, checklist = readiness(profile)
     return ProfileResponse(
+        id=profile.id,
+        institution_id=profile.institution_id,
         full_name=profile.full_name,
         institution_name=profile.institution_name,
         prn=profile.prn,
@@ -82,6 +132,8 @@ def to_response(profile: StudentProfile) -> ProfileResponse:
         target_roles=profile.target_roles,
         external_links=profile.external_links,
         onboarding_step=profile.onboarding_step,
+        revision=profile.revision,
+        updated_at=profile.updated_at,
         readiness=score,
         is_complete=complete,
         checklist=checklist,

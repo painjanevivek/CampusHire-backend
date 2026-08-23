@@ -1,5 +1,7 @@
+from datetime import datetime
 from typing import Literal
 from urllib.parse import urlparse
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -20,6 +22,7 @@ class SkillItem(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
+    expected_revision: int | None = Field(default=None, ge=1)
     full_name: str | None = Field(default=None, min_length=2, max_length=160)
     institution_name: str | None = Field(default=None, min_length=2, max_length=200)
     prn: str | None = Field(default=None, min_length=2, max_length=64)
@@ -69,6 +72,8 @@ class ReadinessItem(BaseModel):
 
 
 class ProfileResponse(BaseModel):
+    id: UUID
+    institution_id: UUID | None
     full_name: str | None
     institution_name: str | None
     prn: str | None
@@ -80,6 +85,61 @@ class ProfileResponse(BaseModel):
     target_roles: list[str]
     external_links: dict[str, str]
     onboarding_step: int
+    revision: int
+    updated_at: datetime
     readiness: int
     is_complete: bool
     checklist: list[ReadinessItem]
+
+
+class IdentityUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    full_name: str | None = Field(default=None, min_length=2, max_length=160)
+    institution_name: str | None = Field(default=None, min_length=2, max_length=200)
+    prn: str | None = Field(default=None, min_length=2, max_length=64)
+    department: str | None = Field(default=None, min_length=2, max_length=120)
+    academic_year: str | None = Field(default=None, max_length=32)
+    phone: str | None = Field(default=None, pattern=r"^\+?[0-9 ()-]{7,24}$")
+    onboarding_step: int | None = Field(default=None, ge=1, le=8)
+
+
+class EducationUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    education: list[EducationItem] = Field(max_length=6)
+    onboarding_step: int | None = Field(default=None, ge=1, le=8)
+
+
+class SkillsUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    skills: list[SkillItem] = Field(max_length=40)
+    onboarding_step: int | None = Field(default=None, ge=1, le=8)
+
+    @field_validator("skills")
+    @classmethod
+    def unique_skills(cls, value: list[SkillItem]) -> list[SkillItem]:
+        if len({item.name.strip().casefold() for item in value}) != len(value):
+            raise ValueError("Each skill can be added only once")
+        return value
+
+
+class PreferencesUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    target_roles: list[str] = Field(min_length=1, max_length=5)
+    onboarding_step: int | None = Field(default=None, ge=1, le=8)
+
+
+class LinksUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    github_url: str | None = Field(default=None, max_length=500)
+    portfolio_url: str | None = Field(default=None, max_length=500)
+    onboarding_step: int | None = Field(default=None, ge=1, le=8)
+
+    @field_validator("github_url")
+    @classmethod
+    def validate_github(cls, value: str | None) -> str | None:
+        return ProfileUpdate.validate_github(value)
+
+    @field_validator("portfolio_url")
+    @classmethod
+    def validate_portfolio(cls, value: str | None) -> str | None:
+        return ProfileUpdate.validate_portfolio(value)

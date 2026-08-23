@@ -10,6 +10,7 @@ The backend is the secure source of business rules, persistence, document proces
 4. Install dependencies with `python -m pip install -e ".[dev]"`.
 5. Run migrations with `alembic upgrade head`.
 6. Start the API with `uvicorn app.main:app --reload`.
+7. In a second terminal, start durable document jobs with `python -m app.worker`.
 
 The API is available at `http://localhost:8000`, with versioned routes under `/api/v1`.
 
@@ -34,3 +35,5 @@ python scripts/export_openapi.py
 - Core recruitment operations remain available during AI-provider outages.
 
 Project-level scope and architecture decisions are maintained in the [frontend repository](https://github.com/painjanevivek/CampusHire/tree/main/docs). Backend-specific implementation documentation will live in this repository as modules are introduced.
+
+Resume uploads are quarantined before parsing. The default `marker` scanner is only for deterministic local development and tests. Staging and production must set `MALWARE_SCANNER=clamav` and provide a reachable, network-isolated ClamAV service; see `docs/RESUME_PIPELINE.md`.

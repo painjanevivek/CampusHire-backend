@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, ForeignKey, String, Uuid
+from sqlalchemy import JSON, ForeignKey, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -14,6 +14,9 @@ class StudentProfile(Base, TimestampMixin):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
+    institution_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     full_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     institution_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     prn: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -25,5 +28,6 @@ class StudentProfile(Base, TimestampMixin):
     target_roles: Mapped[list[str]] = mapped_column(JSON, default=list)
     external_links: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     onboarding_step: Mapped[int] = mapped_column(default=1)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
     readiness: Mapped[int] = mapped_column(default=0)
     is_complete: Mapped[bool] = mapped_column(default=False)

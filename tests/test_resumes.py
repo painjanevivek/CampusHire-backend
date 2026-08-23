@@ -1,6 +1,8 @@
 import pymupdf
 import pytest
 
+from app.core.config import Settings
+from app.modules.resumes.scanner import MarkerScanner
 from app.modules.resumes.service import InvalidResumeError, sanitize_filename, validate_pdf
 
 
@@ -29,3 +31,15 @@ def test_non_pdf_and_excess_pages_are_rejected() -> None:
 
 def test_filename_is_reduced_to_safe_metadata() -> None:
     assert sanitize_filename("../../Vivek<resume>.pdf") == "Vivek_resume_.pdf"
+
+
+@pytest.mark.asyncio
+async def test_development_scanner_quarantines_standard_malware_marker() -> None:
+    result = await MarkerScanner().scan(b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE")
+    assert result.clean is False
+    assert result.signature == "EICAR-Test-Signature"
+
+
+def test_production_cannot_start_with_the_marker_scanner() -> None:
+    with pytest.raises(ValueError, match="MALWARE_SCANNER=clamav"):
+        Settings(app_env="production", malware_scanner="marker")

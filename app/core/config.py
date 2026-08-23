@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,9 +23,22 @@ class Settings(BaseSettings):
     resume_storage_path: str = ".data/resumes"
     resume_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
     resume_max_pages: int = Field(default=3, ge=1, le=20)
+    resume_max_versions: int = Field(default=25, ge=1, le=100)
+    resume_job_max_attempts: int = Field(default=3, ge=1, le=10)
+    resume_worker_poll_seconds: float = Field(default=2.0, ge=0.2, le=30)
+    malware_scanner: Literal["marker", "clamav"] = "marker"
+    clamav_host: str = "127.0.0.1"
+    clamav_port: int = Field(default=3310, ge=1, le=65535)
+    clamav_timeout_seconds: float = Field(default=15.0, ge=1, le=120)
     gemini_api_key: str | None = None
     gemini_embedding_model: str = "gemini-embedding-001"
     qdrant_url: str = "http://localhost:6333"
+
+    @model_validator(mode="after")
+    def production_requires_real_malware_scanning(self) -> "Settings":
+        if self.app_env in {"staging", "production"} and self.malware_scanner != "clamav":
+            raise ValueError("Staging and production require MALWARE_SCANNER=clamav")
+        return self
 
     @property
     def is_development(self) -> bool:
