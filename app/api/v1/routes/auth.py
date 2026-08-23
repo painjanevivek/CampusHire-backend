@@ -5,15 +5,15 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.rate_limit import enforce_auth_rate_limit
+from app.models.auth import InstitutionMembership, User
 from app.modules.auth.dependencies import (
+    CurrentPrincipal,
     CurrentSession,
-    CurrentUser,
     Database,
     verify_authenticated_csrf,
     verify_public_csrf,
 )
 from app.modules.auth.schemas import SignInRequest, SignupRequest, UserResponse
-from app.modules.auth.security import new_secret
 from app.modules.auth.service import (
     DuplicateEmailError,
     InvalidCredentialsError,
@@ -21,6 +21,7 @@ from app.modules.auth.service import (
     create_student,
     revoke_all_sessions,
     revoke_session,
+    rotate_session_csrf,
 )
 
 router = APIRouter(prefix="/auth")
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/auth")
 
 def _set_csrf_cookie(response: Response, token: str) -> None:
     settings = get_settings()
+    response.headers["Cache-Control"] = "no-store"
     response.set_cookie(
         settings.csrf_cookie_name,
         token,
@@ -35,7 +37,7 @@ def _set_csrf_cookie(response: Response, token: str) -> None:
         httponly=False,
         samesite="strict",
         path="/",
-        max_age=3600,
+        max_age=settings.session_ttl_hours * 3600,
     )
 
 
@@ -53,9 +55,29 @@ def _set_session_cookies(response: Response, token: str, csrf_token: str) -> Non
     _set_csrf_cookie(response, csrf_token)
 
 
+def _user_response(
+    user: User, membership: InstitutionMembership | None = None
+) -> UserResponse:
+    response = UserResponse.model_validate(user)
+    if membership is None:
+        return response
+    return response.model_copy(
+        update={
+            "role": membership.role,
+            "institution_id": membership.institution_id,
+            "membership_id": membership.id,
+            "membership_status": membership.status,
+        }
+    )
+
+
 @router.get("/csrf", status_code=status.HTTP_204_NO_CONTENT)
-async def csrf(response: Response) -> None:
-    _set_csrf_cookie(response, new_secret())
+async def csrf(request: Request, response: Response, db: Database) -> None:
+    settings = get_settings()
+    token = await rotate_session_csrf(
+        db, request.cookies.get(settings.session_cookie_name)
+    )
+    _set_csrf_cookie(response, token)
 
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -82,7 +104,7 @@ async def signup(
         request.headers.get("User-Agent"),
     )
     _set_session_cookies(response, auth_session.token, auth_session.csrf_token)
-    return UserResponse.model_validate(user)
+    return _user_response(auth_session.user, auth_session.membership)
 
 
 @router.post("/sign-in", response_model=UserResponse)
@@ -108,12 +130,12 @@ async def sign_in(
             content={"detail": "Invalid email or password"},
         )  # type: ignore[return-value]
     _set_session_cookies(response, auth_session.token, auth_session.csrf_token)
-    return UserResponse.model_validate(auth_session.user)
+    return _user_response(auth_session.user, auth_session.membership)
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user: CurrentUser) -> UserResponse:
-    return UserResponse.model_validate(user)
+async def me(principal: CurrentPrincipal) -> UserResponse:
+    return _user_response(principal.user, principal.membership)
 
 
 @router.post(
@@ -133,8 +155,10 @@ async def sign_out(response: Response, db: Database, session: CurrentSession) ->
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(verify_authenticated_csrf)],
 )
-async def sign_out_all(response: Response, db: Database, user: CurrentUser) -> None:
-    await revoke_all_sessions(db, user)
+async def sign_out_all(
+    response: Response, db: Database, principal: CurrentPrincipal
+) -> None:
+    await revoke_all_sessions(db, principal.user, principal.institution_id)
     settings = get_settings()
     response.delete_cookie(settings.session_cookie_name, path="/")
     response.delete_cookie(settings.csrf_cookie_name, path="/")

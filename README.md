@@ -13,12 +13,15 @@ The backend is the secure source of business rules, persistence, document proces
 
 The API is available at `http://localhost:8000`, with versioned routes under `/api/v1`.
 
+When port 8000 is occupied, set `APP_PORT=8001` and include the exact frontend origin, for example `FRONTEND_ORIGINS='["http://127.0.0.1:3002"]'`, before running `uvicorn app.main:app --reload --port 8001`. Keep origin and cookie configuration environment-specific.
+
 ## Checks
 
 ```text
 ruff check .
 mypy app
 pytest
+python scripts/export_openapi.py
 ```
 
 ## Boundaries

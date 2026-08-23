@@ -1,0 +1,1441 @@
+{
+  "components": {
+    "schemas": {
+      "Body_upload_resume_api_v1_resumes_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_resume_api_v1_resumes_post",
+        "type": "object"
+      },
+      "EducationItem": {
+        "properties": {
+          "branch": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Branch",
+            "type": "string"
+          },
+          "degree": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Degree",
+            "type": "string"
+          },
+          "graduation_year": {
+            "maximum": 2100.0,
+            "minimum": 1990.0,
+            "title": "Graduation Year",
+            "type": "integer"
+          },
+          "institution": {
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Institution",
+            "type": "string"
+          },
+          "score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "score_scale": {
+            "enum": [
+              "cgpa_10",
+              "percentage"
+            ],
+            "title": "Score Scale",
+            "type": "string"
+          },
+          "start_year": {
+            "maximum": 2100.0,
+            "minimum": 1990.0,
+            "title": "Start Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "degree",
+          "branch",
+          "institution",
+          "start_year",
+          "graduation_year",
+          "score",
+          "score_scale"
+        ],
+        "title": "EducationItem",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "MembershipCreate": {
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/UserRole",
+            "default": "student"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "MembershipCreate",
+        "type": "object"
+      },
+      "MembershipResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "institution_id": {
+            "format": "uuid",
+            "title": "Institution Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "institution_id",
+          "user_id",
+          "role",
+          "status"
+        ],
+        "title": "MembershipResponse",
+        "type": "object"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "academic_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Academic Year"
+          },
+          "checklist": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessItem"
+            },
+            "title": "Checklist",
+            "type": "array"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "education": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Education",
+            "type": "array"
+          },
+          "external_links": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "External Links",
+            "type": "object"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "institution_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Name"
+          },
+          "is_complete": {
+            "title": "Is Complete",
+            "type": "boolean"
+          },
+          "onboarding_step": {
+            "title": "Onboarding Step",
+            "type": "integer"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "prn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prn"
+          },
+          "readiness": {
+            "title": "Readiness",
+            "type": "integer"
+          },
+          "skills": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "target_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "full_name",
+          "institution_name",
+          "prn",
+          "department",
+          "academic_year",
+          "phone",
+          "education",
+          "skills",
+          "target_roles",
+          "external_links",
+          "onboarding_step",
+          "readiness",
+          "is_complete",
+          "checklist"
+        ],
+        "title": "ProfileResponse",
+        "type": "object"
+      },
+      "ProfileUpdate": {
+        "properties": {
+          "academic_year": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Academic Year"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "education": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EducationItem"
+                },
+                "maxItems": 6,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Education"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "github_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Url"
+          },
+          "institution_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Name"
+          },
+          "onboarding_step": {
+            "anyOf": [
+              {
+                "maximum": 8.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Step"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "pattern": "^\\+?[0-9 ()-]{7,24}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "portfolio_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Url"
+          },
+          "prn": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prn"
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkillItem"
+                },
+                "maxItems": 40,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          },
+          "target_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Roles"
+          }
+        },
+        "title": "ProfileUpdate",
+        "type": "object"
+      },
+      "ReadinessItem": {
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "complete",
+          "required"
+        ],
+        "title": "ReadinessItem",
+        "type": "object"
+      },
+      "ResumeContent": {
+        "properties": {
+          "education": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Education",
+            "type": "array"
+          },
+          "email": {
+            "maxLength": 320,
+            "title": "Email",
+            "type": "string"
+          },
+          "full_name": {
+            "maxLength": 160,
+            "minLength": 2,
+            "title": "Full Name",
+            "type": "string"
+          },
+          "github_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Url"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 24,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "portfolio_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Url"
+          },
+          "projects": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Projects",
+            "type": "array"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Skills",
+            "type": "array"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 900,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "full_name",
+          "email"
+        ],
+        "title": "ResumeContent",
+        "type": "object"
+      },
+      "SignInRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignInRequest",
+        "type": "object"
+      },
+      "SignupRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignupRequest",
+        "type": "object"
+      },
+      "SkillItem": {
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "proficiency": {
+            "enum": [
+              "learning",
+              "comfortable",
+              "strong"
+            ],
+            "title": "Proficiency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "proficiency"
+        ],
+        "title": "SkillItem",
+        "type": "object"
+      },
+      "UserResponse": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "institution_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Id"
+          },
+          "membership_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Id"
+          },
+          "membership_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Status"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role"
+        ],
+        "title": "UserResponse",
+        "type": "object"
+      },
+      "UserRole": {
+        "enum": [
+          "student",
+          "tnp_admin",
+          "tnp_reviewer"
+        ],
+        "title": "UserRole",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "CampusHire AI API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/auth/csrf": {
+      "get": {
+        "operationId": "csrf_api_v1_auth_csrf_get",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Csrf",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "me_api_v1_auth_me_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/sign-in": {
+      "post": {
+        "operationId": "sign_in_api_v1_auth_sign_in_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign In",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/sign-out": {
+      "post": {
+        "operationId": "sign_out_api_v1_auth_sign_out_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign Out",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/sign-out-all": {
+      "post": {
+        "operationId": "sign_out_all_api_v1_auth_sign_out_all_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign Out All",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/signup": {
+      "post": {
+        "operationId": "signup_api_v1_auth_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Signup",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/health/live": {
+      "get": {
+        "operationId": "liveness_api_v1_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "readiness_api_v1_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/memberships": {
+      "get": {
+        "operationId": "read_memberships_api_v1_institutions__institution_id__memberships_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MembershipResponse"
+                  },
+                  "title": "Response Read Memberships Api V1 Institutions  Institution Id  Memberships Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Memberships",
+        "tags": [
+          "institution memberships"
+        ]
+      },
+      "post": {
+        "operationId": "create_membership_api_v1_institutions__institution_id__memberships_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Membership",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/profile": {
+      "get": {
+        "operationId": "read_profile_api_v1_profile_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Profile",
+        "tags": [
+          "student profile"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_profile_api_v1_profile_patch",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Profile",
+        "tags": [
+          "student profile"
+        ]
+      }
+    },
+    "/api/v1/resumes": {
+      "post": {
+        "operationId": "upload_resume_api_v1_resumes_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_resume_api_v1_resumes_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Upload Resume Api V1 Resumes Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Resume",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/api/v1/resumes/generate": {
+      "post": {
+        "operationId": "generate_resume_api_v1_resumes_generate_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeContent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Resume",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/api/v1/resumes/{resume_id}/download": {
+      "get": {
+        "operationId": "download_resume_api_v1_resumes__resume_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "title": "Resume Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Resume",
+        "tags": [
+          "resumes"
+        ]
+      }
+    }
+  }
+}

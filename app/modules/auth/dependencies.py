@@ -1,6 +1,8 @@
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -9,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.models.auth import Session, User
+from app.models.auth import InstitutionMembership, MembershipStatus, Session, User
 from app.modules.auth.security import hash_secret
 
 Database = Annotated[AsyncSession, Depends(get_db)]
@@ -48,7 +50,7 @@ async def get_current_session(
         )
     session = await db.scalar(
         select(Session)
-        .options(selectinload(Session.user))
+        .options(selectinload(Session.user), selectinload(Session.active_membership))
         .where(Session.token_hash == hash_secret(session_token), Session.revoked_at.is_(None))
     )
     if session is None or _is_expired(session.expires_at) or not session.user.is_active:
@@ -59,6 +61,37 @@ async def get_current_session(
 
 
 CurrentSession = Annotated[Session, Depends(get_current_session)]
+
+
+@dataclass(frozen=True)
+class AuthenticatedPrincipal:
+    user: User
+    session: Session
+    membership: InstitutionMembership | None
+
+    @property
+    def role(self) -> str:
+        if self.membership is not None:
+            return self.membership.role
+        return self.user.role
+
+    @property
+    def institution_id(self) -> UUID | None:
+        if self.membership is not None:
+            return self.membership.institution_id
+        return self.user.institution_id
+
+
+async def get_current_principal(session: CurrentSession) -> AuthenticatedPrincipal:
+    membership = session.active_membership
+    if membership is not None and membership.status != MembershipStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Institution membership is not active"
+        )
+    return AuthenticatedPrincipal(user=session.user, session=session, membership=membership)
+
+
+CurrentPrincipal = Annotated[AuthenticatedPrincipal, Depends(get_current_principal)]
 
 
 def verify_authenticated_csrf(request: Request, session: CurrentSession) -> None:
@@ -80,11 +113,22 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 def require_roles(*roles: str):  # type: ignore[no-untyped-def]
-    async def check_role(user: CurrentUser) -> User:
-        if user.role not in roles:
+    async def check_role(principal: CurrentPrincipal) -> AuthenticatedPrincipal:
+        if principal.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
             )
-        return user
+        return principal
 
     return check_role
+
+
+def require_institution(
+    principal: CurrentPrincipal, institution_id: UUID
+) -> AuthenticatedPrincipal:
+    if principal.institution_id is None or principal.institution_id != institution_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Resource is outside the active institution",
+        )
+    return principal

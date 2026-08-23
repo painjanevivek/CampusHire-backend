@@ -26,3 +26,6 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     role: str
+    institution_id: UUID | None = None
+    membership_id: UUID | None = None
+    membership_status: str | None = None
