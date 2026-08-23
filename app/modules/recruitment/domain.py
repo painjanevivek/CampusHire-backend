@@ -11,6 +11,7 @@ class DriveStatus(StrEnum):
     INTERVIEW = "interview"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+    ARCHIVED = "archived"
 
 
 class ApplicationStatus(StrEnum):
