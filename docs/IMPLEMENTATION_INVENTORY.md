@@ -1,6 +1,6 @@
 # Backend Implementation Inventory
 
-This inventory maps backend capability through Phase 2 without treating domain-only code as an integrated API.
+This inventory maps backend capability through Phase 4 without treating domain-only code as an integrated API.
 
 | Domain | Current disposition | Owner phase |
 | --- | --- | --- |
@@ -10,8 +10,8 @@ This inventory maps backend capability through Phase 2 without treating domain-o
 | Audit | Durable event model existed; Phase 1 centralizes event creation and adds resource/outcome/correlation context | 1 through 6 |
 | Student profile | Institution-scoped aggregate and subresource APIs use optimistic revisions and reject stale writes | Complete in 2 |
 | Resume | Private quarantine, mandatory scanning, PostgreSQL-authoritative jobs, reviewed extraction/suggestions, immutable versions and owner-only downloads | Complete in 2 |
-| Recruitment and eligibility | Deterministic domain primitives and tests exist; persistent companies, drives, roles, applications and APIs remain | 3 |
-| Matching and policy | Bounded scoring, institution metadata and grounded workflow primitives exist; provider adapters, persistence and reviewed APIs remain | 4 |
+| Recruitment and eligibility | Institution-scoped companies, drives, roles, rules, opportunities, immutable applications and accountable review are integrated | Complete in 3 |
+| Matching and policy | Privacy-minimized, versioned relevance evidence and reviewed role/policy APIs degrade safely when providers are unavailable | Complete in 4 |
 | Roadmaps and notifications | Domain validation and safety rules exist; persistence and user/admin APIs remain | 5 |
 
 The backend OpenAPI document is authoritative. Run `.venv/Scripts/python.exe scripts/export_openapi.py` on Windows or `python scripts/export_openapi.py` in CI, then review `openapi/campushire.openapi.json`.

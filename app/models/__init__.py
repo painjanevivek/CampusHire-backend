@@ -1,5 +1,6 @@
 from app.models.auth import AuditEvent, Institution, InstitutionMembership, Session, User
 from app.models.base import Base
+from app.models.intelligence import PolicyDocument, RoleExtractionProposal, SemanticMatchEvidence
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
@@ -20,6 +21,9 @@ __all__ = [
     "ApplicationOverride",
     "ApplicationStatusEvent",
     "Base",
+    "PolicyDocument",
+    "RoleExtractionProposal",
+    "SemanticMatchEvidence",
     "Company",
     "EligibilityEvaluation",
     "EligibilityRuleSet",

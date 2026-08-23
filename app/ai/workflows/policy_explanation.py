@@ -21,9 +21,12 @@ class PolicyState(TypedDict):
 def retrieve(state: PolicyState) -> dict[str, object]:
     terms = set(state["question"].casefold().split())
     approved = [chunk for chunk in state["chunks"] if chunk["approved"]]
-    ranked = sorted(
-        approved, key=lambda chunk: len(terms & set(chunk["text"].casefold().split())), reverse=True
-    )[:3]
+    scored = [(len(terms & set(chunk["text"].casefold().split())), chunk) for chunk in approved]
+    ranked = [
+        chunk
+        for score, chunk in sorted(scored, key=lambda item: item[0], reverse=True)
+        if score > 0
+    ][:3]
     return {"chunks": ranked, "iterations": state["iterations"] + 1}
 
 
