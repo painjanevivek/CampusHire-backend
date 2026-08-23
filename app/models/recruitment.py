@@ -35,9 +35,7 @@ class Company(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200))
     website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(24), default=PublicationStatus.DRAFT.value, index=True
-    )
+    status: Mapped[str] = mapped_column(String(24), default="active", index=True)
 
 
 class PlacementDrive(Base, TimestampMixin):

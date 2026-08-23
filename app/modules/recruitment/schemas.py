@@ -195,6 +195,8 @@ class ApplicationResponse(BaseModel):
     id: UUID
     role_id: UUID
     student_user_id: UUID
+    student_name: str
+    student_email: str
     resume_version_id: UUID
     status: str
     role_snapshot: dict[str, object]
@@ -206,6 +208,13 @@ class ApplicationResponse(BaseModel):
     updated_at: datetime
     history: list[StatusEventResponse] = Field(default_factory=list)
     overrides: list[OverrideResponse] = Field(default_factory=list)
+
+
+class AdminApplicationPage(BaseModel):
+    items: list[ApplicationResponse]
+    page: int
+    page_size: int
+    total: int
 
 
 class ApplicationStatusUpdate(BaseModel):

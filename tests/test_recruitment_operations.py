@@ -16,6 +16,7 @@ from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
     get_current_principal,
+    get_tenant_context,
     verify_authenticated_csrf,
 )
 from app.modules.auth.security import hash_password, hash_secret
@@ -301,7 +302,10 @@ async def test_admin_transition_and_reasoned_override_are_append_only() -> None:
             ),
         )
         await db.commit()
-        response = (await list_admin_applications(db, institution.id, role.id, None))[0]
+        page = await list_admin_applications(
+            db, institution.id, role.id, None, page=1, page_size=25
+        )
+        response = page.items[0]
         assert response.status == "shortlisted"
         assert [item.to_status for item in response.history] == [
             "submitted",
@@ -345,8 +349,31 @@ async def test_recruitment_queries_default_deny_across_institutions() -> None:
                             "label": "Degree",
                         }
                     ]
-                ),
-            )
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_tenant_context_is_derived_from_the_authenticated_principal() -> None:
+    async with TestSession() as db:
+        institution, _, student = await seed_people(db, "tenant-context")
+    principal = AuthenticatedPrincipal(
+        user=student,
+        session=Session(
+            user_id=student.id,
+            token_hash=hash_secret("tenant-context-session"),
+            csrf_hash=hash_secret("tenant-context-csrf"),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            last_activity_at=datetime.now(UTC),
+        ),
+        membership=None,
+    )
+
+    tenant = await get_tenant_context(principal)
+
+    assert tenant.institution_id == institution.id
+    assert tenant.user_id == student.id
+    assert tenant.role == UserRole.STUDENT.value
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.auth import User
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
@@ -24,6 +25,7 @@ from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.eligibility.engine import Rule, evaluate
 from app.modules.recruitment.domain import ApplicationStatus, validate_transition
 from app.modules.recruitment.schemas import (
+    AdminApplicationPage,
     ApplicationCreate,
     ApplicationOverrideCreate,
     ApplicationResponse,
@@ -690,6 +692,10 @@ async def toggle_saved(
 
 
 async def _application_response(db: AsyncSession, application: Application) -> ApplicationResponse:
+    student = await db.get(User, application.student_user_id)
+    profile = await db.scalar(
+        select(StudentProfile).where(StudentProfile.user_id == application.student_user_id)
+    )
     history = (
         await db.scalars(
             select(ApplicationStatusEvent)
@@ -708,6 +714,14 @@ async def _application_response(db: AsyncSession, application: Application) -> A
         id=application.id,
         role_id=application.role_id,
         student_user_id=application.student_user_id,
+        student_name=(
+            profile.full_name
+            if profile and profile.full_name
+            else student.email
+            if student
+            else "Student"
+        ),
+        student_email=student.email if student else "unavailable",
         resume_version_id=application.resume_version_id,
         status=application.status,
         role_snapshot=dict(application.role_snapshot),
@@ -862,8 +876,14 @@ async def list_student_applications(
 
 
 async def list_admin_applications(
-    db: AsyncSession, institution_id: UUID | None, role_id: UUID | None, status: str | None
-) -> list[ApplicationResponse]:
+    db: AsyncSession,
+    institution_id: UUID | None,
+    role_id: UUID | None,
+    status: str | None,
+    *,
+    page: int,
+    page_size: int,
+) -> AdminApplicationPage:
     statement = select(Application).where(
         Application.institution_id == _institution(institution_id)
     )
@@ -871,8 +891,22 @@ async def list_admin_applications(
         statement = statement.where(Application.role_id == role_id)
     if status:
         statement = statement.where(Application.status == status)
-    items = (await db.scalars(statement.order_by(Application.created_at.desc()))).all()
-    return [await _application_response(db, item) for item in items]
+    total = await db.scalar(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    ) or 0
+    items = (
+        await db.scalars(
+            statement.order_by(Application.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).all()
+    return AdminApplicationPage(
+        items=[await _application_response(db, item) for item in items],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 async def _owned_application(

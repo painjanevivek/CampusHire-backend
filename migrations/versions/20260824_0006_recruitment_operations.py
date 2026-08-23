@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("website_url", sa.String(500), nullable=True),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("status", sa.String(24), server_default="draft", nullable=False),
+        sa.Column("status", sa.String(24), server_default="active", nullable=False),
         *_timestamps(),
         sa.ForeignKeyConstraint(["institution_id"], ["institutions.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),

@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Operator(StrEnum):
@@ -20,16 +20,44 @@ class Rule(BaseModel):
     value: Any = None
     label: str = Field(min_length=2, max_length=200)
 
+    @model_validator(mode="after")
+    def validate_operator_value(self) -> "Rule":
+        if self.operator is Operator.PRESENT:
+            return self
+        if self.operator is Operator.IN and (
+            not isinstance(self.value, list) or not self.value
+        ):
+            raise ValueError("The in operator requires a non-empty list")
+        if self.operator in {Operator.GTE, Operator.LTE} and (
+            isinstance(self.value, bool) or not isinstance(self.value, (int, float))
+        ):
+            raise ValueError("Comparison rules require a numeric value")
+        if self.operator is Operator.EQ and self.value is None:
+            raise ValueError("Equality rules require a value")
+        return self
+
 
 class RuleResult(BaseModel):
+    field: str
+    operator: Operator
     label: str
     passed: bool | None
     reason: str
+    actual: Any = None
+    expected: Any = None
 
 
 def evaluate_rule(rule: Rule, facts: dict[str, Any]) -> RuleResult:
     if rule.field not in facts or facts[rule.field] is None:
-        return RuleResult(label=rule.label, passed=None, reason="Required profile data is missing")
+        return RuleResult(
+            field=rule.field,
+            operator=rule.operator,
+            label=rule.label,
+            passed=None,
+            reason="Required profile data is missing",
+            actual=None,
+            expected=rule.value,
+        )
     actual = facts[rule.field]
     if rule.operator is Operator.EQ:
         passed = actual == rule.value
@@ -42,9 +70,13 @@ def evaluate_rule(rule: Rule, facts: dict[str, Any]) -> RuleResult:
     else:
         passed = bool(actual)
     return RuleResult(
+        field=rule.field,
+        operator=rule.operator,
         label=rule.label,
         passed=passed,
         reason="Requirement met" if passed else f"Profile value {actual!s} does not meet this rule",
+        actual=actual,
+        expected=rule.value,
     )
 
 

@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.models.auth import UserRole
 from app.modules.audit.service import record_audit_event
@@ -11,6 +12,7 @@ from app.modules.auth.dependencies import (
     verify_authenticated_csrf,
 )
 from app.modules.recruitment.schemas import (
+    AdminApplicationPage,
     ApplicationOverrideCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
@@ -403,14 +405,23 @@ async def publish_admin_rule_set(
     return RuleSetResponse.model_validate(item, from_attributes=True)
 
 
-@router.get("/applications", response_model=list[ApplicationResponse])
+@router.get("/applications", response_model=AdminApplicationPage)
 async def read_applications(
     db: Database,
     principal: CurrentPrincipal,
     role_id: UUID | None = None,
     application_status: str | None = None,
-) -> list[ApplicationResponse]:
-    return await list_admin_applications(db, principal.institution_id, role_id, application_status)
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 25,
+) -> AdminApplicationPage:
+    return await list_admin_applications(
+        db,
+        principal.institution_id,
+        role_id,
+        application_status,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post(

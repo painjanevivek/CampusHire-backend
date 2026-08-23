@@ -82,6 +82,20 @@ class AuthenticatedPrincipal:
         return self.user.institution_id
 
 
+@dataclass(frozen=True)
+class TenantContext:
+    """Server-derived tenant identity passed into tenant-owned workflows.
+
+    The browser must never select an institution for an authorization decision.
+    Route handlers obtain this object from the authenticated session and pass its
+    values into domain services and audit records.
+    """
+
+    institution_id: UUID
+    user_id: UUID
+    role: str
+
+
 async def get_current_principal(session: CurrentSession) -> AuthenticatedPrincipal:
     membership = session.active_membership
     if membership is not None and membership.status != MembershipStatus.ACTIVE.value:
@@ -92,6 +106,22 @@ async def get_current_principal(session: CurrentSession) -> AuthenticatedPrincip
 
 
 CurrentPrincipal = Annotated[AuthenticatedPrincipal, Depends(get_current_principal)]
+
+
+async def get_tenant_context(principal: CurrentPrincipal) -> TenantContext:
+    if principal.institution_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active institution membership is required",
+        )
+    return TenantContext(
+        institution_id=principal.institution_id,
+        user_id=principal.user.id,
+        role=principal.role,
+    )
+
+
+CurrentTenant = Annotated[TenantContext, Depends(get_tenant_context)]
 
 
 def verify_authenticated_csrf(request: Request, session: CurrentSession) -> None:
