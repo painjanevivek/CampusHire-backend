@@ -1,7 +1,9 @@
 # Institution Privacy Notice — Approval Draft
 
-Status: **Not approved for real student data**  
-Version: `draft-1.0`  
+Status: **Not approved for real student data**
+
+Version: `draft-1.0`
+
 Institution/data-controller identity, privacy contact, legal basis, hosting regions, subprocessors, and effective date: **Pending authorized completion**
 
 ## What CampusHire processes
