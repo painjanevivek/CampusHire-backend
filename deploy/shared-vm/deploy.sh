@@ -48,6 +48,7 @@ PY
 }
 
 parser_host="$(read_environment PARSER_DOCKER_HOST)"
+parser_host_preflight="${parser_host/host.docker.internal/127.0.0.1}"
 parser_cert_directory="$(read_environment PARSER_CLIENT_CERT_DIR)"
 parser_image="$(read_environment RESUME_PARSER_IMAGE)"
 shared_gateway_network="$(read_environment SHARED_GATEWAY_NETWORK)"
@@ -61,13 +62,13 @@ done
 docker network inspect "${shared_gateway_network}" >/dev/null \
   || fail "the selected shared gateway network is unavailable"
 
-DOCKER_HOST="${parser_host}" \
+DOCKER_HOST="${parser_host_preflight}" \
 DOCKER_TLS_VERIFY=1 \
 DOCKER_CERT_PATH="${parser_cert_directory}" \
   docker version --format '{{.Server.Version}}' >/dev/null \
   || fail "authenticated rootless parser launcher is unavailable"
 
-DOCKER_HOST="${parser_host}" \
+DOCKER_HOST="${parser_host_preflight}" \
 DOCKER_TLS_VERIFY=1 \
 DOCKER_CERT_PATH="${parser_cert_directory}" \
   docker pull "${parser_image}" >/dev/null
