@@ -3,7 +3,7 @@
 ## Automated gates
 
 - Backend lint, strict type checking, 81 passing unit/integration/security tests (one environment-gated skip), migration head, dependency consistency, and phase smoke runner pass on the 2026-08-24 local candidate.
-- Frontend lint, strict type checking, 68 passing tests, production build, zero high dependency vulnerabilities, public-route smoke, and the 42-route/viewport rendered accessibility matrix pass on the 2026-08-24 local candidate.
+- Frontend lint, strict type checking, 70 passing tests, production build, zero dependency vulnerabilities, public-route smoke, and the 126-check Chromium/Firefox/WebKit rendered accessibility matrix pass on the 2026-08-24 local candidate.
 - Core profiles, resumes, drives, applications, deterministic eligibility, and notifications do not require Gemini.
 
 ## Performance and cost gate
@@ -17,7 +17,7 @@ The local concurrency-20 baseline and proposed capacity/alert envelope are recor
 - One-drive shadow comparison against the institution’s current authoritative process.
 - Named institution approval for privacy notice, retention, support, appeal, and incident ownership.
 - Production backup restoration in the target hosting environment.
-- A credential-free PDF parser sandbox with CPU, memory, wall-time, read-only input, and bounded-output controls. ClamAV and a separate worker alone do not satisfy this gate.
+- Managed reproduction of the locally proven credential-free PDF parser sandbox with CPU, memory, wall-time, read-only input, no-network, and bounded-output controls. ClamAV and a separate worker alone do not satisfy this gate.
 
 Until these human gates are signed, the system is code-complete for an internal fictional-data pilot, not approved for real student production data.
 
