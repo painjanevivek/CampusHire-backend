@@ -81,7 +81,7 @@ All five repository actions are complete as drafts/control artifacts: institutio
 | --- | --- | --- |
 | Freeze SHAs, contract, images, migrations, config, rollback pair | Complete locally | Clean Git archives produced verified image/archive digests, configuration hash, migration head, and smoke-tested rollback pair; approved registry promotion remains external. |
 | Run all candidate gates | Complete where authorized | Local engineering gates pass; deferred Deep Scans and managed/human gates remain open. |
-| Prove prohibited-file exclusion and remote parity | Complete locally | Frontend is clean at remote SHA `46b3fa8`; backend is clean at remote SHA `d252b3f`; no prohibited file is tracked. |
+| Prove prohibited-file exclusion and remote parity | Complete locally | Post-push verification requires both worktrees to be clean with `HEAD == origin/main`; the generated manifest captures the observed heads, and no prohibited file is tracked. |
 | Generate go/no-go dossier | Complete | Dossier and strict manifest return no-go with explicit blockers. |
 | Deploy gradually, observe, stop/rollback on thresholds | Prepared, external | Launch record/runbooks exist; deployment is unauthorized and was not attempted. |
 | Record pilot outcome and follow-up | Prepared, external | Sanitized launch record exists; no outcome is invented before a launch. |
