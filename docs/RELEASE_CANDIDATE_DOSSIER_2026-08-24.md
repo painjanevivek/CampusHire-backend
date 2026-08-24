@@ -17,7 +17,7 @@ This is an evidence-backed status, not a failure of the completed engineering ph
 
 ## Verified engineering evidence
 
-- Backend Ruff, strict MyPy, dependency consistency, `81 passed / 1 skipped`, parser isolation, tenant topology, recovery/dependency rehearsals, and local capacity evidence pass.
+- Backend Ruff, strict MyPy, dependency consistency, `82 passed / 1 skipped`, parser isolation, tenant topology, recovery/dependency rehearsals, and local capacity evidence pass.
 - Frontend OpenAPI drift, ESLint, TypeScript, `70 passed`, production build, zero dependency vulnerabilities, release smoke, and 126-check Chromium/Firefox/WebKit rendered accessibility matrix pass.
 - Credential-free parser boundaries, deterministic eligibility, durable jobs/deletion, audit evidence, and degraded AI/provider operation are documented and tested locally.
 - Prohibited contributor guidance, design references, local skills, and generated evidence are excluded from release tracking.

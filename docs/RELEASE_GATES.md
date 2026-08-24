@@ -2,7 +2,7 @@
 
 ## Automated gates
 
-- Backend lint, strict type checking, 81 passing unit/integration/security tests (one environment-gated skip), migration head, dependency consistency, and phase smoke runner pass on the 2026-08-24 local candidate.
+- Backend lint, strict type checking, 82 passing unit/integration/security tests (one environment-gated skip), migration head, dependency consistency, and phase smoke runner pass on the 2026-08-24 local candidate.
 - Frontend lint, strict type checking, 70 passing tests, production build, zero dependency vulnerabilities, public-route smoke, and the 126-check Chromium/Firefox/WebKit rendered accessibility matrix pass on the 2026-08-24 local candidate.
 - Core profiles, resumes, drives, applications, deterministic eligibility, and notifications do not require Gemini.
 
