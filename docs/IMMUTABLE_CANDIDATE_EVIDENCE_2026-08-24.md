@@ -2,7 +2,7 @@
 
 Status: **Local immutable artifacts verified; registry promotion and release authorization pending**
 
-The images below were built from clean `git archive` exports, never from the dirty backend worktree. The generated Docker archives and machine-readable manifests remain under `.data/` and are intentionally excluded from Git. These content identifiers prove a reproducible local candidate; they do not claim that an approved registry, signing identity, managed environment, or deployment authority exists.
+The images below were built from clean `git archive` exports. The generated Docker archives and machine-readable manifests remain under `.data/` and are intentionally excluded from Git. These content identifiers prove a reproducible local candidate; they do not claim that an approved registry, signing identity, managed environment, or deployment authority exists.
 
 ## Candidate
 
@@ -59,7 +59,7 @@ Both frontend snapshots contain the same OpenAPI hash. The rollback frontend pas
 - The candidate API container became live and returned the documented `database_unavailable` readiness response when intentionally started without PostgreSQL.
 - The migration head was read from the candidate API image, not inferred from a filename.
 - The candidate parser passed `scripts/verify_parser_sandbox.py` with no credentials or network and bounded cleanup.
-- The strict manifest accepted every immutable identifier, including the CycloneDX bundle, and retained only the dirty-worktree and external gate blockers.
+- The strict manifest accepted every immutable identifier, including the CycloneDX bundle; with both repositories clean and at remote parity, it retained only external gate blockers.
 
 ## Promotion boundary
 

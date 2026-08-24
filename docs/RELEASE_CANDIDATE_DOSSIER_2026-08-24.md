@@ -9,8 +9,8 @@ This is an evidence-backed status, not a failure of the completed engineering ph
 | Artifact | Observed value | Freeze status |
 | --- | --- | --- |
 | Frontend commit | `46b3fa8f3b19df437498787952fabdbbf5237b77` | Remote parity confirmed; tracked worktree clean |
-| Backend commit | Captured by `scripts/build_release_candidate_manifest.py` | Draft run: remote parity confirmed; worktree contains pre-existing user changes, so not immutable |
-| OpenAPI hash | `cdd29daf9ca99f96dc31e69e28afc2dd58aa4bb99a27f579457eb5e10f8f2ab4` in the draft run | Recompute and freeze after a clean candidate |
+| Backend commit | `d252b3f34093f83cf6d941e2f79b380eeb3db0cf` | Remote parity confirmed; tracked worktree clean |
+| OpenAPI hash | `cdd29daf9ca99f96dc31e69e28afc2dd58aa4bb99a27f579457eb5e10f8f2ab4` in the clean strict run | Frozen locally; revalidate after any contract change |
 | Frontend/backend images | Local OCI digests and archive hash in `docs/IMMUTABLE_CANDIDATE_EVIDENCE_2026-08-24.md` | Locally frozen; private-registry promotion/signing pending |
 | Migration head/config manifest | `20260824_0010`; deterministic bundle hash recorded with the images | Locally frozen; managed values/approval pending |
 | Rollback pair | Explicit source/image/archive identifiers and smoke evidence recorded | Locally verified; registry promotion and managed rehearsal pending |
@@ -24,13 +24,12 @@ This is an evidence-backed status, not a failure of the completed engineering ph
 
 ## Blocking gates
 
-1. Frontend and backend exhaustive Deep Security Scans remain explicitly deferred.
+1. Frontend and backend exhaustive Deep Security Scans are authorized but blocked because the managed scanner did not provide its required filesystem permission profile. The failed pre-discovery launch is not a pass or no-findings result.
 2. Managed staging, managed backup/restore, selected-provider failure drills, and managed HTTPS capacity repetition are incomplete.
 3. Provider pricing, pilot size, cost ceiling, and production SLO/alert approval are pending.
 4. Representative student, administrator, keyboard, and screen-reader UAT plus independent retest/acceptance are pending.
 5. Privacy/legal, T&P, accessibility, product, security/platform, audit-access, ownership, and after-hours approvals are pending.
-6. Backend tracked user changes must be intentionally committed or reverted by their owner before candidate freeze.
-7. No target deployment access, approved private-registry promotion/signing evidence, or authorized go/no-go decision is available. Local immutable image/configuration/rollback evidence is complete but is not a managed deployment.
+6. No target deployment access, approved private-registry promotion/signing evidence, or authorized go/no-go decision is available. Local immutable image/configuration/rollback evidence is complete but is not a managed deployment.
 
 ## Launch/rollback decision
 
