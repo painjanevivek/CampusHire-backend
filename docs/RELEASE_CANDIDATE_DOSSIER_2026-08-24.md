@@ -9,7 +9,7 @@ This is an evidence-backed status, not a failure of the completed engineering ph
 | Artifact | Observed value | Freeze status |
 | --- | --- | --- |
 | Frontend commit | `46b3fa8f3b19df437498787952fabdbbf5237b77` | Remote parity confirmed; tracked worktree clean |
-| Backend commit | `d252b3f34093f83cf6d941e2f79b380eeb3db0cf` | Remote parity confirmed; tracked worktree clean |
+| Backend repository | Captured by `scripts/build_release_candidate_manifest.py` | Remote parity confirmed; tracked worktree clean at manifest generation |
 | OpenAPI hash | `cdd29daf9ca99f96dc31e69e28afc2dd58aa4bb99a27f579457eb5e10f8f2ab4` in the clean strict run | Frozen locally; revalidate after any contract change |
 | Frontend/backend images | Local OCI digests and archive hash in `docs/IMMUTABLE_CANDIDATE_EVIDENCE_2026-08-24.md` | Locally frozen; private-registry promotion/signing pending |
 | Migration head/config manifest | `20260824_0010`; deterministic bundle hash recorded with the images | Locally frozen; managed values/approval pending |
