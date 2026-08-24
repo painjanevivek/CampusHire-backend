@@ -9,7 +9,7 @@ This audit maps every action and exit criterion in `campushire-release-completio
 | Phase | Repository evidence | Commit evidence | Current outcome |
 | --- | --- | --- | --- |
 | 7A parser isolation | `docs/PARSER_SANDBOX.md`, `docs/PARSER_ISOLATION_EVIDENCE_2026-08-24.md`, parser protocol/runner/container tests | Backend `3a8d09d` | Local boundary complete; managed launcher proof pending (`KL-001`) |
-| 7B security closure | `docs/SECURITY_REVIEW.md`, `docs/THREAT_MODEL.md`, `docs/KNOWN_LIMITATIONS.md` | Frontend launch attempted on 2026-08-24 | Blocked by the managed scanner's missing filesystem permission profile; neither Deep Scan is represented as passed |
+| 7B security closure | `docs/SECURITY_REVIEW.md`, `docs/THREAT_MODEL.md`, `docs/KNOWN_LIMITATIONS.md` | Active Frontend run canceled on 2026-08-24; Backend not started | Explicitly deferred; neither Deep Scan is represented as passed |
 | 7C staging topology | `docs/ENVIRONMENT_MANIFEST.md`, `docs/STAGING_DEPLOYMENT.md`, `deploy/`, topology rehearsal evidence | Backend `90629dc` | Reproducible local topology complete; managed deployment pending |
 | 7D recovery | recovery/dependency scripts and dated rehearsal reports | Backend `fe5932f` | Local rehearsals complete; selected-provider repetition pending |
 | 7E capacity | performance script, baseline, and capacity proposal | Backend `50bf17e` | Reproducible local baseline complete; approved pilot envelope pending |
@@ -36,7 +36,7 @@ Exit criterion: **locally proven; not closed for pilot** until managed policy an
 
 ### Phase 7B
 
-The user lifted the scan deferral on 2026-08-24. The Frontend Deep Scan launch then failed before discovery because the managed scanner did not provide the required filesystem permission profile. The security workflow prohibits retrying or substituting a result in the same response, so no scan identifier, findings, coverage, or report exists. Backend scanning remains pending behind the same external profile requirement. Standard tests and reviews remain controls, not substitutes. Exit criterion: **not met**.
+On 2026-08-24 the user explicitly deferred further Deep Scan work and requested cancellation of the active Frontend run. Cancellation completed with no active workers and no report available; the Backend run was not started. Standard tests and reviews remain controls, not substitutes. Resumption requires a new explicit user decision and the scanner's managed read-only worker profile. Exit criterion: **not met**.
 
 ### Phase 7C
 
@@ -80,7 +80,7 @@ All five repository actions are complete as drafts/control artifacts: institutio
 | Action | Status | Evidence / remaining condition |
 | --- | --- | --- |
 | Freeze SHAs, contract, images, migrations, config, rollback pair | Complete locally | Clean Git archives produced verified image/archive digests, configuration hash, migration head, and smoke-tested rollback pair; approved registry promotion remains external. |
-| Run all candidate gates | Complete where authorized | Local engineering gates pass; managed Deep Scans and managed/human gates remain open. |
+| Run all candidate gates | Complete where authorized | Local engineering gates pass; deferred Deep Scans and managed/human gates remain open. |
 | Prove prohibited-file exclusion and remote parity | Complete locally | Frontend is clean at remote SHA `46b3fa8`; backend is clean at remote SHA `d252b3f`; no prohibited file is tracked. |
 | Generate go/no-go dossier | Complete | Dossier and strict manifest return no-go with explicit blockers. |
 | Deploy gradually, observe, stop/rollback on thresholds | Prepared, external | Launch record/runbooks exist; deployment is unauthorized and was not attempted. |
@@ -99,7 +99,7 @@ The representative UAT record, governance sign-off register, and pilot launch re
 | Requirement | Status |
 | --- | --- |
 | Parser isolation implemented and abuse-tested | Complete locally; managed reproduction pending |
-| Separate Deep Scans completed and validated | Authorized but externally blocked / open |
+| Separate Deep Scans completed and validated | Explicitly deferred / open |
 | Production-like managed staging and tenant/security proof | Open |
 | Managed recovery and provider-failure rehearsals | Open |
 | Approved performance and cost budgets | Open |
@@ -110,4 +110,4 @@ The representative UAT record, governance sign-off register, and pilot launch re
 | Immutable candidate and rollback pair | Complete locally; approved registry promotion/signing and managed rehearsal open |
 | Authorized controlled pilot and post-release checks | Open |
 
-Repository-controlled preparation is exhausted for the supplied access and authority. Both repositories are clean and the strict manifest now retains only external gates. The next executable sequence is: enable the managed scanner filesystem permission profile and run separate Deep Scans, supply managed staging access and approved pilot budgets, run managed rehearsals, complete representative UAT and governance sign-off, then attach the resulting approvals to the immutable manifest for the named go/no-go decision.
+Repository-controlled preparation is exhausted for the supplied access and authority. Both repositories are clean and the strict manifest now retains only external gates. The next executable sequence is: supply managed staging access and approved pilot budgets, run managed rehearsals, complete representative UAT and governance sign-off, and—only after the user lifts the deferral—run separate Deep Scans with a managed read-only worker profile. Attach the resulting evidence and approvals to the immutable manifest before the named go/no-go decision.

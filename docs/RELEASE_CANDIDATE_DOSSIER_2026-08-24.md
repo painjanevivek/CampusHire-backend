@@ -24,7 +24,7 @@ This is an evidence-backed status, not a failure of the completed engineering ph
 
 ## Blocking gates
 
-1. Frontend and backend exhaustive Deep Security Scans are authorized but blocked because the managed scanner did not provide its required filesystem permission profile. The failed pre-discovery launch is not a pass or no-findings result.
+1. Frontend and backend exhaustive Deep Security Scans are explicitly deferred. The active Frontend run was canceled at the user's request and the Backend run was not started; neither state is a pass or no-findings result.
 2. Managed staging, managed backup/restore, selected-provider failure drills, and managed HTTPS capacity repetition are incomplete.
 3. Provider pricing, pilot size, cost ceiling, and production SLO/alert approval are pending.
 4. Representative student, administrator, keyboard, and screen-reader UAT plus independent retest/acceptance are pending.
