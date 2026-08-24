@@ -8,6 +8,14 @@ __pycache__/
 htmlcov/
 .env
 .data/
+.agents/
+.codebase-memory/
+docs/visuals/
+skills-lock.json
+AGENTS.md
+CLAUDE.md
+design.md
+designs.md
 dist/
 build/
 *.egg-info/

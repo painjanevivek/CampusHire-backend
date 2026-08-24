@@ -2,17 +2,13 @@
 
 ## Automated gates
 
-- Backend lint, strict type checking, 30+ unit/integration/security tests, migration head, dependency consistency, and phase smoke runner pass.
-- Frontend lint, strict type checking, unit tests, production build, dependency audit, and desktop/mobile browser smoke matrix pass.
+- Backend lint, strict type checking, 81 passing unit/integration/security tests (one environment-gated skip), migration head, dependency consistency, and phase smoke runner pass on the 2026-08-24 local candidate.
+- Frontend lint, strict type checking, 68 passing tests, production build, zero high dependency vulnerabilities, public-route smoke, and the 42-route/viewport rendered accessibility matrix pass on the 2026-08-24 local candidate.
 - Core profiles, resumes, drives, applications, deterministic eligibility, and notifications do not require Gemini.
 
-## Performance targets for the pilot environment
+## Performance and cost gate
 
-- Non-AI API: p95 below 400 ms at 50 concurrent users with the fictional pilot dataset.
-- Application submission: p99 below 1 second with 100 concurrent submissions and zero duplicates.
-- Opportunity search: p95 below 600 ms over 10,000 students and 500 roles.
-- AI job acknowledgement: below 1 second; completion measured separately by workflow and model.
-- Every load report must record environment, dataset, concurrency, percentile, failures, and date.
+The local concurrency-20 baseline and proposed capacity/alert envelope are recorded in `docs/PERFORMANCE_BASELINE_2026-08-24.md` and `docs/PILOT_CAPACITY_PROPOSAL.md`. They are not production SLOs. Release requires approved pilot size, provider rates, cost ceiling, managed HTTPS repetition, and named SLO/alert owners. Every report must retain environment, dataset, concurrency, percentile, failures, and date.
 
 ## Human gates that cannot be automated or self-certified
 
@@ -24,3 +20,5 @@
 - A credential-free PDF parser sandbox with CPU, memory, wall-time, read-only input, and bounded-output controls. ClamAV and a separate worker alone do not satisfy this gate.
 
 Until these human gates are signed, the system is code-complete for an internal fictional-data pilot, not approved for real student production data.
+
+Generate the candidate evidence with `scripts/build_release_candidate_manifest.py --strict`. A nonzero exit is an intentional no-go signal; never bypass it without closing or formally evidencing every reported gate.
