@@ -88,6 +88,12 @@ All five repository actions are complete as drafts/control artifacts: institutio
 
 Exit criterion: **not met**.
 
+## External gate availability audit
+
+The 2026-08-24 access audit found no pre-authorized CampusHire deployment target. The available Vercel session contains no CampusHire project and neither repository has a Vercel binding. No Kubernetes context is configured. Both GitHub repositories expose no deployment environments, Actions secrets, or Actions variables. Other supported managed-provider CLIs are absent. These checks inspect only capability and configuration names; no secret value was read or recorded.
+
+The representative UAT record, governance sign-off register, and pilot launch record remain explicitly pending. Creating a new hosted project, selecting vendors, supplying production-shaped credentials, naming institutional approvers, or recording participant decisions would materially change external state or fabricate authority, so those actions remain outside autonomous execution until the corresponding owners provide them.
+
 ## Final definition of done
 
 | Requirement | Status |
