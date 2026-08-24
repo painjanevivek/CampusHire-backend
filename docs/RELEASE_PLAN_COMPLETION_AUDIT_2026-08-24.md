@@ -15,7 +15,7 @@ This audit maps every action and exit criterion in `campushire-release-completio
 | 7E capacity | performance script, baseline, and capacity proposal | Backend `50bf17e` | Reproducible local baseline complete; approved pilot envelope pending |
 | 7F accessibility/UAT | browser runner, UAT pack/templates, issue template, browser support matrix | Frontend `46b3fa8` | 126 automated checks complete; representative UAT pending |
 | 7G governance | privacy, retention, appeals, incident, permission, ownership, cross-check, sign-off drafts | Backend `ae93421`, `da1672f` | Draft/control pack complete; authorized ownership and approvals pending |
-| 7H candidate decision | strict manifest generator, release gates, dossier, launch record | Backend `fc03b58` | Strict no-go is enforced; immutable freeze/deployment pending |
+| 7H candidate decision | strict manifest generator, immutable artifact evidence, release gates, dossier, launch record | Backend `fc03b58`, `0532442` | Local immutable pair verified and strict no-go enforced; registry promotion/deployment pending |
 
 ## Action-by-action audit
 
@@ -79,7 +79,7 @@ All five repository actions are complete as drafts/control artifacts: institutio
 
 | Action | Status | Evidence / remaining condition |
 | --- | --- | --- |
-| Freeze SHAs, contract, images, migrations, config, rollback pair | Partial | SHA/OpenAPI capture is executable; image/config/migration/rollback values are not approved or immutable. |
+| Freeze SHAs, contract, images, migrations, config, rollback pair | Complete locally | Clean Git archives produced verified image/archive digests, configuration hash, migration head, and smoke-tested rollback pair; approved registry promotion remains external. |
 | Run all candidate gates | Complete where authorized | Local engineering gates pass; deferred scans and managed/human gates remain open. |
 | Prove prohibited-file exclusion and remote parity | Partial | Frontend is clean and at remote SHA `46b3fa8`; backend has preserved user-owned tracked changes and cannot freeze. No prohibited file is tracked. |
 | Generate go/no-go dossier | Complete | Dossier and strict manifest return no-go with explicit blockers. |
@@ -101,7 +101,7 @@ Exit criterion: **not met**.
 | Representative student/admin/screen-reader UAT | Open |
 | Institutional governance approvals | Open |
 | Critical/high security and blocking defect closure | Cannot close before deferred scans/UAT |
-| Immutable candidate and rollback pair | Open |
+| Immutable candidate and rollback pair | Complete locally; approved registry promotion/signing and managed rehearsal open |
 | Authorized controlled pilot and post-release checks | Open |
 
 Repository-controlled preparation is exhausted for the supplied access and authority. The next executable sequence is: close the backend working tree intentionally, authorize separate Deep Scans, supply managed staging access and approved pilot budgets, run managed rehearsals, complete representative UAT and governance sign-off, then generate a strict immutable manifest for the named go/no-go decision.
