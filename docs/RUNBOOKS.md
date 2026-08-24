@@ -10,7 +10,7 @@ Open the AI circuit breaker, stop retry storms, and surface queued or failed sta
 
 ## Queue backlog
 
-Inspect the oldest job, failure code, and deduplication key. Scale workers only after identifying the slow dependency. Never replay a job without its idempotency key.
+Inspect `oldest_queued_age_seconds`, the oldest job, failure code, lease owner, attempt budget, and deduplication key. Scale workers only after identifying the slow dependency. Recover expired leases before replaying work, and never replay a business action without its idempotency key. Confirm the application/notification count is unchanged after recovery.
 
 ## Parser sandbox outage or timeout
 
@@ -18,7 +18,11 @@ Inspect only the safe parser code, job attempt, parser image digest, worker iden
 
 ## Database issue and restore
 
-Stop writes, capture the incident timestamp, restore the latest verified PostgreSQL backup into a clean environment, run migrations, validate row counts and authorization boundaries, then rehearse forward recovery before reopening writes.
+Stop writes and workers, capture the incident timestamp, and preserve the failed environment for investigation. Restore the latest verified PostgreSQL backup into a clean environment, run migrations, then compare the Alembic head, institution-scoped row counts, immutable application snapshots, audit events, queued-work timestamps, and private-object manifest references. Rehearse forward recovery and tenant-negative checks before reopening writes. Never overwrite the failed database until the restored copy is verified and the incident lead authorizes promotion.
+
+## Dependency failure matrix
+
+Use `scripts/rehearse_dependency_failures.py` for the synthetic local matrix and repeat its named scenarios in managed staging. Record start/end times, queue age, retries, terminal errors, business-object counts, and correlation IDs. Redis must fail closed for protected expensive operations; scanner/storage/parser failures must retain or safely terminate durable work; Gemini/Qdrant failures must not disable deterministic eligibility or core CRUD. Escalate rather than weakening a boundary to recover availability.
 
 ## Policy or matching incident
 

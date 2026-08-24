@@ -55,7 +55,7 @@ try {
         --publish "${HostPort}:5432" `
         --env "POSTGRES_PASSWORD=$databasePassword" `
         --env "POSTGRES_DB=$databaseName" `
-        postgres:16-alpine
+        postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
     if ($LASTEXITCODE -ne 0 -or -not $containerId) {
         throw "Unable to start the isolated PostgreSQL rehearsal container."
     }
@@ -96,9 +96,34 @@ try {
         "SELECT version_num FROM alembic_version"
     )
 
+    $fixture = & ".\.venv\Scripts\python.exe" scripts\seed_recovery_fixture.py | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or $fixture.data_class -ne "synthetic-only") {
+        throw "Unable to create the synthetic recovery fixture."
+    }
+    $sourceCounts = Invoke-PostgresScalar -Database $databaseName -Query (
+        "SELECT json_build_object(" +
+        "'institutions', (SELECT count(*) FROM institutions), " +
+        "'users', (SELECT count(*) FROM users), " +
+        "'profiles', (SELECT count(*) FROM student_profiles), " +
+        "'resumes', (SELECT count(*) FROM resume_versions), " +
+        "'resume_jobs', (SELECT count(*) FROM resume_processing_jobs), " +
+        "'applications', (SELECT count(*) FROM applications), " +
+        "'audit_events', (SELECT count(*) FROM audit_events))"
+    )
+    $sourceApplicationSnapshots = Invoke-PostgresScalar -Database $databaseName -Query (
+        "SELECT md5(role_snapshot::text || resume_snapshot::text || facts_snapshot::text || " +
+        "rule_snapshot::text || eligibility_snapshot::text) FROM applications LIMIT 1"
+    )
+    $sourceObjectReference = Invoke-PostgresScalar -Database $databaseName -Query (
+        "SELECT storage_key FROM resume_versions LIMIT 1"
+    )
+    $sourceOldestQueuedAt = Invoke-PostgresScalar -Database $databaseName -Query (
+        "SELECT min(available_at)::text FROM resume_processing_jobs WHERE status = 'queued'"
+    )
+
     & docker exec $containerName psql -U postgres -d $databaseName -v ON_ERROR_STOP=1 -c (
         "CREATE TABLE recovery_probe (marker text PRIMARY KEY); " +
-        "INSERT INTO recovery_probe(marker) VALUES ('campushire-phase6');"
+        "INSERT INTO recovery_probe(marker) VALUES ('campushire-phase7d');"
     ) *> $null
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to create the recovery probe."
@@ -127,23 +152,63 @@ try {
         "SELECT count(*) FROM information_schema.tables " +
         "WHERE table_schema = 'public'"
     ))
+    $restoredCounts = Invoke-PostgresScalar -Database $restoreDatabaseName -Query (
+        "SELECT json_build_object(" +
+        "'institutions', (SELECT count(*) FROM institutions), " +
+        "'users', (SELECT count(*) FROM users), " +
+        "'profiles', (SELECT count(*) FROM student_profiles), " +
+        "'resumes', (SELECT count(*) FROM resume_versions), " +
+        "'resume_jobs', (SELECT count(*) FROM resume_processing_jobs), " +
+        "'applications', (SELECT count(*) FROM applications), " +
+        "'audit_events', (SELECT count(*) FROM audit_events))"
+    )
+    $restoredApplicationSnapshots = Invoke-PostgresScalar -Database $restoreDatabaseName -Query (
+        "SELECT md5(role_snapshot::text || resume_snapshot::text || facts_snapshot::text || " +
+        "rule_snapshot::text || eligibility_snapshot::text) FROM applications LIMIT 1"
+    )
+    $restoredObjectReference = Invoke-PostgresScalar -Database $restoreDatabaseName -Query (
+        "SELECT storage_key FROM resume_versions LIMIT 1"
+    )
+    $restoredOldestQueuedAt = Invoke-PostgresScalar -Database $restoreDatabaseName -Query (
+        "SELECT min(available_at)::text FROM resume_processing_jobs WHERE status = 'queued'"
+    )
+    $oldestQueuedAgeSeconds = [int](Invoke-PostgresScalar -Database $restoreDatabaseName -Query (
+        "SELECT floor(extract(epoch FROM (now() - min(available_at))))::int " +
+        "FROM resume_processing_jobs WHERE status = 'queued'"
+    ))
 
     if ($headBeforeRollback -ne $headAfterRollForward -or $headBeforeRollback -ne $restoredHead) {
         throw "Migration head changed across rollback, roll-forward, or restore."
     }
-    if ($restoredProbe -ne "campushire-phase6") {
+    if ($restoredProbe -ne "campushire-phase7d") {
         throw "The restored recovery probe does not match the source database."
+    }
+    if ($sourceCounts -ne $restoredCounts) {
+        throw "Authoritative row counts changed during backup and restore."
+    }
+    if ($sourceApplicationSnapshots -ne $restoredApplicationSnapshots) {
+        throw "Immutable application snapshots changed during backup and restore."
+    }
+    if ($sourceObjectReference -ne $restoredObjectReference) {
+        throw "Private-object references changed during backup and restore."
+    }
+    if ($sourceOldestQueuedAt -ne $restoredOldestQueuedAt) {
+        throw "Queued-work timestamps changed during backup and restore."
     }
 
     $result = [ordered]@{
         recorded_at_utc = [DateTime]::UtcNow.ToString("o")
-        topology = "isolated-postgres-16-container"
+        topology = "isolated-postgres-17-container"
         source_database = $databaseName
         restore_database = $restoreDatabaseName
         migration_head = $headBeforeRollback
         rollback_head = $rollbackHead
         restored_table_count = $restoredTableCount
         recovery_probe = $restoredProbe
+        restored_record_counts = ($restoredCounts | ConvertFrom-Json)
+        application_snapshots_preserved = ($sourceApplicationSnapshots -eq $restoredApplicationSnapshots)
+        private_object_references_preserved = ($sourceObjectReference -eq $restoredObjectReference)
+        oldest_queued_age_seconds = $oldestQueuedAgeSeconds
         timings_ms = [ordered]@{
             initial_upgrade = $upgradeMs
             downgrade_one_revision = $downgradeMs
@@ -155,7 +220,17 @@ try {
             rollback_changed_head = ($rollbackHead -ne $headBeforeRollback)
             roll_forward_restored_head = ($headAfterRollForward -eq $headBeforeRollback)
             backup_restore_preserved_head = ($restoredHead -eq $headBeforeRollback)
-            backup_restore_preserved_probe = ($restoredProbe -eq "campushire-phase6")
+            backup_restore_preserved_probe = ($restoredProbe -eq "campushire-phase7d")
+            backup_restore_preserved_record_counts = ($sourceCounts -eq $restoredCounts)
+            backup_restore_preserved_application_snapshots = (
+                $sourceApplicationSnapshots -eq $restoredApplicationSnapshots
+            )
+            backup_restore_preserved_private_object_references = (
+                $sourceObjectReference -eq $restoredObjectReference
+            )
+            backup_restore_preserved_queued_work = (
+                $sourceOldestQueuedAt -eq $restoredOldestQueuedAt
+            )
         }
     }
 

@@ -22,7 +22,18 @@ From `Backend/`, run:
 .\scripts\rehearse_postgres_recovery.ps1
 ```
 
-The script starts a uniquely named, ephemeral PostgreSQL 16 container; migrates from base to head; downgrades one revision; rolls forward; performs a custom-format logical backup; restores into a second database; and verifies the migration head plus a recovery marker. Evidence is written to `.data/release-rehearsal.json` and contains no credentials.
+The script starts a uniquely named, ephemeral, digest-pinned PostgreSQL 17 container; migrates from base to head; downgrades one revision; rolls forward; seeds synthetic authoritative records; performs a custom-format logical backup; and restores into a second database. It verifies the migration head, record counts, immutable application snapshots, audit history, queued-work timestamp, and private-object reference. Evidence is written below `.data/` and contains no credentials.
+
+## Dependency-failure rehearsal
+
+With the approved parser image built, run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\rehearse_dependency_failures.py `
+  --parser-image campushire-pdf-parser:test
+```
+
+The bounded local matrix exercises Redis fail-closed behavior, worker lease recovery, exhausted jobs, application and notification idempotency, scanner and private-storage retries, Gemini degradation, parser timeout cleanup, and continued core operation without Gemini or Qdrant. The machine record is written below `.data/`; repeat the same operator paths on selected managed services before release.
 
 ## Incident boundaries
 
@@ -34,4 +45,4 @@ The script starts a uniquely named, ephemeral PostgreSQL 16 container; migrates 
 
 ## Exit criteria
 
-Release only when the migration head, restored probe, worker lifecycle, frontend production build, API contract, security gates, and documented pilot limitations all pass. Human UAT, institutional privacy approval, isolated PDF parsing, and the separate Deep Security Scans remain explicit external release gates.
+Release only when the migration head, restored authoritative evidence, worker lifecycle, frontend production build, API contract, security gates, and documented pilot limitations all pass. Managed-provider recovery, human UAT, institutional privacy approval, and the separate deferred Deep Security Scans remain explicit external release gates.
