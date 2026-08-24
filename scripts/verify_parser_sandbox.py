@@ -1,8 +1,6 @@
 import argparse
 import json
 import subprocess
-import tempfile
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -40,7 +38,7 @@ def sample_pdf() -> bytes:
     return data
 
 
-def assert_policy(document: dict[str, Any], output_directory: Path) -> None:
+def assert_policy(document: dict[str, Any]) -> None:
     config = document["Config"]
     host = document["HostConfig"]
     assert config["User"] == "65532:65532"
@@ -54,11 +52,8 @@ def assert_policy(document: dict[str, Any], output_directory: Path) -> None:
     assert host["NanoCpus"] == 500_000_000
     assert "/tmp" in host["Tmpfs"]  # noqa: S108 - verifying the isolated tmpfs mount
     assert host["Ulimits"] == [{"Name": "fsize", "Hard": 262144, "Soft": 262144}]
-    assert len(document["Mounts"]) == 1
-    mount = document["Mounts"][0]
-    assert mount["Destination"] == "/output"
-    assert mount["RW"] is True
-    assert Path(mount["Source"]).resolve() == output_directory.resolve()
+    assert document["Mounts"] == []
+    assert config["Cmd"][-2:] == ["--output", "-"]
     names = {item.partition("=")[0] for item in config.get("Env") or []}
     assert names.isdisjoint(SENSITIVE_ENVIRONMENT)
 
@@ -75,30 +70,26 @@ def main() -> int:
         pids_limit=32,
     )
     container_name = f"campushire-parser-policy-{uuid4().hex}"
-    with tempfile.TemporaryDirectory(prefix="campushire-parser-policy-") as directory:
-        output_directory = Path(directory)
-        output_directory.chmod(0o733)
-        try:
-            run(
-                parser.create_command(
-                    container_name,
-                    max_bytes=5 * 1024 * 1024,
-                    max_pages=3,
-                    output_directory=output_directory,
-                )
+    try:
+        run(
+            parser.create_command(
+                container_name,
+                max_bytes=5 * 1024 * 1024,
+                max_pages=3,
             )
-            inspected = run(["docker", "inspect", container_name], capture=True)
-            document = json.loads(inspected.stdout)[0]
-            assert_policy(document, output_directory)
-        finally:
-            subprocess.run(  # noqa: S603 - fixed cleanup operation and generated name
-                ["docker", "rm", "--force", container_name],  # noqa: S607
-                check=False,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=15,
-            )
+        )
+        inspected = run(["docker", "inspect", container_name], capture=True)
+        document = json.loads(inspected.stdout)[0]
+        assert_policy(document)
+    finally:
+        subprocess.run(  # noqa: S603 - fixed cleanup operation and generated name
+            ["docker", "rm", "--force", container_name],  # noqa: S607
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        )
     parsed = parser.parse(sample_pdf(), max_bytes=5 * 1024 * 1024, max_pages=3)
     assert parsed.page_count == 1
     assert "CampusHire parser isolation evidence" in parsed.text
