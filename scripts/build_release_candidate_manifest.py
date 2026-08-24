@@ -181,6 +181,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--parser-image-digest", type=sha256_digest)
     parser.add_argument("--candidate-archive-sha256", type=sha256_digest)
     parser.add_argument("--rollback-archive-sha256", type=sha256_digest)
+    parser.add_argument("--sbom-bundle-sha256", type=sha256_digest)
     parser.add_argument("--migration-head", type=migration_head)
     parser.add_argument("--config-manifest-hash", type=sha256_digest)
     parser.add_argument("--rollback-frontend-sha", type=git_sha)
@@ -205,6 +206,7 @@ def main() -> None:
         "parser_image_digest": args.parser_image_digest,
         "candidate_archive_sha256": args.candidate_archive_sha256,
         "rollback_archive_sha256": args.rollback_archive_sha256,
+        "sbom_bundle_sha256": args.sbom_bundle_sha256,
         "migration_head": args.migration_head,
         "config_manifest_hash": args.config_manifest_hash,
         "rollback_frontend_sha": args.rollback_frontend_sha,
