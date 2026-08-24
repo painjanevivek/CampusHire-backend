@@ -9,4 +9,4 @@ The Codex Security Standard Scan completed on the Phase 6A backend snapshot with
 
 ## Remaining evidence
 
-Separate frontend and backend Deep Security Scans, an advisory-database dependency scan, staging tenant/IDOR tests, parser abuse tests, provider-budget tests, and institutional incident/privacy ownership remain release gates. TAC access was not granted during the Standard Scans, so protected scan-output availability is not assumed.
+Separate frontend and backend Deep Security Scans were attempted but could not obtain the required managed read-only worker profile. The user explicitly deferred them on 2026-08-24; they are not counted as passed or as no-findings results. Parser sandbox/abuse testing, staging tenant/IDOR testing, representative provider budgets, and institutional incident/privacy ownership remain real-data pilot gates. Dependency checks and the provider-budget regression suite passed for the current candidate.

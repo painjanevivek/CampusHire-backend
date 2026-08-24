@@ -1,0 +1,72 @@
+# CampusHire threat model
+
+## Executive summary
+
+CampusHire's highest-impact risks are cross-tenant placement-data access, compromise of the PDF worker through an untrusted document, integrity loss in eligibility or application decisions, and disclosure or abuse at the external AI boundary. The implementation provides server-derived tenant context, role and ownership checks, CSRF-protected mutations, immutable decision snapshots, private file storage, reviewed AI output, and PII-minimized semantic matching. Credential-free PDF parser isolation remains a hard gate before real student uploads.
+
+## Scope and assumptions
+
+This model covers the Next.js runtime and API client, FastAPI application, database migrations, background worker, private object storage, Redis coordination, and external AI calls. Build output, local fixtures, and provider-specific cloud controls are out of scope.
+
+The pilot is assumed to be internet-facing and institution-scoped, with secure cookie sessions and sensitive student profile, resume, academic, and application data. Production dependencies must be private, least-privileged, and independently recoverable. Institutional retention, incident, appeal, and accessibility owners still require named approval.
+
+## System and trust boundaries
+
+```mermaid
+flowchart LR
+  U["Students and administrators"] --> F["Next.js frontend"]
+  F --> A["FastAPI API"]
+  A --> P["PostgreSQL"]
+  A --> R["Redis"]
+  A --> O["Private object store"]
+  A --> G["Gemini embeddings"]
+  W["Background worker"] --> P
+  W --> O
+  W --> C["ClamAV"]
+  W --> X["PDF parser sandbox gate"]
+```
+
+- Internet to Next.js: nonce CSP, browser security headers, React escaping, and safe internal-link checks.
+- Browser to FastAPI: strict origins, SameSite cookies, session-bound CSRF, typed schemas, upload limits, and rate budgets.
+- Principal to tenant services: role dependencies and server-derived institution identifiers scope every protected query.
+- PDF quarantine to parser: files are bounded and scanned, but native parsing must move to a credential-free sandbox.
+- Services to durable stores: opaque keys, path containment, transactions, leases, and audit events protect authoritative data.
+- Evidence projection to Gemini: contact and identity fields are excluded, input is bounded, calls are budgeted and timed out, and output cannot decide eligibility.
+
+## Assets and security objectives
+
+| Asset | Objective |
+| --- | --- |
+| Session and CSRF secrets | Confidentiality and integrity |
+| Student profile, resume, academic, and application data | Confidentiality, integrity, and availability |
+| Rules, decisions, overrides, and audit history | Integrity and availability |
+| Database, object-store, and provider credentials | Confidentiality, integrity, and availability |
+| Worker/API capacity and provider quota | Availability |
+| OpenAPI and release artifacts | Integrity |
+
+## Threats and controls
+
+| ID | Abuse path and impact | Existing controls | Remaining mitigation | Priority |
+| --- | --- | --- | --- | --- |
+| TM-001 | Crafted PDF exploits or exhausts the native parser, compromising worker credentials or availability. | Quarantine, MIME/size/page limits, ClamAV, bounded durable jobs, clean-only download. | Credential-free sandbox, read-only input, bounded output, CPU/RAM/wall-time limits, and parser abuse test. | High until deployment gate |
+| TM-002 | A principal substitutes another tenant's object identifier, exposing or changing placement data. | Server-derived institution context, role/ownership dependencies, scoped repository queries, negative authorization tests. | Repeat staging IDOR matrix for every candidate route. | Medium |
+| TM-003 | A malicious origin submits a credentialed mutation. | Secure SameSite cookie policy, allowed-origin validation, session-bound double-submit CSRF, revocable sessions. | Validate production origin and cookie configuration during deployment smoke. | Low |
+| TM-004 | Match requests exhaust provider quota or create uncontrolled cost. | CSRF-protected POST, fingerprint cache, per-principal/institution Redis budget, provider timeout, production fail-closed behavior. | Approve staging quotas, concurrency, cost alerts, and SLOs. | Medium |
+| TM-005 | An administrator publishes incorrect rules or abuses an override. | Immutable rule/application snapshots, reason and policy reference, permission checks, status history, audit events, manual review. | Institutional approval matrix and four-eyes policy for high-impact changes. | Medium |
+| TM-006 | External AI receives unnecessary PII or influences an authoritative outcome. | Minimized evidence projection, reviewed extraction, bounded prompts, provider metadata, deterministic eligibility separation. | Provider DPA, region, retention, and egress approval. | Medium |
+| TM-007 | Stored API content navigates a user to an unsafe destination or injects script. | React escaping, nonce CSP, relative API paths, internal-link validation, unsafe-link tests. | Maintain HTTPS allowlists for intentional external company links. | Low |
+| TM-008 | Database, queue, object-store, or operator failure causes data loss or inconsistent recovery. | PostgreSQL authority, durable jobs, idempotency, leases, runbooks, timed migration/rollback/restore rehearsal. | Repeat recovery on managed staging and exercise vendor-specific dependency failures. | Medium |
+
+## Security review focus
+
+- `app/modules/auth/dependencies.py`: session, role, and tenant root controls.
+- `app/api/v1/routes/resumes.py`: attacker-controlled file entry and owner-only download.
+- `app/modules/resumes/pipeline.py` and `app/modules/resumes/service.py`: scan, parse, and job-state boundary.
+- `app/modules/recruitment/service.py`: immutable eligibility and application decisions.
+- `app/api/v1/routes/intelligence.py`: provider trigger, CSRF, and budget control.
+- `app/modules/privacy/service.py`: destructive deletion and retention boundary.
+- `.github/workflows/ci.yml`: contract, migration, dependency, and release integrity.
+
+## Review status
+
+The standard backend scan found no critical/high source issue. Its semantic-provider-budget finding was remediated; parser isolation remains an explicit release condition. Separate exhaustive frontend and backend Deep Security Scans were attempted but could not obtain the managed read-only worker profile. On 2026-08-24 the user explicitly deferred those scans for the current implementation audit. This is a deferral, not a pass or a no-findings result.
