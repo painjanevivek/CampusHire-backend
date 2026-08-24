@@ -317,7 +317,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         resume_version_id = os.getenv("PILOT_RESUME_VERSION_ID")
         skipped: list[dict[str, str]] = []
         if role_id and resume_version_id:
-            idempotency_key = f"pilot-baseline-{time.time_ns()}"
+            idempotency_key = os.getenv("PILOT_IDEMPOTENCY_KEY") or (
+                f"pilot-baseline-{time.time_ns()}"
+            )
             application_headers = {
                 "X-CSRF-Token": student_csrf,
                 "Idempotency-Key": idempotency_key,
