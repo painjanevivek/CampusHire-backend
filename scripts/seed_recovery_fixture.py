@@ -36,7 +36,14 @@ from app.modules.auth.security import hash_password
 async def seed() -> dict[str, object]:
     now = datetime.now(UTC)
     facts = {"program": "B.Tech CSE", "cgpa": 8.4, "active_backlogs": 0}
-    rules = [{"field": "cgpa", "operator": "gte", "value": 7.0}]
+    rules = [
+        {
+            "field": "cgpa",
+            "operator": "gte",
+            "value": 7.0,
+            "label": "Minimum CGPA of 7.0",
+        }
+    ]
     eligibility = {"status": "eligible", "requirements": [{"passed": True}]}
     role_snapshot = {"title": "Synthetic Recovery Engineer", "company": "Example Labs"}
     resume_snapshot = {
