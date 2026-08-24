@@ -48,7 +48,7 @@ flowchart LR
 
 | ID | Abuse path and impact | Existing controls | Remaining mitigation | Priority |
 | --- | --- | --- | --- | --- |
-| TM-001 | Crafted PDF exploits or exhausts the native parser, compromising worker credentials or availability. | Quarantine, MIME/size/page limits, ClamAV, bounded durable jobs, clean-only download. | Credential-free sandbox, read-only input, bounded output, CPU/RAM/wall-time limits, and parser abuse test. | High until deployment gate |
+| TM-001 | Crafted PDF exploits or exhausts the native parser. | Quarantine, MIME/size/page limits, ClamAV, ephemeral credential-free parser image, stdin-only input, bounded output, no network, read-only root, dropped capabilities, resource/time limits, and abuse tests. | Reproduce the committed policy on the selected managed rootless launcher before real student uploads. | Medium deployment condition |
 | TM-002 | A principal substitutes another tenant's object identifier, exposing or changing placement data. | Server-derived institution context, role/ownership dependencies, scoped repository queries, negative authorization tests. | Repeat staging IDOR matrix for every candidate route. | Medium |
 | TM-003 | A malicious origin submits a credentialed mutation. | Secure SameSite cookie policy, allowed-origin validation, session-bound double-submit CSRF, revocable sessions. | Validate production origin and cookie configuration during deployment smoke. | Low |
 | TM-004 | Match requests exhaust provider quota or create uncontrolled cost. | CSRF-protected POST, fingerprint cache, per-principal/institution Redis budget, provider timeout, production fail-closed behavior. | Approve staging quotas, concurrency, cost alerts, and SLOs. | Medium |
@@ -69,4 +69,4 @@ flowchart LR
 
 ## Review status
 
-The standard backend scan found no critical/high source issue. Its semantic-provider-budget finding was remediated; parser isolation remains an explicit release condition. Separate exhaustive frontend and backend Deep Security Scans were attempted but could not obtain the managed read-only worker profile. On 2026-08-24 the user explicitly deferred those scans for the current implementation audit. This is a deferral, not a pass or a no-findings result.
+The standard backend scan found no critical/high source issue. Its semantic-provider-budget finding was remediated. Phase 7A removed the hostile PDF source-to-sink path from the privileged worker and confined uploaded-byte parsing to the tested credential-free container policy; PyMuPDF remains only for deterministic output generation from reviewed structured fields. Managed-staging reproduction remains a deployment condition. Separate exhaustive frontend and backend Deep Security Scans were attempted but could not obtain the managed read-only worker profile. On 2026-08-24 the user explicitly deferred those scans for the current implementation audit. This is a deferral, not a pass or a no-findings result.

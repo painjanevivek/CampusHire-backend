@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.logging import configure_logging
 from app.modules.privacy.service import process_next_deletion_cleanup
+from app.modules.resumes.parser import build_pdf_parser
 from app.modules.resumes.pipeline import claim_next_job, process_job, recover_stale_jobs
 from app.modules.resumes.scanner import build_scanner
 from app.modules.resumes.storage import LocalObjectStore
@@ -18,6 +19,7 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
     settings = get_settings()
     store = LocalObjectStore(settings.resume_storage_path)
     scanner = build_scanner(settings)
+    parser_backend = build_pdf_parser(settings)
     worker_identity = worker_id or f"resume-worker-{uuid4().hex[:12]}"
     logger.info(
         "resume_worker_started",
@@ -74,7 +76,14 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
             },
         )
         async with SessionFactory() as db:
-            await process_job(db, job_id, store=store, scanner=scanner, settings=settings)
+            await process_job(
+                db,
+                job_id,
+                store=store,
+                scanner=scanner,
+                parser=parser_backend,
+                settings=settings,
+            )
         if once:
             return
 

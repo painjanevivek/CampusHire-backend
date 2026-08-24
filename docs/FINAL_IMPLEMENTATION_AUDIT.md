@@ -14,7 +14,7 @@
 | TASK-004 tenant authorization | Delivered | membership migrations, role/tenant dependencies, cross-tenant negative tests |
 | TASK-005 session/CSRF | Delivered | revocable sessions, CSRF/origin enforcement, rate limits, credentialed client tests |
 | TASK-006 progressive profile | Delivered | versioned profile APIs, onboarding autosave/conflict handling, readiness inputs |
-| TASK-007 resume pipeline | Delivered with deployment gate | private storage, quarantine/scan/job lifecycle, owner-only download; parser sandbox remains required |
+| TASK-007 resume pipeline | Delivered with managed-staging gate | private storage, quarantine/scan/job lifecycle, owner-only download, credential-free parser image and abuse evidence; managed launcher reproduction remains required |
 | TASK-008 reviewed resume versions | Delivered | suggestion review, immutable resume versions, generated/downloadable PDF tests |
 | TASK-009 placement persistence | Delivered | company/drive/role migrations, lifecycle APIs, admin workflows, audit records |
 | TASK-010 opportunity discovery | Delivered | published-window search/filter/detail contract and complete frontend states |
@@ -29,7 +29,7 @@
 | TASK-019 background jobs | Delivered | durable jobs, leases, retries, cancellation, recovery, worker operations UI |
 | TASK-020 observability/evaluation | Delivered | structured request/job/provider evidence, metrics, correlation, reproducible evaluation |
 | TASK-021 accessibility/failure states | Technically delivered | axe, keyboard, mobile, reduced-motion, loading/empty/offline/error browser evidence; human screen-reader review pending |
-| TASK-022 security/privacy | Delivered with deferred/external gates | `docs/THREAT_MODEL.md`, privacy deletion/retention, standard scans, hardening tests; Deep Scans deferred and parser isolation pending |
+| TASK-022 security/privacy | Delivered with deferred/external gates | `docs/THREAT_MODEL.md`, privacy deletion/retention, standard scans, hardening and parser-isolation tests; Deep Scans deferred and managed launcher review pending |
 | TASK-023 release matrix | Delivered | `docs/RELEASE_EVIDENCE_MATRIX.md`, CI suites, contract, accessibility, audit, and smoke checks |
 | TASK-024 recovery rehearsal | Delivered locally | timed PostgreSQL migration/downgrade/restore and HTTP baseline reports; managed staging repetition pending |
 | TASK-025 pilot acceptance | Pack delivered; stakeholder decision pending | `docs/PILOT_ACCEPTANCE.md`, frontend UAT pack, known limitations, triage and decision criteria |

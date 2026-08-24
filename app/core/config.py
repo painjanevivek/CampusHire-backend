@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     resume_job_max_attempts: int = Field(default=3, ge=1, le=10)
     resume_worker_poll_seconds: float = Field(default=2.0, ge=0.2, le=30)
     resume_worker_lease_seconds: int = Field(default=300, ge=30, le=3_600)
+    resume_parser_backend: Literal["subprocess", "docker"] = "subprocess"
+    resume_parser_image: str = "campushire-pdf-parser:local"
+    resume_parser_timeout_seconds: float = Field(default=20.0, ge=1, le=120)
+    resume_parser_memory_megabytes: int = Field(default=256, ge=64, le=1_024)
+    resume_parser_cpus: float = Field(default=0.5, ge=0.1, le=4)
+    resume_parser_pids_limit: int = Field(default=32, ge=8, le=128)
     privacy_cleanup_max_attempts: int = Field(default=5, ge=1, le=20)
     privacy_cleanup_lease_seconds: int = Field(default=300, ge=30, le=3_600)
     malware_scanner: Literal["marker", "clamav"] = "marker"
@@ -43,6 +49,8 @@ class Settings(BaseSettings):
     def production_requires_real_malware_scanning(self) -> "Settings":
         if self.app_env in {"staging", "production"} and self.malware_scanner != "clamav":
             raise ValueError("Staging and production require MALWARE_SCANNER=clamav")
+        if self.app_env in {"staging", "production"} and self.resume_parser_backend != "docker":
+            raise ValueError("Staging and production require RESUME_PARSER_BACKEND=docker")
         return self
 
     @property

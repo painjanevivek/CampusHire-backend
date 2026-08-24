@@ -12,6 +12,10 @@ Open the AI circuit breaker, stop retry storms, and surface queued or failed sta
 
 Inspect the oldest job, failure code, and deduplication key. Scale workers only after identifying the slow dependency. Never replay a job without its idempotency key.
 
+## Parser sandbox outage or timeout
+
+Inspect only the safe parser code, job attempt, parser image digest, worker identity, duration, and launcher health; never attach the PDF or extracted text to logs or tickets. Confirm the approved image is available and the rootless launcher enforces no network, read-only root, dropped capabilities, `no-new-privileges`, non-root UID, and resource limits. `resume_parser_unavailable` and `resume_parser_timeout` requeue within the bounded attempt budget. Do not switch staging/production to the subprocess adapter. After recovery, retry only an authorized queued/failed job and verify that no `campushire-parser-*` container or disposable output directory remains.
+
 ## Database issue and restore
 
 Stop writes, capture the incident timestamp, restore the latest verified PostgreSQL backup into a clean environment, run migrations, validate row counts and authorization boundaries, then rehearse forward recovery before reopening writes.

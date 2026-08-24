@@ -17,12 +17,19 @@ from app.models.resume import (
     ResumeVersion,
     ScanStatus,
 )
+from app.modules.resumes.parser import (
+    InvalidResumeError,
+    ParserUnavailableError,
+    PdfParser,
+    build_pdf_parser,
+)
 from app.modules.resumes.scanner import MalwareScanner, ScannerUnavailableError
-from app.modules.resumes.service import InvalidResumeError, parse_pdf
 from app.modules.resumes.storage import ObjectStore, ObjectStoreError
 
 RETRYABLE_ERRORS = {
     "resume_scan_unavailable",
+    "resume_parser_timeout",
+    "resume_parser_unavailable",
     "resume_storage_unavailable",
     "resume_worker_interrupted",
 }
@@ -227,6 +234,7 @@ async def process_job(
     store: ObjectStore,
     scanner: MalwareScanner,
     settings: Settings,
+    parser: PdfParser | None = None,
     correlation_id: str | None = None,
 ) -> None:
     job = await db.scalar(
@@ -281,7 +289,12 @@ async def process_job(
             version.scan_status = ScanStatus.INFECTED.value
             raise InvalidResumeError("resume_malware_detected")
         version.scan_status = ScanStatus.CLEAN.value
-        parsed = parse_pdf(data, settings.resume_max_pages)
+        parser_backend = parser or build_pdf_parser(settings)
+        parsed = parser_backend.parse(
+            data,
+            max_bytes=settings.resume_max_bytes,
+            max_pages=settings.resume_max_pages,
+        )
         if version.storage_key.startswith("quarantine/"):
             version.storage_key = store.promote_clean(version.storage_key)
         version.page_count = parsed.page_count
@@ -315,7 +328,12 @@ async def process_job(
         job.safe_error_code = None
         record_job_event(db, job, "completed", correlation_id=correlation_id)
         await db.commit()
-    except (InvalidResumeError, ObjectStoreError, ScannerUnavailableError) as error:
+    except (
+        InvalidResumeError,
+        ObjectStoreError,
+        ParserUnavailableError,
+        ScannerUnavailableError,
+    ) as error:
         code = str(error)
         retryable = code in RETRYABLE_ERRORS and job.attempts < job.max_attempts
         version.safe_error_code = code

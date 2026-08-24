@@ -5,11 +5,11 @@ Resume files are non-authoritative until the student completes review. The API v
 The worker performs these ordered gates:
 
 1. Read the quarantined object and run the configured malware scanner.
-2. Promote only clean objects to the private `clean/` namespace.
-3. Parse bounded PDF pages and store proposed structured extraction.
+2. Stream clean bytes to the credential-free parser sandbox described in `docs/PARSER_SANDBOX.md`.
+3. Validate the bounded protocol result, then promote only clean, successfully parsed objects to the private `clean/` namespace and store proposed structured extraction.
 4. Create conservative wording suggestions that add no metrics or outcomes.
 5. Expose the version as `review_required`; never update profile or matching facts automatically.
 
 Job states are `queued`, `processing`, `cancellation_requested`, `completed`, `failed`, and `cancelled`. Claims carry a random worker identity and bounded lease; storage/scanner boundaries refresh the heartbeat. Expired leases requeue within the retry budget and become inspectable terminal failures after exhaustion. Storage/scanner outages retry with bounded backoff; malformed, encrypted, oversized, or infected files fail closed. Repeated processing is idempotent because each upload checksum and each version job are unique.
 
-Development uses `LocalObjectStore` and `MarkerScanner`. Before staging, provide an S3-compatible adapter behind the `ObjectStore` protocol and set `MALWARE_SCANNER=clamav`. Downloads require ownership, a clean scan, private no-store caching, and safe `Content-Disposition` metadata.
+Development uses `LocalObjectStore`, `MarkerScanner`, and the subprocess parser adapter. Staging and production reject this parser mode and require `MALWARE_SCANNER=clamav`, `RESUME_PARSER_BACKEND=docker`, an immutable parser image, and an approved rootless launcher. Provide an S3-compatible adapter behind the `ObjectStore` protocol. Downloads require ownership, a clean scan, private no-store caching, and safe `Content-Disposition` metadata.

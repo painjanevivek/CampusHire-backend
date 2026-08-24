@@ -15,13 +15,14 @@ from app.modules.auth.dependencies import (
     verify_authenticated_csrf,
 )
 from app.modules.resumes.builder import ResumeContent
+from app.modules.resumes.parser import InvalidResumeError
 from app.modules.resumes.schemas import (
     ExtractionReviewRequest,
     ResumeUploadResponse,
     ResumeVersionResponse,
     SuggestionDecisionRequest,
 )
-from app.modules.resumes.service import InvalidResumeError, validate_upload_envelope
+from app.modules.resumes.service import validate_upload_envelope
 from app.modules.resumes.storage import LocalObjectStore, ObjectStoreError
 from app.modules.resumes.workflow import (
     ResumeWorkflowError,

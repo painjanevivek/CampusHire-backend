@@ -1,19 +1,8 @@
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-import pymupdf
-
-
-class InvalidResumeError(ValueError):
-    pass
-
-
-@dataclass(frozen=True)
-class ParsedResume:
-    page_count: int
-    text: str
+from app.modules.resumes.parser import InvalidResumeError
 
 
 def sanitize_filename(value: str) -> str:
@@ -21,38 +10,11 @@ def sanitize_filename(value: str) -> str:
     return (clean or "resume.pdf")[:200]
 
 
-def validate_pdf(data: bytes, declared_type: str, max_bytes: int, max_pages: int) -> ParsedResume:
-    validate_upload_envelope(data, declared_type, max_bytes)
-    return parse_pdf(data, max_pages)
-
-
 def validate_upload_envelope(data: bytes, declared_type: str, max_bytes: int) -> None:
     if len(data) > max_bytes:
         raise InvalidResumeError("resume_too_large")
     if declared_type != "application/pdf" or not data.startswith(b"%PDF-"):
         raise InvalidResumeError("resume_not_pdf")
-
-
-def parse_pdf(data: bytes, max_pages: int) -> ParsedResume:
-    try:
-        document = pymupdf.open(stream=data, filetype="pdf")  # type: ignore[no-untyped-call]
-        if document.needs_pass:
-            raise InvalidResumeError("resume_encrypted")
-        if document.page_count < 1 or document.page_count > max_pages:
-            raise InvalidResumeError("resume_page_limit")
-        page_count = document.page_count
-        text = "\n".join(
-            document[index].get_text("text")  # type: ignore[no-untyped-call]
-            for index in range(page_count)
-        )[:100_000]
-        document.close()  # type: ignore[no-untyped-call]
-    except InvalidResumeError:
-        raise
-    except Exception as error:
-        raise InvalidResumeError("resume_malformed") from error
-    return ParsedResume(page_count=page_count, text=text)
-
-
 def store_pdf(data: bytes, root: str) -> str:
     base = Path(root).resolve()
     base.mkdir(parents=True, exist_ok=True)

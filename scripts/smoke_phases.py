@@ -16,7 +16,8 @@ from app.modules.recruitment.domain import (
     validate_transition,
 )
 from app.modules.resumes.builder import ResumeContent, generate_pdf
-from app.modules.resumes.service import validate_pdf
+from app.modules.resumes.parser import SubprocessPdfParser
+from app.modules.resumes.service import validate_upload_envelope
 from app.modules.roadmaps.graph import AI_ENGINEER, next_nodes, validate_dag
 
 
@@ -58,7 +59,11 @@ def main() -> None:
         education=["B.Tech CS"],
     )
     pdf = generate_pdf(resume)
-    assert validate_pdf(pdf, "application/pdf", 5_000_000, 3).page_count == 1
+    validate_upload_envelope(pdf, "application/pdf", 5_000_000)
+    parsed = SubprocessPdfParser(timeout_seconds=10).parse(
+        pdf, max_bytes=5_000_000, max_pages=3
+    )
+    assert parsed.page_count == 1
     passed(4, "secure PDF parsing")
     assert pdf.startswith(b"%PDF-")
     passed(5, "selectable deterministic resume PDF")

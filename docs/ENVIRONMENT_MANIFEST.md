@@ -4,7 +4,8 @@
 
 - **Frontend:** immutable Next.js 16 image/artifact, configured with the public HTTPS API origin. It does not contain database, provider, or storage credentials.
 - **Backend API:** immutable FastAPI image exposing `/api/v1`, with PostgreSQL, Redis, Qdrant, object storage, scanner, and Gemini configuration supplied by the deployment secret manager.
-- **Worker:** the same reviewed backend release or a separately pinned worker artifact. It consumes durable PostgreSQL jobs and uses bounded leases; parsing must run in a credential-free isolated process before pilot uploads.
+- **Worker:** the reviewed backend release running on a dedicated workload with a rootless container launcher. It consumes durable PostgreSQL jobs and uses bounded leases; it does not contain the native PDF parser.
+- **Parser:** a separately pinned minimal image containing only the parser runtime and PyMuPDF. Each invocation has no network, application credentials, input mounts, or durable authority and is destroyed after one bounded result.
 
 ## Required services
 
