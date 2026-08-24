@@ -7,6 +7,8 @@ The versioned stack in `deploy/staging/compose.yaml` is the provider-neutral rel
 Create an ignored deployment environment file from `deploy/staging/.env.template`. Generate independent PostgreSQL and Redis passwords in a directory outside the repository as `postgres_password` and `redis_password`. Supply `DATABASE_URL`, `REDIS_URL`, and `GEMINI_API_KEY` through the selected secret manager. Never place populated values in Git, CI logs, tickets, or release evidence.
 
 The worker requires `PARSER_DOCKER_HOST` to point to an approved isolated, authenticated rootless launcher and `PARSER_CLIENT_CERT_DIR` to contain its narrow mutual-TLS client identity. Do not mount a host Docker socket into the worker. Load the exact `RESUME_PARSER_IMAGE` digest into that launcher and reproduce `docs/PARSER_SANDBOX.md` policy checks there.
+The protected host certificate directory is read only by a network-disabled one-shot initializer;
+the worker receives application-owned mode `0400` copies from a private Docker volume.
 
 ## Deployment order
 

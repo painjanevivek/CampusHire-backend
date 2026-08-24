@@ -12,6 +12,8 @@ for synthetic staging and controlled pilot rehearsal, not high-availability prod
 - The firewall denies public access to `2376`; only private Docker networks may reach it.
 - `ca.pem`, `cert.pem`, and `key.pem` are mode `0600` in
   `/opt/campushire/config/parser-client-tls`.
+- A network-disabled one-shot initializer copies only those three files into the worker's
+  private, read-only certificate volume with mode `0400` and application-user ownership.
 - An existing gateway network is supplied as `SHARED_GATEWAY_NETWORK`.
 - The gateway imports `Caddyfile.site`, substitutes `STAGING_HOST`, and can resolve the
   `campushire-api` and `campushire-frontend` aliases on the shared network.

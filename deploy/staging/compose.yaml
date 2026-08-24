@@ -70,6 +70,27 @@ services:
     cap_add: [CHOWN]
     restart: "no"
 
+  parser_tls_init:
+    image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE to an immutable digest}
+    user: "0:0"
+    command:
+      - sh
+      - -c
+      - >-
+        rm -f /target/ca.pem /target/cert.pem /target/key.pem &&
+        cp /source/ca.pem /source/cert.pem /source/key.pem /target/ &&
+        chmod 0400 /target/ca.pem /target/cert.pem /target/key.pem &&
+        chown campushire:campushire /target/ca.pem /target/cert.pem /target/key.pem
+    volumes:
+      - ${PARSER_CLIENT_CERT_DIR:?Set PARSER_CLIENT_CERT_DIR to the protected client certificate directory}:/source:ro
+      - parser_tls:/target
+    network_mode: none
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_READ_SEARCH]
+    restart: "no"
+
   migrate:
     image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE to an immutable digest}
     command: ["alembic", "upgrade", "head"]
@@ -126,9 +147,10 @@ services:
       redis: {condition: service_healthy}
       clamav: {condition: service_healthy}
       resume_store_init: {condition: service_completed_successfully}
+      parser_tls_init: {condition: service_completed_successfully}
     volumes:
       - resume_store:/private/resumes
-      - ${PARSER_CLIENT_CERT_DIR:?Set PARSER_CLIENT_CERT_DIR to the protected client certificate directory}:/run/parser-tls:ro
+      - parser_tls:/run/parser-tls:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [data]
@@ -184,5 +206,6 @@ volumes:
   qdrant_data:
   clamav_signatures:
   resume_store:
+  parser_tls:
   caddy_data:
   caddy_config:
