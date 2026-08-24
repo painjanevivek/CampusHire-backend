@@ -1,5 +1,7 @@
 .agents
 .data
+deploy
+docs
 .env
 .env.*
 !.env.example
@@ -10,5 +12,7 @@
 .ruff_cache
 .venv
 __pycache__
+scripts
+tests
 *.pyc
 pytest-cache-files-*

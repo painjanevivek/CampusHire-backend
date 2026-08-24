@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -28,6 +29,9 @@ REQUIRED_EXTERNAL_GATES = {
     "governance_signoff",
     "authorized_go_no_go",
 }
+SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+MIGRATION_HEAD_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,28 @@ def parse_gate_evidence(values: Sequence[str]) -> dict[str, str]:
     return evidence
 
 
+def sha256_digest(value: str) -> str:
+    normalized = value.lower()
+    if not SHA256_PATTERN.fullmatch(normalized):
+        raise argparse.ArgumentTypeError("expected sha256:<64 lowercase hexadecimal characters>")
+    return normalized
+
+
+def git_sha(value: str) -> str:
+    normalized = value.lower()
+    if not GIT_SHA_PATTERN.fullmatch(normalized):
+        raise argparse.ArgumentTypeError("expected a full 40-character Git SHA")
+    return normalized
+
+
+def migration_head(value: str) -> str:
+    if not MIGRATION_HEAD_PATTERN.fullmatch(value):
+        raise argparse.ArgumentTypeError(
+            "migration head may contain only letters, digits, and underscores"
+        )
+    return value
+
+
 def release_blockers(
     repositories: Sequence[RepositoryState],
     *,
@@ -149,12 +175,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frontend", type=Path, default=Path("../Frontend"))
     parser.add_argument("--backend", type=Path, default=Path("."))
     parser.add_argument("--output", type=Path, default=Path(".data/release-candidate.json"))
-    parser.add_argument("--frontend-image-digest")
-    parser.add_argument("--backend-image-digest")
-    parser.add_argument("--migration-head")
-    parser.add_argument("--config-manifest-hash")
-    parser.add_argument("--rollback-frontend-sha")
-    parser.add_argument("--rollback-backend-sha")
+    parser.add_argument("--frontend-image-digest", type=sha256_digest)
+    parser.add_argument("--backend-image-digest", type=sha256_digest)
+    parser.add_argument("--backend-worker-image-digest", type=sha256_digest)
+    parser.add_argument("--parser-image-digest", type=sha256_digest)
+    parser.add_argument("--candidate-archive-sha256", type=sha256_digest)
+    parser.add_argument("--rollback-archive-sha256", type=sha256_digest)
+    parser.add_argument("--migration-head", type=migration_head)
+    parser.add_argument("--config-manifest-hash", type=sha256_digest)
+    parser.add_argument("--rollback-frontend-sha", type=git_sha)
+    parser.add_argument("--rollback-backend-sha", type=git_sha)
     parser.add_argument("--approved-gate", action="append", default=[])
     parser.add_argument("--strict", action="store_true")
     return parser.parse_args()
@@ -171,6 +201,10 @@ def main() -> None:
     immutable_artifacts = {
         "frontend_image_digest": args.frontend_image_digest,
         "backend_image_digest": args.backend_image_digest,
+        "backend_worker_image_digest": args.backend_worker_image_digest,
+        "parser_image_digest": args.parser_image_digest,
+        "candidate_archive_sha256": args.candidate_archive_sha256,
+        "rollback_archive_sha256": args.rollback_archive_sha256,
         "migration_head": args.migration_head,
         "config_manifest_hash": args.config_manifest_hash,
         "rollback_frontend_sha": args.rollback_frontend_sha,
