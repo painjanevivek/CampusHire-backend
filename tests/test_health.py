@@ -33,6 +33,9 @@ def test_api_security_headers_are_present() -> None:
     assert response.headers["Cache-Control"] == "no-store"
     assert response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
     assert response.headers["Cross-Origin-Resource-Policy"] == "same-site"
+    assert response.headers["Content-Security-Policy"] == (
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+    )
 
 
 def test_structured_logs_redact_credentials_and_ignore_unknown_pii_fields() -> None:

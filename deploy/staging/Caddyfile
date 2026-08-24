@@ -1,0 +1,23 @@
+{
+	admin off
+	auto_https disable_redirects
+}
+
+https://{$STAGING_HOST} {
+	tls internal
+	encode zstd gzip
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}

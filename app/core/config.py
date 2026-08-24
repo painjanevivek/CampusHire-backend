@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     frontend_origins: list[AnyHttpUrl] = Field(
         default_factory=lambda: [AnyHttpUrl("http://localhost:3000")]
     )
+    trusted_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "testserver", "test"]
+    )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     session_cookie_name: str = "campushire_session"
     csrf_cookie_name: str = "campushire_csrf"
@@ -51,6 +54,11 @@ class Settings(BaseSettings):
             raise ValueError("Staging and production require MALWARE_SCANNER=clamav")
         if self.app_env in {"staging", "production"} and self.resume_parser_backend != "docker":
             raise ValueError("Staging and production require RESUME_PARSER_BACKEND=docker")
+        if self.app_env in {"staging", "production"}:
+            if any(origin.scheme != "https" for origin in self.frontend_origins):
+                raise ValueError("Staging and production require HTTPS FRONTEND_ORIGINS")
+            if not self.trusted_hosts or "*" in self.trusted_hosts:
+                raise ValueError("Staging and production require explicit TRUSTED_HOSTS")
         return self
 
     @property

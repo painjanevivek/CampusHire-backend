@@ -55,6 +55,8 @@ def test_production_configuration_accepts_only_the_sandbox_backend() -> None:
         malware_scanner="clamav",
         resume_parser_backend="docker",
         resume_parser_image="registry.example.edu/campushire/parser@sha256:abc123",
+        frontend_origins=["https://staging.example.edu"],
+        trusted_hosts=["staging.example.edu"],
     )
     assert settings.resume_parser_backend == "docker"
     with pytest.raises(ValueError, match="valid image reference"):

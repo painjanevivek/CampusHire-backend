@@ -1,0 +1,157 @@
+name: campushire-staging
+
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: campushire
+      POSTGRES_USER: campushire
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campushire -d campushire"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [data]
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
+    command: ["/bin/sh", "-c", "exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    secrets: [redis_password]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - redis_data:/data
+    networks: [data]
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks: [data]
+    restart: unless-stopped
+
+  clamav:
+    image: clamav/clamav:stable@sha256:0e85467cb0d6e7d860a45035707741cd5ffc032ffefc6002a3510c75b6d07027
+    volumes:
+      - clamav_signatures:/var/lib/clamav
+    networks: [data]
+    restart: unless-stopped
+
+  migrate:
+    image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE to an immutable digest}
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend_environment
+      APP_ENV: staging
+      HEALTHCHECK_HOST: ${STAGING_HOST:?Set STAGING_HOST}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL through the deployment secret manager}
+      REDIS_URL: ${REDIS_URL:?Set REDIS_URL through the deployment secret manager}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:?Set FRONTEND_ORIGINS to a JSON HTTPS origin list}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:?Set TRUSTED_HOSTS to a JSON hostname list}
+      MALWARE_SCANNER: clamav
+      CLAMAV_HOST: clamav
+      RESUME_PARSER_BACKEND: docker
+      RESUME_PARSER_IMAGE: ${RESUME_PARSER_IMAGE:?Set RESUME_PARSER_IMAGE to an immutable digest}
+      RESUME_STORAGE_PATH: /private/resumes
+      QDRANT_URL: http://qdrant:6333
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [data]
+    restart: "no"
+
+  api:
+    image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE to an immutable digest}
+    environment: *backend_environment
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/health/ready', headers={'Host': os.environ['HEALTHCHECK_HOST']}); urllib.request.urlopen(request, timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - resume_store:/private/resumes
+    networks: [edge, data]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  worker:
+    image: ${BACKEND_WORKER_IMAGE:?Set BACKEND_WORKER_IMAGE to an immutable digest}
+    environment:
+      <<: *backend_environment
+      DOCKER_HOST: ${PARSER_DOCKER_HOST:?Set PARSER_DOCKER_HOST to the approved isolated launcher}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      clamav: {condition: service_started}
+    volumes:
+      - resume_store:/private/resumes
+    networks: [data]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to an immutable digest}
+    environment:
+      NEXT_PUBLIC_API_URL: https://${STAGING_HOST:?Set STAGING_HOST}/api/v1
+    networks: [edge]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  gateway:
+    image: caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    environment:
+      STAGING_HOST: ${STAGING_HOST:?Set STAGING_HOST}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api: {condition: service_healthy}
+      frontend: {condition: service_started}
+    networks: [edge]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    restart: unless-stopped
+
+secrets:
+  postgres_password:
+    file: ${STAGING_SECRET_DIR:?Set STAGING_SECRET_DIR}/postgres_password
+  redis_password:
+    file: ${STAGING_SECRET_DIR:?Set STAGING_SECRET_DIR}/redis_password
+
+networks:
+  edge:
+  data:
+    internal: true
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  clamav_signatures:
+  resume_store:
+  caddy_data:
+  caddy_config:

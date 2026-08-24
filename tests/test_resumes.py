@@ -55,3 +55,21 @@ def test_production_cannot_start_with_the_marker_scanner() -> None:
 def test_production_requires_the_container_parser() -> None:
     with pytest.raises(ValueError, match="RESUME_PARSER_BACKEND=docker"):
         Settings(app_env="production", malware_scanner="clamav", resume_parser_backend="subprocess")
+
+
+def test_staging_requires_https_and_explicit_trusted_hosts() -> None:
+    with pytest.raises(ValueError, match="HTTPS FRONTEND_ORIGINS"):
+        Settings(
+            app_env="staging",
+            malware_scanner="clamav",
+            resume_parser_backend="docker",
+            frontend_origins=["http://staging.example.edu"],
+        )
+    with pytest.raises(ValueError, match="explicit TRUSTED_HOSTS"):
+        Settings(
+            app_env="staging",
+            malware_scanner="clamav",
+            resume_parser_backend="docker",
+            frontend_origins=["https://staging.example.edu"],
+            trusted_hosts=["*"],
+        )

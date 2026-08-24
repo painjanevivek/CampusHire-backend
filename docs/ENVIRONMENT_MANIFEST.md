@@ -26,3 +26,5 @@
 - **Production pilot:** institution-approved configuration, contacts, retention, SLO/RTO/RPO, secrets, monitoring, backups, and signed release decision.
 
 Use `.env.example` only as a variable inventory. Never commit populated `.env` files, credentials, provider payloads, or recovery exports. Record immutable commit/image identifiers and configuration version—not secret values—in the release evidence pack.
+
+The provider-neutral staging topology is versioned in `deploy/staging/compose.yaml`, with deployment instructions and secret ownership in `docs/STAGING_DEPLOYMENT.md`. Local executable evidence is recorded in `docs/STAGING_REHEARSAL_EVIDENCE_2026-08-24.md`; it does not replace managed-provider staging evidence.

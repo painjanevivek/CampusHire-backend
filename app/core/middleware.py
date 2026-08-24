@@ -58,8 +58,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+        )
         if "Cache-Control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
-        if get_settings().app_env == "production":
+        if get_settings().app_env in {"staging", "production"}:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
