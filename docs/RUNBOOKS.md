@@ -1,5 +1,7 @@
 # CampusHire operational runbooks
 
+Use `docs/INCIDENT_BREACH_COMMUNICATION.md` for the approval-draft incident matrix and `docs/OPERATIONAL_OWNERSHIP.md` for accountable contacts and coverage. Pending fields are release blockers, not implied assignments.
+
 ## Login outage
 
 Check PostgreSQL and Redis readiness, then authentication error rate. Do not weaken CSRF, cookie, or rate-limit controls. If Redis is unavailable in production, authentication fails closed while existing health diagnostics remain available.

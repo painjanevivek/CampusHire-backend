@@ -1,5 +1,7 @@
 # CampusHire privacy baseline
 
+Institution-facing approval drafts and current gaps are maintained in `docs/GOVERNANCE_PRIVACY_NOTICE.md`, `docs/DATA_RIGHTS_RETENTION.md`, and `docs/GOVERNANCE_IMPLEMENTATION_CROSSCHECK.md`. They remain drafts until the roles in `docs/GOVERNANCE_SIGNOFF_REGISTER.md` record authorized decisions.
+
 CampusHire collects only data needed to operate institutional recruitment, explain eligibility, support resumes, calculate versioned match evidence, and personalize approved roadmaps. Age and date of birth are excluded from normal onboarding. Protected or sensitive attributes must never enter match embeddings.
 
 Students may request correction, export, or deactivation through their TNP team. An authenticated student may delete eligible data through `POST /api/v1/privacy/deletion-requests` after entering the exact irreversible confirmation. The transaction removes the account, sessions, profile, resumes and suggestions, roadmap progress, notifications, saved roles, eligibility evaluations, and semantic-match evidence. Private resume files are handed to a durable worker record and retried without retaining filenames, email addresses, or resume content.
