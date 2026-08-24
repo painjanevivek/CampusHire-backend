@@ -1,0 +1,53 @@
+services:
+  postgres:
+    cpus: 0.75
+    mem_limit: 1536m
+    mem_reservation: 512m
+    pids_limit: 200
+
+  redis:
+    cpus: 0.25
+    mem_limit: 512m
+    mem_reservation: 128m
+    pids_limit: 100
+
+  qdrant:
+    cpus: 0.75
+    mem_limit: 1536m
+    mem_reservation: 512m
+    pids_limit: 200
+
+  clamav:
+    cpus: 0.75
+    mem_limit: 2304m
+    mem_reservation: 1024m
+    pids_limit: 200
+
+  migrate:
+    cpus: 0.5
+    mem_limit: 768m
+    pids_limit: 128
+
+  api:
+    cpus: 1.0
+    mem_limit: 1024m
+    mem_reservation: 384m
+    pids_limit: 256
+
+  worker:
+    cpus: 1.0
+    mem_limit: 1024m
+    mem_reservation: 384m
+    pids_limit: 256
+
+  frontend:
+    cpus: 0.75
+    mem_limit: 768m
+    mem_reservation: 256m
+    pids_limit: 200
+
+  gateway:
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 64m
+    pids_limit: 100

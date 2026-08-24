@@ -9,11 +9,22 @@ from typing import Final
 
 CONFIGURATION_PATHS: Final = (
     ("backend", ".env.example"),
+    ("backend", ".dockerignore"),
+    ("backend", ".github/workflows/publish-images.yml"),
+    ("backend", ".github/workflows/deploy-oci-staging.yml"),
     ("backend", "Dockerfile"),
     ("backend", "Dockerfile.parser"),
+    ("backend", "Dockerfile.clamav"),
+    ("backend", "deploy/clamav/clamd.conf"),
+    ("backend", "deploy/clamav/entrypoint.sh"),
     ("backend", "deploy/staging/Caddyfile"),
     ("backend", "deploy/staging/compose.yaml"),
+    ("backend", "deploy/oci/Caddyfile"),
+    ("backend", "deploy/oci/compose.override.yaml"),
+    ("backend", "deploy/oci/deploy.sh"),
     ("frontend", ".env.example"),
+    ("frontend", ".dockerignore"),
+    ("frontend", ".github/workflows/publish-image.yml"),
     ("frontend", "Dockerfile"),
     ("frontend", "next.config.ts"),
 )

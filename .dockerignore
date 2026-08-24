@@ -1,6 +1,8 @@
 .agents
 .data
-deploy
+deploy/*
+!deploy/clamav/
+!deploy/clamav/**
 docs
 .env
 .env.*

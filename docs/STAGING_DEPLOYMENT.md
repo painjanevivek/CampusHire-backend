@@ -6,11 +6,11 @@ The versioned stack in `deploy/staging/compose.yaml` is the provider-neutral rel
 
 Create an ignored deployment environment file from `deploy/staging/.env.template`. Generate independent PostgreSQL and Redis passwords in a directory outside the repository as `postgres_password` and `redis_password`. Supply `DATABASE_URL`, `REDIS_URL`, and `GEMINI_API_KEY` through the selected secret manager. Never place populated values in Git, CI logs, tickets, or release evidence.
 
-The worker requires `PARSER_DOCKER_HOST` to point to an approved isolated, authenticated rootless launcher. Do not mount a host Docker socket into the worker. Load the exact `RESUME_PARSER_IMAGE` digest into that launcher and reproduce `docs/PARSER_SANDBOX.md` policy checks there.
+The worker requires `PARSER_DOCKER_HOST` to point to an approved isolated, authenticated rootless launcher and `PARSER_CLIENT_CERT_DIR` to contain its narrow mutual-TLS client identity. Do not mount a host Docker socket into the worker. Load the exact `RESUME_PARSER_IMAGE` digest into that launcher and reproduce `docs/PARSER_SANDBOX.md` policy checks there.
 
 ## Deployment order
 
-1. Build and publish the backend `api` and `worker` targets, the parser image, and the frontend image.
+1. Build and publish the backend `api` and `worker` targets, the parser and ClamAV images, and the frontend image.
 2. Record commit SHAs, image digests, OpenAPI hash, and configuration version.
 3. Run `docker compose --env-file <protected-file> -f deploy/staging/compose.yaml config` and review the resolved topology without printing secrets into evidence.
 4. Start dependencies and the one-shot `migrate` service. The API and worker start only after migration succeeds.
@@ -29,3 +29,7 @@ The worker requires `PARSER_DOCKER_HOST` to point to an approved isolated, authe
 | Parser launcher client identity | worker only | Platform security owner | worker/launcher compromise or scheduled rotation |
 
 Managed-provider access, DNS, public certificates, backup policy, and provider-specific identities are external Phase 7C gates. Local TLS or Docker evidence must be labelled local and cannot authorize real student data.
+
+## OCI Always Free target
+
+`deploy/oci/` supplies the public Caddy policy, an ARM64 single-VM resource envelope, protected-environment validation, and the operator contract for an OCI Ampere A1 staging host. The GitHub publication workflows produce AMD64/ARM64 images with immutable digests, SBOMs, and provenance; `Deploy OCI staging` transfers only the committed deployment bundle and protected runtime configuration. Follow `deploy/oci/README.md`. This is a cost-constrained staging target, not evidence of high availability or production capacity.

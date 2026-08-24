@@ -1,0 +1,21 @@
+FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241 AS clamav-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates clamav-daemon clamav-freshclam \
+    && rm -rf /var/lib/apt/lists/* \
+    && install -d -o clamav -g clamav /run/clamav /var/lib/clamav
+
+COPY --chown=clamav:clamav deploy/clamav/clamd.conf /etc/clamav/clamd.conf
+COPY --chown=root:root deploy/clamav/entrypoint.sh /usr/local/bin/campushire-clamav
+RUN chmod 0755 /usr/local/bin/campushire-clamav
+
+USER clamav
+EXPOSE 3310
+VOLUME ["/var/lib/clamav"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+  CMD ["clamdscan", "--ping", "3"]
+
+ENTRYPOINT ["/usr/local/bin/campushire-clamav"]

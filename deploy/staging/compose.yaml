@@ -20,7 +20,7 @@ services:
 
   redis:
     image: redis:8-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
-    command: ["/bin/sh", "-c", "exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    command: ["/bin/sh", "-c", "exec redis-server --appendonly yes --maxmemory \"$${REDIS_MAXMEMORY:-384mb}\" --maxmemory-policy noeviction --requirepass \"$$(cat /run/secrets/redis_password)\""]
     secrets: [redis_password]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep PONG"]
@@ -40,10 +40,16 @@ services:
     restart: unless-stopped
 
   clamav:
-    image: clamav/clamav:stable@sha256:0e85467cb0d6e7d860a45035707741cd5ffc032ffefc6002a3510c75b6d07027
+    image: ${CLAMAV_IMAGE:?Set CLAMAV_IMAGE to an immutable digest}
     volumes:
       - clamav_signatures:/var/lib/clamav
     networks: [data]
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "3"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
     restart: unless-stopped
 
   migrate:
@@ -94,12 +100,17 @@ services:
     environment:
       <<: *backend_environment
       DOCKER_HOST: ${PARSER_DOCKER_HOST:?Set PARSER_DOCKER_HOST to the approved isolated launcher}
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /run/parser-tls
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
-      clamav: {condition: service_started}
+      clamav: {condition: service_healthy}
     volumes:
       - resume_store:/private/resumes
+      - ${PARSER_CLIENT_CERT_DIR:?Set PARSER_CLIENT_CERT_DIR to the protected client certificate directory}:/run/parser-tls:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [data]
     read_only: true
     tmpfs: [/tmp]
@@ -124,7 +135,7 @@ services:
       STAGING_HOST: ${STAGING_HOST:?Set STAGING_HOST}
     ports: ["80:80", "443:443"]
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

@@ -28,3 +28,5 @@
 Use `.env.example` only as a variable inventory. Never commit populated `.env` files, credentials, provider payloads, or recovery exports. Record immutable commit/image identifiers and configuration version—not secret values—in the release evidence pack.
 
 The provider-neutral staging topology is versioned in `deploy/staging/compose.yaml`, with deployment instructions and secret ownership in `docs/STAGING_DEPLOYMENT.md`. Local executable evidence is recorded in `docs/STAGING_REHEARSAL_EVIDENCE_2026-08-24.md`; it does not replace managed-provider staging evidence.
+
+The selected zero-cost managed target is an OCI Ampere A1 ARM64 VM. `deploy/oci/` constrains the provider-neutral topology to the free 2-OCPU/12-GB envelope and keeps the parser behind a mutually authenticated rootless Docker endpoint. A single VM remains one failure domain; off-VM backups, managed rehearsal evidence, and the documented human/governance gates remain mandatory before any real-data pilot.
