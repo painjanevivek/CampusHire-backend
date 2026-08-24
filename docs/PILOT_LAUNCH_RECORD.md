@@ -2,6 +2,17 @@
 
 Status: **Not launched — authorization and release gates pending**
 
+## Approval authority
+
+| Field | Recorded value |
+| --- | --- |
+| Named final approver | Vivek Painjane (Admin) |
+| Decision | Approved with prerequisites |
+| Decision date | 2026-08-24 |
+| Effective condition | Staging, recovery, representative UAT, governance reviews, and the deferred frontend/backend security scans must pass |
+
+This approval names the final project authority now, but it is not an immediate `GO` and does not waive any entry gate below.
+
 ## Immutable candidate
 
 | Field | Controlled value / status |
@@ -27,9 +38,9 @@ These values describe the locally verified immutable runtime pair. Before Stage 
 
 | Stage | Scope | Entry evidence | Observation window | Decision / approver |
 | --- | --- | --- | --- | --- |
-| 0 | Synthetic operator smoke | Approved manifest, restore evidence, monitoring active | Pending | Pending |
-| 1 | Authorized internal synthetic users | Security/accessibility/browser gates pass | Pending | Pending |
-| 2 | Bounded institution pilot | Governance/UAT/go-no-go approved | Pending | Pending |
+| 0 | Synthetic operator smoke | Approved manifest, restore evidence, monitoring active | Pending | Vivek Painjane (Admin), subject to entry evidence |
+| 1 | Authorized internal synthetic users | Security/accessibility/browser gates pass | Pending | Vivek Painjane (Admin), subject to entry evidence |
+| 2 | Bounded institution pilot | Governance/UAT/go-no-go approved | Pending | Vivek Painjane (Admin), conditionally approved after every prerequisite passes |
 
 At each stage record health/readiness, error rate, latency percentiles, database/Redis saturation, queue age/retries/failures, scanner/parser/provider health, authorization/security events, restore readiness, and support observations. Compare only with approved thresholds and dataset labels.
 

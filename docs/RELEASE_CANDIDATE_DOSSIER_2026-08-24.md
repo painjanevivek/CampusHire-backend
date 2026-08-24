@@ -28,9 +28,9 @@ This is an evidence-backed status, not a failure of the completed engineering ph
 2. Managed staging, managed backup/restore, selected-provider failure drills, and managed HTTPS capacity repetition are incomplete.
 3. Provider pricing, pilot size, cost ceiling, and production SLO/alert approval are pending.
 4. Representative student, administrator, keyboard, and screen-reader UAT plus independent retest/acceptance are pending.
-5. Privacy/legal, T&P, accessibility, product, security/platform, audit-access, ownership, and after-hours approvals are pending.
-6. No target deployment access, approved private-registry promotion/signing evidence, or authorized go/no-go decision is available. Local immutable image/configuration/rollback evidence is complete but is not a managed deployment.
+5. Vivek Painjane (Admin) is the current named project approver, but document-level governance reviews, representative accessibility/UAT acceptance, operational delegates, audit access, and after-hours coverage remain pending.
+6. No target deployment access or approved private-registry promotion/signing evidence is available. Vivek Painjane (Admin) provided conditional pilot approval on 2026-08-24; it becomes effective only after staging, recovery, UAT, governance review, and the deferred security scans pass. Local immutable image/configuration/rollback evidence is complete but is not a managed deployment.
 
 ## Launch/rollback decision
 
-No deployment was attempted because doing so would bypass explicit plan authority and release gates. After blockers close, generate a strict manifest, attach controlled evidence, obtain the named go/no-go decisions, follow `docs/DEPLOYMENT_RECOVERY.md`, and use `docs/PILOT_LAUNCH_RECORD.md` for monitored rollout. Any critical/high security or accessibility finding, tenant leakage, data loss, dishonest decision authority, failed restore, or threshold breach requires stop/rollback.
+No deployment was attempted because the conditional approval is not effective until its prerequisites pass. After blockers close, generate a strict manifest, attach controlled evidence, activate the recorded approval through the final gate review, follow `docs/DEPLOYMENT_RECOVERY.md`, and use `docs/PILOT_LAUNCH_RECORD.md` for monitored rollout. Any critical/high security or accessibility finding, tenant leakage, data loss, dishonest decision authority, failed restore, or threshold breach requires stop/rollback.
