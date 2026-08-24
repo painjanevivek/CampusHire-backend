@@ -43,7 +43,7 @@ services:
     image: ${CLAMAV_IMAGE:?Set CLAMAV_IMAGE to an immutable digest}
     volumes:
       - clamav_signatures:/var/lib/clamav
-    networks: [data]
+    networks: [data, scanner_egress]
     healthcheck:
       test: ["CMD", "clamdscan", "--ping", "3"]
       interval: 30s
@@ -153,7 +153,7 @@ services:
       - parser_tls:/run/parser-tls:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks: [data]
+    networks: [data, worker_egress]
     read_only: true
     tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
@@ -199,6 +199,8 @@ networks:
   edge:
   data:
     internal: true
+  scanner_egress:
+  worker_egress:
 
 volumes:
   postgres_data:

@@ -19,9 +19,9 @@ for synthetic staging and controlled pilot rehearsal, not high-availability prod
   `campushire-api` and `campushire-frontend` aliases on the shared network.
 
 The application does not publish host ports and does not replace the existing gateway. Keep
-PostgreSQL, Redis, Qdrant, ClamAV, and the parser endpoint private. ClamAV alone joins a
-dedicated egress network so it can retrieve signed malware-definition updates; the data network
-remains internal.
+PostgreSQL, Redis, Qdrant, ClamAV, and the parser endpoint private. ClamAV and the worker use
+separate egress networks for signed definition updates and authenticated provider/launcher calls;
+the data network remains internal and parser containers remain networkless.
 
 ## GitHub staging environment
 

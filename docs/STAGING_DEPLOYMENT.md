@@ -9,6 +9,9 @@ Create an ignored deployment environment file from `deploy/staging/.env.template
 The worker requires `PARSER_DOCKER_HOST` to point to an approved isolated, authenticated rootless launcher and `PARSER_CLIENT_CERT_DIR` to contain its narrow mutual-TLS client identity. Do not mount a host Docker socket into the worker. Load the exact `RESUME_PARSER_IMAGE` digest into that launcher and reproduce `docs/PARSER_SANDBOX.md` policy checks there.
 The protected host certificate directory is read only by a network-disabled one-shot initializer;
 the worker receives application-owned mode `0400` copies from a private Docker volume.
+The worker has its own egress network for the authenticated parser launcher and optional external
+providers. ClamAV uses a separate egress network for definition updates; neither service shares
+an egress network with PostgreSQL, Redis, or Qdrant, and parser containers remain networkless.
 
 ## Deployment order
 
