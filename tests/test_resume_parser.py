@@ -99,7 +99,6 @@ def test_docker_command_enforces_the_parser_security_boundary() -> None:
         "campushire-parser-test",
         max_bytes=5 * 1024 * 1024,
         max_pages=3,
-        output_directory=Path("parser-output"),
     )
     joined = " ".join(command)
     assert "--network none" in joined
@@ -114,8 +113,9 @@ def test_docker_command_enforces_the_parser_security_boundary() -> None:
     assert "--ulimit fsize=262144:262144" in joined
     assert "--env" not in command
     assert "--volume" not in command
-    assert command.count("--mount") == 1
-    assert "target=/output" in joined
+    assert "--mount" not in command
+    assert command.count("--tmpfs") == 1
+    assert command[-1] == "-"
 
 
 def test_privileged_worker_path_has_no_native_parser_sink() -> None:

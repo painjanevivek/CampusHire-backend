@@ -16,9 +16,10 @@ Every parse uses these fixed controls:
 - all Linux capabilities dropped and `no-new-privileges` enabled;
 - 0.5 CPU, 256 MiB memory/swap, 32 PIDs, and a 20-second wall-time default;
 - a 16 MiB `noexec,nosuid,nodev` temporary filesystem;
-- a 256 KiB output file-size limit;
+- a strict 192 KiB parent-side result limit with anonymous worker-local capture;
 - PDF bytes delivered through stdin, never a host input mount;
-- one randomly named, disposable host output directory and no application/storage mounts;
+- no host, application, database, or storage mounts; the single result is streamed over the
+  authenticated launcher API into an anonymous worker-local temporary file;
 - fixed output path, strict protocol v1 schema, 192 KiB parent read limit, 100,000-character text limit, and maximum page revalidation.
 
 Container creation, start, result validation, and forced removal use argv arrays without a shell. A timeout kills and removes the container. Missing runtime, crash, or timeout produces a safe parser code and follows the bounded job retry policy. Malformed, encrypted, oversized, and over-page-limit documents fail terminally.

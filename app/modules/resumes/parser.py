@@ -168,7 +168,6 @@ class DockerPdfParser:
         *,
         max_bytes: int,
         max_pages: int,
-        output_directory: Path,
     ) -> list[str]:
         return [
             self.docker_binary,
@@ -197,8 +196,6 @@ class DockerPdfParser:
             "fsize=262144:262144",
             "--tmpfs",
             "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",  # noqa: S108
-            "--mount",
-            f"type=bind,source={output_directory.resolve()},target=/output",
             self.image,
             "--max-bytes",
             str(max_bytes),
@@ -207,7 +204,7 @@ class DockerPdfParser:
             "--max-text-chars",
             str(MAX_EXTRACTED_TEXT_CHARS),
             "--output",
-            "/output/result.json",
+            "-",
         ]
 
     def _run_control(self, command: list[str], *, timeout: float = 15.0) -> None:
@@ -228,24 +225,27 @@ class DockerPdfParser:
     def parse(self, data: bytes, *, max_bytes: int, max_pages: int) -> ParsedResume:
         container_name = f"campushire-parser-{uuid4().hex}"
         created = False
-        with tempfile.TemporaryDirectory(prefix="campushire-parser-result-") as directory:
-            output_directory = Path(directory)
-            output_directory.chmod(0o733)
-            try:
-                self._run_control(
-                    self.create_command(
-                        container_name,
-                        max_bytes=max_bytes,
-                        max_pages=max_pages,
-                        output_directory=output_directory,
-                    )
+        try:
+            self._run_control(
+                self.create_command(
+                    container_name,
+                    max_bytes=max_bytes,
+                    max_pages=max_pages,
                 )
-                created = True
+            )
+            created = True
+            with tempfile.TemporaryFile() as result_file:
                 try:
                     process = subprocess.Popen(  # noqa: S603 - fixed docker operation and name
-                        [self.docker_binary, "start", "--attach", "--interactive", container_name],
+                        [
+                            self.docker_binary,
+                            "start",
+                            "--attach",
+                            "--interactive",
+                            container_name,
+                        ],
                         stdin=subprocess.PIPE,
-                        stdout=subprocess.DEVNULL,
+                        stdout=result_file,
                         stderr=subprocess.DEVNULL,
                     )
                     process.communicate(input=data, timeout=self.timeout_seconds)
@@ -259,18 +259,16 @@ class DockerPdfParser:
                 if process.returncode != 0:
                     raise ParserUnavailableError("resume_parser_unavailable")
 
-                target = Path(directory) / "result.json"
-                try:
-                    size = target.stat().st_size
-                    if size < 1 or size > MAX_RESULT_BYTES:
-                        raise ParserUnavailableError("resume_parser_invalid_output")
-                    raw = target.read_bytes()
-                except OSError as error:
-                    raise ParserUnavailableError("resume_parser_invalid_output") from error
+                result_file.seek(0, os.SEEK_END)
+                size = result_file.tell()
+                if size < 1 or size > MAX_RESULT_BYTES:
+                    raise ParserUnavailableError("resume_parser_invalid_output")
+                result_file.seek(0)
+                raw = result_file.read(MAX_RESULT_BYTES + 1)
                 return _decode_result(raw, max_pages=max_pages)
-            finally:
-                if created:
-                    self._terminate_container(container_name)
+        finally:
+            if created:
+                self._terminate_container(container_name)
 
     def _terminate_container(self, container_name: str) -> None:
         try:

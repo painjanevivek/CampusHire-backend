@@ -18,7 +18,7 @@
 5. A source regression test proved the privileged worker and upload-processing pipeline contain no `pymupdf` import or `parse_pdf()` call.
 6. Focused resume/pipeline tests preserved valid upload, review, suggestion, ownership, retry, generation, and download behavior.
 
-Live inspection proved: network mode `none`; read-only root; all capabilities dropped; `no-new-privileges`; non-root UID/GID; fixed CPU, memory/swap, PID, wall-time, tmpfs, and output-file limits; no application credential variables; no input/application mounts; one isolated disposable output mount. The valid control retained selectable text. Non-PDF, malformed, encrypted, oversized, and over-page-limit inputs returned only bounded safe codes. A forced timeout removed its container and produced `resume_parser_timeout`.
+Live inspection proved: network mode `none`; read-only root; all capabilities dropped; `no-new-privileges`; non-root UID/GID; fixed CPU, memory/swap, PID, wall-time, tmpfs, and output limits; no application credential variables; and no host, input, output, or application mounts. The bounded result streams through the authenticated launcher API into an anonymous worker-local temporary file and is size-checked before decoding. The valid control retained selectable text. Non-PDF, malformed, encrypted, oversized, and over-page-limit inputs returned only bounded safe codes. A forced timeout removed its container and produced `resume_parser_timeout`.
 
 ## Disposition
 
