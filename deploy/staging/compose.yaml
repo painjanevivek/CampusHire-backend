@@ -52,6 +52,24 @@ services:
       retries: 5
     restart: unless-stopped
 
+  resume_store_init:
+    image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE to an immutable digest}
+    user: "0:0"
+    command:
+      - sh
+      - -c
+      - >-
+        install -d -o campushire -g campushire -m 0700
+        /private/resumes/quarantine /private/resumes/clean
+    volumes:
+      - resume_store:/private/resumes
+    network_mode: none
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    restart: "no"
+
   migrate:
     image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE to an immutable digest}
     command: ["alembic", "upgrade", "head"]
@@ -81,6 +99,7 @@ services:
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
+      resume_store_init: {condition: service_completed_successfully}
     healthcheck:
       test: ["CMD", "python", "-c", "import os, urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/health/ready', headers={'Host': os.environ['HEALTHCHECK_HOST']}); urllib.request.urlopen(request, timeout=3)"]
       interval: 10s
@@ -106,6 +125,7 @@ services:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
       clamav: {condition: service_healthy}
+      resume_store_init: {condition: service_completed_successfully}
     volumes:
       - resume_store:/private/resumes
       - ${PARSER_CLIENT_CERT_DIR:?Set PARSER_CLIENT_CERT_DIR to the protected client certificate directory}:/run/parser-tls:ro

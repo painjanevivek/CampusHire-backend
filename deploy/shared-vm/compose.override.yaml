@@ -31,6 +31,11 @@ services:
     mem_limit: 768m
     pids_limit: 128
 
+  resume_store_init:
+    cpus: 0.25
+    mem_limit: 128m
+    pids_limit: 32
+
   api:
     cpus: 1.5
     mem_limit: 1536m

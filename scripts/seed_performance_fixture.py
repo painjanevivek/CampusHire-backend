@@ -64,6 +64,9 @@ async def seed() -> dict[str, str]:
                 raise RuntimeError(
                     "The existing performance fixture is incomplete; use a clean database."
                 )
+            student.password_hash = hash_password(required("PERFORMANCE_STUDENT_PASSWORD"))
+            admin.password_hash = hash_password(required("PERFORMANCE_ADMIN_PASSWORD"))
+            await db.commit()
             return {
                 "data_class": "synthetic-only",
                 "student_email": student.email,

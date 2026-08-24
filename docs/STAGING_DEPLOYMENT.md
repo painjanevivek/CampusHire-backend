@@ -14,6 +14,8 @@ The worker requires `PARSER_DOCKER_HOST` to point to an approved isolated, authe
 2. Record commit SHAs, image digests, OpenAPI hash, and configuration version.
 3. Run `docker compose --env-file <protected-file> -f deploy/staging/compose.yaml config` and review the resolved topology without printing secrets into evidence.
 4. Start dependencies and the one-shot `migrate` service. The API and worker start only after migration succeeds.
+   A network-disabled, capability-minimized one-shot initializer creates the private resume
+   directories with application-user ownership before either service starts.
 5. Start the frontend and gateway, then verify HTTPS, health probes, secure cookies, CSP/HSTS, tenant-negative tests, synthetic student/admin journeys, parser policy, and degraded Gemini behavior.
 
 `scripts/seed_staging_synthetic.py` creates only standards-reserved `example.com` test identities in two synthetic institutions. It requires three passwords through the process environment and prints no password. Export its second institution identifier as `STAGING_SECOND_INSTITUTION_ID`, then run `scripts/smoke_staging.py --base-url https://<host> --environment-label <label>`. The `--insecure-local-tls` option is restricted to labels beginning with `local-`; never use it for managed staging.
