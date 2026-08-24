@@ -1,0 +1,21 @@
+https://{$STAGING_HOST} {
+	import vswarm_access_log
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy campushire-api:8000 {
+			import vswarm_local_dev_transport
+		}
+	}
+
+	handle {
+		reverse_proxy campushire-frontend:3000 {
+			import vswarm_local_dev_transport
+		}
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}

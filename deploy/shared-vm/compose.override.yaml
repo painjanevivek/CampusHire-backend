@@ -1,0 +1,64 @@
+services:
+  postgres:
+    cpus: 1.0
+    mem_limit: 2048m
+    mem_reservation: 512m
+    pids_limit: 256
+
+  redis:
+    cpus: 0.5
+    mem_limit: 768m
+    mem_reservation: 128m
+    pids_limit: 128
+
+  qdrant:
+    cpus: 1.0
+    mem_limit: 2048m
+    mem_reservation: 512m
+    pids_limit: 256
+
+  clamav:
+    cpus: 1.0
+    mem_limit: 3072m
+    mem_reservation: 1024m
+    pids_limit: 256
+
+  migrate:
+    cpus: 0.5
+    mem_limit: 768m
+    pids_limit: 128
+
+  api:
+    cpus: 1.5
+    mem_limit: 1536m
+    mem_reservation: 384m
+    pids_limit: 256
+    networks:
+      edge: {}
+      data: {}
+      shared_gateway:
+        aliases: [campushire-api]
+
+  worker:
+    cpus: 1.5
+    mem_limit: 1536m
+    mem_reservation: 384m
+    pids_limit: 256
+
+  frontend:
+    cpus: 1.0
+    mem_limit: 1024m
+    mem_reservation: 256m
+    pids_limit: 200
+    networks:
+      edge: {}
+      shared_gateway:
+        aliases: [campushire-frontend]
+
+  gateway:
+    profiles: [standalone-gateway]
+
+networks:
+  shared_gateway:
+    external: true
+    name: ${SHARED_GATEWAY_NETWORK:?Set SHARED_GATEWAY_NETWORK to the existing gateway network}

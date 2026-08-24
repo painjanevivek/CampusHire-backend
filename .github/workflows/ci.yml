@@ -54,7 +54,7 @@ jobs:
           docker build --tag campushire-backend:test .
           docker run --rm --entrypoint python campushire-backend:test -c "from app.modules.resumes.builder import ResumeContent, generate_pdf; assert generate_pdf(ResumeContent(full_name='Test Student', email='test@example.edu')).startswith(b'%PDF-')"
       - run: ruff check .
-      - run: mypy app parser_runtime/main.py scripts/verify_parser_sandbox.py scripts/seed_staging_synthetic.py scripts/seed_recovery_fixture.py scripts/seed_performance_fixture.py scripts/smoke_staging.py scripts/rehearse_dependency_failures.py scripts/measure_pilot_http.py scripts/estimate_pilot_cost.py scripts/build_release_candidate_manifest.py scripts/hash_release_configuration.py scripts/validate_oci_environment.py
+      - run: mypy app parser_runtime/main.py scripts/verify_parser_sandbox.py scripts/seed_staging_synthetic.py scripts/seed_recovery_fixture.py scripts/seed_performance_fixture.py scripts/smoke_staging.py scripts/rehearse_dependency_failures.py scripts/measure_pilot_http.py scripts/estimate_pilot_cost.py scripts/build_release_candidate_manifest.py scripts/hash_release_configuration.py scripts/validate_oci_environment.py scripts/validate_shared_vm_environment.py
       - run: pytest
       - name: Verify authoritative OpenAPI snapshot
         run: |

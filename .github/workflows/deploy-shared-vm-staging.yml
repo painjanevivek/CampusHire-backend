@@ -1,0 +1,176 @@
+name: Deploy shared VM staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_api_image:
+        description: Immutable ghcr.io API image reference including @sha256 digest
+        required: true
+        type: string
+      backend_worker_image:
+        description: Immutable ghcr.io worker image reference including @sha256 digest
+        required: true
+        type: string
+      frontend_image:
+        description: Immutable ghcr.io frontend image reference including @sha256 digest
+        required: true
+        type: string
+      parser_image:
+        description: Immutable ghcr.io parser image reference including @sha256 digest
+        required: true
+        type: string
+      clamav_image:
+        description: Immutable ghcr.io ClamAV image reference including @sha256 digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-vm-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy immutable release to shared VM
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      SSH_HOST: ${{ vars.VM_SSH_HOST }}
+      SSH_USER: ${{ vars.VM_SSH_USER }}
+      STAGING_HOST: ${{ vars.STAGING_HOST }}
+      SHARED_GATEWAY_NETWORK: ${{ vars.SHARED_GATEWAY_NETWORK }}
+      BACKEND_API_IMAGE: ${{ inputs.backend_api_image }}
+      BACKEND_WORKER_IMAGE: ${{ inputs.backend_worker_image }}
+      FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+      RESUME_PARSER_IMAGE: ${{ inputs.parser_image }}
+      CLAMAV_IMAGE: ${{ inputs.clamav_image }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require protected deployment inputs
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.VM_SSH_HOST_KEY }}
+        run: |
+          python - <<'PY'
+          import os
+
+          required = (
+              "SSH_HOST",
+              "SSH_USER",
+              "STAGING_HOST",
+              "SHARED_GATEWAY_NETWORK",
+              "SSH_PRIVATE_KEY",
+              "SSH_HOST_KEY",
+              "POSTGRES_PASSWORD",
+              "REDIS_PASSWORD",
+          )
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              raise SystemExit("missing protected deployment inputs: " + ", ".join(missing))
+          PY
+
+      - name: Build protected deployment bundle
+        env:
+          RELEASE_DIRECTORY: ${{ runner.temp }}/campushire-${{ github.sha }}
+        run: |
+          install -d -m 700 "${RELEASE_DIRECTORY}" "${RELEASE_DIRECTORY}/config/secrets"
+          cp -R deploy scripts "${RELEASE_DIRECTORY}/"
+          chmod +x "${RELEASE_DIRECTORY}/deploy/shared-vm/deploy.sh"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from urllib.parse import quote
+
+          release = Path(os.environ["RELEASE_DIRECTORY"])
+          postgres_password = os.environ["POSTGRES_PASSWORD"]
+          redis_password = os.environ["REDIS_PASSWORD"]
+          if "\n" in postgres_password or "\n" in redis_password:
+              raise SystemExit("database credentials must be single-line values")
+
+          host = os.environ["STAGING_HOST"]
+          values = {
+              "STAGING_HOST": host,
+              "FRONTEND_ORIGINS": f'["https://{host}"]',
+              "TRUSTED_HOSTS": f'["{host}"]',
+              "BACKEND_API_IMAGE": os.environ["BACKEND_API_IMAGE"],
+              "BACKEND_WORKER_IMAGE": os.environ["BACKEND_WORKER_IMAGE"],
+              "FRONTEND_IMAGE": os.environ["FRONTEND_IMAGE"],
+              "RESUME_PARSER_IMAGE": os.environ["RESUME_PARSER_IMAGE"],
+              "CLAMAV_IMAGE": os.environ["CLAMAV_IMAGE"],
+              "PARSER_DOCKER_HOST": "tcp://host.docker.internal:2376",
+              "PARSER_CLIENT_CERT_DIR": "/opt/campushire/config/parser-client-tls",
+              "STAGING_SECRET_DIR": "/opt/campushire/config/secrets",
+              "CADDYFILE_PATH": "../oci/Caddyfile",
+              "SHARED_GATEWAY_NETWORK": os.environ["SHARED_GATEWAY_NETWORK"],
+              "DATABASE_URL": (
+                  "postgresql+asyncpg://campushire:"
+                  f"{quote(postgres_password, safe='')}@postgres:5432/campushire"
+              ),
+              "REDIS_URL": f"redis://:{quote(redis_password, safe='')}@redis:6379/0",
+              "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY", ""),
+          }
+          environment = release / "config" / "staging.env"
+          environment.write_text(
+              "\n".join(f"{name}={value}" for name, value in values.items()) + "\n",
+              encoding="utf-8",
+          )
+          environment.chmod(0o600)
+          for name, value in (
+              ("postgres_password", postgres_password),
+              ("redis_password", redis_password),
+          ):
+              path = release / "config" / "secrets" / name
+              path.write_text(value, encoding="utf-8")
+              path.chmod(0o600)
+          PY
+          python -m scripts.validate_shared_vm_environment "${RELEASE_DIRECTORY}/config/staging.env"
+          tar -C "${RELEASE_DIRECTORY}" -czf "${RUNNER_TEMP}/campushire-${GITHUB_SHA}.tar.gz" .
+
+      - name: Configure pinned SSH identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.VM_SSH_HOST_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${SSH_HOST_KEY}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload and activate release
+        env:
+          REMOTE_RELEASE: /opt/campushire/releases/${{ github.sha }}
+        run: |
+          ssh "${SSH_USER}@${SSH_HOST}" "install -d -m 700 '${REMOTE_RELEASE}'"
+          scp "${RUNNER_TEMP}/campushire-${GITHUB_SHA}.tar.gz" \
+            "${SSH_USER}@${SSH_HOST}:${REMOTE_RELEASE}/release.tar.gz"
+          ssh "${SSH_USER}@${SSH_HOST}" "
+            set -eu
+            tar -C '${REMOTE_RELEASE}' -xzf '${REMOTE_RELEASE}/release.tar.gz'
+            rm '${REMOTE_RELEASE}/release.tar.gz'
+            install -d -m 700 /opt/campushire/config /opt/campushire/config/secrets
+            install -m 600 '${REMOTE_RELEASE}/config/staging.env' /opt/campushire/config/staging.env
+            install -m 600 '${REMOTE_RELEASE}/config/secrets/postgres_password' /opt/campushire/config/secrets/postgres_password
+            install -m 600 '${REMOTE_RELEASE}/config/secrets/redis_password' /opt/campushire/config/secrets/redis_password
+            rm -rf '${REMOTE_RELEASE}/config'
+            '${REMOTE_RELEASE}/deploy/shared-vm/deploy.sh' /opt/campushire/config/staging.env
+          "
+
+      - name: Record deployment evidence
+        run: |
+          {
+            echo "## Shared VM staging deployment"
+            echo
+            echo "- Host: \`https://${STAGING_HOST}\`"
+            echo "- Backend commit: \`${GITHUB_SHA}\`"
+            echo "- API: \`${BACKEND_API_IMAGE}\`"
+            echo "- Worker: \`${BACKEND_WORKER_IMAGE}\`"
+            echo "- Frontend: \`${FRONTEND_IMAGE}\`"
+            echo "- Parser: \`${RESUME_PARSER_IMAGE}\`"
+            echo "- ClamAV: \`${CLAMAV_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
