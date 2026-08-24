@@ -4,7 +4,24 @@ Status: **Not launched — authorization and release gates pending**
 
 ## Immutable candidate
 
-Record frontend/backend SHAs and image digests, OpenAPI hash, migration head, configuration-manifest hash, rollback pair, approved gate-evidence links, target environment, and deployment operator. Do not record secrets or personal data.
+| Field | Controlled value / status |
+| --- | --- |
+| Frontend runtime source | `46b3fa8f3b19df437498787952fabdbbf5237b77` |
+| Backend runtime source | `053244217dc3a51995ecd162a9a240f25ef00f1d` |
+| Frontend image | `sha256:b50515fca49038611965d2c3953608c0f5854e0ca4c314fdfef1dfb785f505f7` |
+| Backend API image | `sha256:50544b14c60b7e1096c2fca46c82048e17be5e658e932b177a84d0f9d6610834` |
+| Backend worker image | `sha256:3ed9c4890e655f2aff13d710063d608f13e3215ac8dfa45d6b72a0f62eb885a2` |
+| Credential-free parser image | `sha256:56523cea8e9cba9a53d0a5e6d76e520aa293e10e46a0d46113ea471b180d747c` |
+| OpenAPI SHA-256 | `cdd29daf9ca99f96dc31e69e28afc2dd58aa4bb99a27f579457eb5e10f8f2ab4` |
+| Migration head | `20260824_0010` |
+| Configuration-manifest hash | `sha256:bc3702619c4a467c9abfc11c8bfd0600121218190ac7765b5c24851500c0e896` |
+| Rollback source pair | Frontend `d07678bf9fe194d75619002b43c9eff38eac55ac`; backend `fc03b588113b8a2194665820296b21392d940917` |
+| Artifact and gate evidence | [Immutable candidate evidence](IMMUTABLE_CANDIDATE_EVIDENCE_2026-08-24.md); [release evidence matrix](RELEASE_EVIDENCE_MATRIX.md) |
+| Registry promotion / signing | Pending approved private registry and signing identity |
+| Target environment | Pending selected managed staging target |
+| Deployment operator | Pending named authorized operator |
+
+These values describe the locally verified immutable runtime pair. Before Stage 0, reconcile them against the generated strict manifest and registry-qualified digests; any mismatch invalidates this record. Do not record secrets or personal data.
 
 ## Gradual rollout
 
