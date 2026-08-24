@@ -35,7 +35,13 @@ an egress network with PostgreSQL, Redis, or Qdrant, and parser containers remai
 | Gateway private key / local CA | gateway | Platform TLS owner | certificate lifecycle or key exposure |
 | Parser launcher client identity | worker only | Platform security owner | worker/launcher compromise or scheduled rotation |
 
-Managed-provider access, DNS, public certificates, backup policy, and provider-specific identities are external Phase 7C gates. Local TLS or Docker evidence must be labelled local and cannot authorize real student data.
+The selected shared-VM target is now deployed over public HTTPS with immutable
+GHCR digests, protected GitHub deployment inputs, synthetic tenant fixtures,
+separate service networks, a mutual-TLS rootless parser launcher, and repeatable
+recovery tooling. The sanitized Phase 7C record is
+`docs/SHARED_VM_STAGING_EVIDENCE_2026-08-25.md`. This is production-like
+single-host staging, not high availability and not authorization for real
+student data.
 
 ## OCI Always Free target
 

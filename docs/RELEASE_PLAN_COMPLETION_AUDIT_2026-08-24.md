@@ -1,5 +1,9 @@
 # Release Plan Completion Audit — 2026-08-24
 
+> Historical access audit. The selected shared-VM deployment, recovery, and
+> performance work completed afterward is recorded in
+> `docs/RELEASE_PLAN_STATUS_2026-08-25.md`.
+
 Decision: **NO-GO for a real-data pilot**
 
 This audit maps every action and exit criterion in `campushire-release-completion-plan.md` to executable evidence. “Complete” means repository-controlled work is implemented and locally verified. It does not substitute local evidence for managed-provider proof, representative-user experience, legal approval, or release authority.

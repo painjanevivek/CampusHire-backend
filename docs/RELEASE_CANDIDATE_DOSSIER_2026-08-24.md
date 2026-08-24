@@ -1,5 +1,9 @@
 # CampusHire Release Candidate Dossier — 2026-08-24
 
+> Historical snapshot. Deployment access was supplied afterward. Use
+> `docs/RELEASE_PLAN_STATUS_2026-08-25.md` and the linked shared-VM evidence for
+> current status; the Deep Scan and representative-UAT blockers remain valid.
+
 Decision: **NO-GO for real-data pilot deployment**
 
 This is an evidence-backed status, not a failure of the completed engineering phases. The repository is prepared for the next authorized steps, but release authority and several production-environment proofs are absent.

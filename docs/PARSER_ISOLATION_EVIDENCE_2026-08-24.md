@@ -1,5 +1,11 @@
 # PDF parser isolation evidence — 2026-08-24
 
+> 2026-08-25 deployment addendum: the immutable parser was reproduced behind a
+> mutual-TLS rootless Docker launcher on selected shared-VM staging. Three real
+> synthetic uploads completed through the mount-free stdin/stdout protocol and
+> no disposable parser container remained. See
+> `docs/SHARED_VM_STAGING_EVIDENCE_2026-08-25.md`.
+
 ## Candidate and environment
 
 - Source baseline: backend `f3a9fcb293642edb720a8725b539d49ad8b4b234` plus the Phase 7A change.
@@ -22,4 +28,4 @@ Live inspection proved: network mode `none`; read-only root; all capabilities dr
 
 ## Disposition
 
-The original source-to-sink path—scanned attacker PDF to `pymupdf.open()` inside the privileged worker—no longer exists. Native parsing of uploaded bytes is confined to the credential-free parser image. The application retains the same library only for deterministic output generation from reviewed structured fields, preserving legitimate behavior without reopening the hostile parsing path. The same runtime policy must still be demonstrated on the selected managed staging launcher in Phase 7C; local Docker evidence does not approve a hosting topology or real student data.
+The original source-to-sink path—scanned attacker PDF to `pymupdf.open()` inside the privileged worker—no longer exists. Native parsing of uploaded bytes is confined to the credential-free parser image. The application retains the same library only for deterministic output generation from reviewed structured fields, preserving legitimate behavior without reopening the hostile parsing path. The selected shared-VM staging launcher now reproduces the runtime policy. This technical proof still does not authorize real student data while the independent security, governance, and representative-UAT gates remain open.

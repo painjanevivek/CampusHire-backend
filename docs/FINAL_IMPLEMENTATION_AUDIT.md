@@ -1,5 +1,8 @@
 # Final implementation audit
 
+> Historical implementation snapshot. For current deployed staging, recovery,
+> and performance evidence, see `docs/RELEASE_PLAN_STATUS_2026-08-25.md`.
+
 - Audit date: 2026-08-24
 - Backend implementation candidate: `a7dd6717cb3940d8119fba2fce78f82539522552`
 - Frontend implementation candidate: `75a7474f73f6f7e0a8547b9718efdb045b40f24a`
