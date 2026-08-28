@@ -3,12 +3,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from app.models.auth import UserRole
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     Database,
-    require_roles,
+    require_permissions,
+    require_recent_reauthentication,
     verify_authenticated_csrf,
 )
 from app.modules.engagement.service import upsert_notification
@@ -19,12 +19,18 @@ from app.modules.recruitment.schemas import (
     ApplicationOverrideCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
+    BulkApplicationApplyRequest,
+    BulkApplicationApplyResponse,
+    BulkApplicationPreviewResponse,
+    BulkApplicationStatusRequest,
     CompanyCreate,
     CompanyResponse,
     CompanyUpdate,
     DriveCreate,
     DriveResponse,
     DriveUpdate,
+    EligibilityPreviewRequest,
+    EligibilityResponse,
     RoleCreate,
     RoleResponse,
     RoleUpdate,
@@ -34,18 +40,22 @@ from app.modules.recruitment.schemas import (
 from app.modules.recruitment.service import (
     RecruitmentError,
     application_appeal_response,
+    apply_bulk_application_status,
     company_response,
     create_company,
     create_drive,
     create_role,
     create_rule_set,
     drive_response,
+    duplicate_drive,
     list_admin_applications,
     list_companies,
     list_drives,
     list_roles,
     list_rule_sets,
     override_application,
+    preview_bulk_application_status,
+    preview_role_eligibility,
     publish_role,
     publish_rule_set,
     resolve_application_appeal,
@@ -60,7 +70,7 @@ from app.modules.recruitment.service import (
 
 router = APIRouter(
     prefix="/admin/recruitment",
-    dependencies=[Depends(require_roles(UserRole.TNP_ADMIN.value))],
+    dependencies=[Depends(require_permissions("recruitment.read"))],
 )
 
 
@@ -106,7 +116,10 @@ async def read_companies(db: Database, principal: CurrentPrincipal) -> list[Comp
     "/companies",
     response_model=CompanyResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def add_company(
     request: Request, payload: CompanyCreate, db: Database, principal: CurrentPrincipal
@@ -130,7 +143,10 @@ async def add_company(
 @router.patch(
     "/companies/{company_id}",
     response_model=CompanyResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def edit_company(
     request: Request,
@@ -164,7 +180,10 @@ async def read_drives(db: Database, principal: CurrentPrincipal) -> list[DriveRe
     "/drives",
     response_model=DriveResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def add_drive(
     request: Request, payload: DriveCreate, db: Database, principal: CurrentPrincipal
@@ -189,7 +208,10 @@ async def add_drive(
 @router.post(
     "/application-appeals/{appeal_id}/resolution",
     response_model=ApplicationAppealResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.review")),
+    ],
 )
 async def resolve_appeal(
     request: Request,
@@ -231,7 +253,10 @@ async def resolve_appeal(
 @router.patch(
     "/drives/{drive_id}",
     response_model=DriveResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def edit_drive(
     request: Request,
@@ -260,7 +285,10 @@ async def edit_drive(
 @router.post(
     "/drives/{drive_id}/actions/{action}",
     response_model=DriveResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def change_drive_state(
     request: Request,
@@ -287,6 +315,38 @@ async def change_drive_state(
     return response
 
 
+@router.post(
+    "/drives/{drive_id}/duplicate",
+    response_model=DriveResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
+)
+async def duplicate_admin_drive(
+    request: Request,
+    drive_id: UUID,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> DriveResponse:
+    try:
+        drive = await duplicate_drive(db, principal.institution_id, drive_id, principal.user.id)
+        response = await drive_response(db, drive)
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request,
+        db,
+        principal,
+        event_type="drive.duplicated",
+        resource_type="placement_drive",
+        resource_id=drive.id,
+        details={"source_drive_id": str(drive_id)},
+    )
+    await db.commit()
+    return response
+
+
 @router.get("/drives/{drive_id}/roles", response_model=list[RoleResponse])
 async def read_roles(
     drive_id: UUID, db: Database, principal: CurrentPrincipal
@@ -301,7 +361,10 @@ async def read_roles(
     "/drives/{drive_id}/roles",
     response_model=RoleResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def add_role(
     request: Request,
@@ -330,7 +393,10 @@ async def add_role(
 @router.patch(
     "/roles/{role_id}",
     response_model=RoleResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def edit_role(
     request: Request,
@@ -359,7 +425,10 @@ async def edit_role(
 @router.post(
     "/roles/{role_id}/publish",
     response_model=RoleResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def publish_admin_role(
     request: Request, role_id: UUID, db: Database, principal: CurrentPrincipal
@@ -392,10 +461,35 @@ async def read_rule_sets(
 
 
 @router.post(
+    "/roles/{role_id}/eligibility-preview",
+    response_model=EligibilityResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def preview_admin_eligibility(
+    role_id: UUID,
+    payload: EligibilityPreviewRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> EligibilityResponse:
+    try:
+        return await preview_role_eligibility(
+            db,
+            principal.institution_id,
+            role_id,
+            payload.model_dump(),
+        )
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+
+
+@router.post(
     "/roles/{role_id}/rule-sets",
     response_model=RuleSetResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def add_rule_set(
     request: Request,
@@ -426,7 +520,10 @@ async def add_rule_set(
 @router.post(
     "/roles/{role_id}/rule-sets/{rule_set_id}/publish",
     response_model=RuleSetResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def publish_admin_rule_set(
     request: Request,
@@ -472,9 +569,85 @@ async def read_applications(
 
 
 @router.post(
+    "/applications/bulk/preview",
+    response_model=BulkApplicationPreviewResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def preview_bulk_application_change(
+    payload: BulkApplicationStatusRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> BulkApplicationPreviewResponse:
+    try:
+        return await preview_bulk_application_status(db, principal.institution_id, payload)
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+
+
+@router.post(
+    "/applications/bulk/status",
+    response_model=BulkApplicationApplyResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.review")),
+        Depends(require_recent_reauthentication),
+    ],
+)
+async def apply_bulk_application_change(
+    request: Request,
+    payload: BulkApplicationApplyRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> BulkApplicationApplyResponse:
+    try:
+        applications = await apply_bulk_application_status(
+            db, principal.institution_id, principal.user.id, payload
+        )
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    notification_count = 0
+    for application in applications:
+        await upsert_notification(
+            db,
+            institution_id=application.institution_id,
+            recipient_user_id=application.student_user_id,
+            event_key=f"application:{application.id}:{payload.status}",
+            title=f"Application {payload.status.replace('_', ' ')}",
+            body=payload.reason,
+            deep_link=f"/applications/{application.id}",
+            created_by_user_id=principal.user.id,
+        )
+        notification_count += 1
+    record_audit_event(
+        db,
+        event_type="application.bulk_status_changed",
+        actor_user_id=principal.user.id,
+        institution_id=principal.institution_id,
+        resource_type="application",
+        outcome="success",
+        reason=payload.reason,
+        correlation_id=request.state.correlation_id,
+        details={
+            "status": payload.status,
+            "updated_count": len(applications),
+            "notification_count": notification_count,
+        },
+    )
+    await db.commit()
+    return BulkApplicationApplyResponse(
+        updated_count=len(applications),
+        notification_count=notification_count,
+        application_ids=[item.id for item in applications],
+    )
+
+
+@router.post(
     "/applications/{application_id}/status",
     response_model=ApplicationResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.review")),
+    ],
 )
 async def change_application_status(
     request: Request,
@@ -517,7 +690,10 @@ async def change_application_status(
 @router.post(
     "/applications/{application_id}/override",
     response_model=ApplicationResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.review")),
+    ],
 )
 async def override_application_decision(
     request: Request,

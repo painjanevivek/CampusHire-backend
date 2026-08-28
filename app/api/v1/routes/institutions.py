@@ -1,18 +1,23 @@
+import csv
+import io
 import secrets
 from collections.abc import Sequence
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
+from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.models.auth import RosterImport, RosterImportRow, UserRole
+from app.models.auth import RosterImport, RosterImportRow
+from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
     Database,
     require_institution,
-    require_roles,
+    require_permissions,
+    require_recent_reauthentication,
     verify_authenticated_csrf,
 )
 from app.modules.institutions.lifecycle import (
@@ -31,6 +36,7 @@ from app.modules.institutions.schemas import (
     MembershipResponse,
     MembershipStatusUpdate,
     RosterImportResponse,
+    RosterImportSummary,
     RosterRowResponse,
 )
 from app.modules.institutions.service import (
@@ -43,8 +49,13 @@ from app.modules.institutions.service import (
 router = APIRouter(prefix="/institutions/{institution_id}")
 operator_router = APIRouter(prefix="/operator")
 InstitutionAdmin = Annotated[
-    AuthenticatedPrincipal, Depends(require_roles(UserRole.TNP_ADMIN.value))
+    AuthenticatedPrincipal, Depends(require_permissions("institution.manage"))
 ]
+
+
+def _csv_cell(value: object | None) -> str:
+    text = "" if value is None else str(value)
+    return f"'{text}" if text.startswith(("=", "+", "-", "@", "\t", "\r")) else text
 
 
 @router.get("/memberships", response_model=list[MembershipResponse])
@@ -58,11 +69,73 @@ async def read_memberships(
     ]
 
 
+@router.get("/memberships/export.csv")
+async def export_memberships(
+    institution_id: UUID,
+    request: Request,
+    db: Database,
+    principal: InstitutionAdmin,
+) -> Response:
+    require_institution(principal, institution_id)
+    memberships = await list_memberships(db, institution_id)
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["email", "role", "status", "verified_at"])
+    for membership in memberships:
+        writer.writerow(
+            [
+                _csv_cell(membership.user.email),
+                _csv_cell(membership.role),
+                _csv_cell(membership.status),
+                _csv_cell(membership.verified_at.isoformat() if membership.verified_at else None),
+            ]
+        )
+    record_audit_event(
+        db,
+        event_type="membership.exported",
+        actor_user_id=principal.user.id,
+        institution_id=institution_id,
+        resource_type="institution_membership",
+        correlation_id=request.state.correlation_id,
+        details={"row_count": len(memberships)},
+    )
+    await db.commit()
+    return Response(
+        output.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="campushire-memberships.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/roster-imports", response_model=list[RosterImportSummary])
+async def read_roster_imports(
+    institution_id: UUID,
+    db: Database,
+    principal: InstitutionAdmin,
+) -> list[RosterImportSummary]:
+    require_institution(principal, institution_id)
+    imports = (
+        await db.scalars(
+            select(RosterImport)
+            .where(RosterImport.institution_id == institution_id)
+            .order_by(RosterImport.created_at.desc())
+            .limit(50)
+        )
+    ).all()
+    return [RosterImportSummary.model_validate(item, from_attributes=True) for item in imports]
+
+
 @router.post(
     "/memberships",
     response_model=MembershipResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
 )
 async def create_membership(
     institution_id: UUID,
@@ -91,7 +164,10 @@ async def create_membership(
 @router.patch(
     "/memberships/{membership_id}",
     response_model=MembershipResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
 )
 async def change_membership_status(
     institution_id: UUID,
@@ -208,7 +284,10 @@ async def read_roster_import(
 @router.post(
     "/roster-imports/{roster_import_id}/commit",
     response_model=RosterImportResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
 )
 async def commit_roster_import(
     institution_id: UUID,

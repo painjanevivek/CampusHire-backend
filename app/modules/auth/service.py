@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models.auth import (
+    ADMIN_ROLE_VALUES,
     InstitutionMembership,
     MembershipInvitation,
     MembershipStatus,
@@ -133,10 +134,7 @@ async def authenticate(
         .limit(1)
     )
     effective_role = membership.role if membership is not None else user.role
-    requires_mfa = effective_role in {
-        UserRole.TNP_ADMIN.value,
-        UserRole.TNP_REVIEWER.value,
-    }
+    requires_mfa = effective_role in ADMIN_ROLE_VALUES
     enrollment = await db.scalar(
         select(MfaEnrollment).where(
             MfaEnrollment.user_id == user.id,

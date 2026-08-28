@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.core.config import get_settings
 from app.core.rate_limit import enforce_auth_rate_limit
-from app.models.auth import InstitutionMembership, User
+from app.models.auth import ADMIN_ROLE_VALUES, InstitutionMembership, User
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentSession,
@@ -246,7 +246,7 @@ def _require_admin_session(session: CurrentSession) -> None:
         if session.active_membership is not None
         else session.user.role
     )
-    if role not in {"tnp_admin", "tnp_reviewer"}:
+    if role not in ADMIN_ROLE_VALUES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required"
         )

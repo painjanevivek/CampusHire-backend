@@ -11,6 +11,7 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
+    require_permissions,
     require_roles,
     verify_authenticated_csrf,
 )
@@ -40,7 +41,7 @@ from app.modules.intelligence.service import (
 student_router = APIRouter(dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
 admin_router = APIRouter(
     prefix="/admin/intelligence",
-    dependencies=[Depends(require_roles(UserRole.TNP_ADMIN.value))],
+    dependencies=[Depends(require_permissions("recruitment.read"))],
 )
 
 
@@ -104,7 +105,10 @@ async def read_policies(db: Database, principal: CurrentPrincipal) -> list[Polic
     "/policies",
     response_model=PolicyResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("intelligence.review")),
+    ],
 )
 async def add_policy(
     payload: PolicyCreate, request: Request, db: Database, principal: CurrentPrincipal
@@ -130,7 +134,10 @@ async def add_policy(
 @admin_router.post(
     "/policies/{policy_id}/review",
     response_model=PolicyResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("intelligence.review")),
+    ],
 )
 async def decide_policy(
     policy_id: UUID,
@@ -185,7 +192,10 @@ async def read_extractions(
     "/roles/{role_id}/extractions",
     response_model=ExtractionResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("intelligence.review")),
+    ],
 )
 async def add_extraction(
     role_id: UUID,
@@ -220,7 +230,10 @@ async def add_extraction(
 @admin_router.post(
     "/extractions/{proposal_id}/review",
     response_model=ExtractionResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("intelligence.review")),
+    ],
 )
 async def decide_extraction(
     proposal_id: UUID,

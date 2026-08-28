@@ -8,6 +8,7 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
+    require_permissions,
     require_roles,
     verify_authenticated_csrf,
 )
@@ -38,7 +39,7 @@ from app.modules.engagement.service import (
 student_router = APIRouter(dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
 admin_router = APIRouter(
     prefix="/admin/notifications",
-    dependencies=[Depends(require_roles(UserRole.TNP_ADMIN.value))],
+    dependencies=[Depends(require_permissions("recruitment.read"))],
 )
 
 
@@ -147,7 +148,10 @@ async def read_notification(
     "",
     response_model=NotificationResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
 )
 async def create_notification(
     payload: NotificationCreate,

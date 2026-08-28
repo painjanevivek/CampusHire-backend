@@ -11,10 +11,55 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.models.auth import InstitutionMembership, MembershipStatus, Session, User
+from app.models.auth import (
+    ADMIN_ROLE_VALUES,
+    InstitutionMembership,
+    MembershipStatus,
+    Session,
+    User,
+)
 from app.modules.auth.security import hash_secret
 
 Database = Annotated[AsyncSession, Depends(get_db)]
+
+ADMIN_ROLES = ADMIN_ROLE_VALUES
+ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
+    "tnp_owner": frozenset(
+        {
+            "institution.manage",
+            "recruitment.read",
+            "recruitment.manage",
+            "applications.review",
+            "intelligence.review",
+            "operations.read",
+            "operations.manage",
+            "audit.read",
+            "audit.export",
+        }
+    ),
+    "tnp_admin": frozenset(
+        {
+            "institution.manage",
+            "recruitment.read",
+            "recruitment.manage",
+            "applications.review",
+            "intelligence.review",
+            "operations.read",
+            "operations.manage",
+            "audit.read",
+            "audit.export",
+        }
+    ),
+    "tnp_reviewer": frozenset(
+        {
+            "recruitment.read",
+            "applications.review",
+            "intelligence.review",
+            "operations.read",
+        }
+    ),
+    "tnp_auditor": frozenset({"recruitment.read", "operations.read", "audit.read", "audit.export"}),
+}
 
 
 def _is_expired(value: datetime) -> bool:
@@ -107,7 +152,7 @@ async def get_current_principal(session: CurrentSession) -> AuthenticatedPrincip
             },
         )
     effective_role = membership.role if membership is not None else session.user.role
-    if effective_role in {"tnp_admin", "tnp_reviewer"} and session.mfa_verified_at is None:
+    if effective_role in ADMIN_ROLES and session.mfa_verified_at is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -164,6 +209,42 @@ def require_roles(*roles: str):  # type: ignore[no-untyped-def]
         return principal
 
     return check_role
+
+
+def require_permissions(*permissions: str):  # type: ignore[no-untyped-def]
+    required = frozenset(permissions)
+
+    async def check_permissions(principal: CurrentPrincipal) -> AuthenticatedPrincipal:
+        granted = ROLE_PERMISSIONS.get(principal.role, frozenset())
+        if not required.issubset(granted):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "permission_denied",
+                    "message": "This administrator role cannot perform that action.",
+                },
+            )
+        return principal
+
+    return check_permissions
+
+
+def require_recent_reauthentication(principal: CurrentPrincipal) -> None:
+    verified_at = principal.session.mfa_verified_at
+    if verified_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "reauthentication_required", "message": "Verify MFA again."},
+        )
+    normalized = verified_at if verified_at.tzinfo else verified_at.replace(tzinfo=UTC)
+    if (datetime.now(UTC) - normalized).total_seconds() > 10 * 60:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "reauthentication_required",
+                "message": "Verify MFA again before this sensitive action.",
+            },
+        )
 
 
 def require_institution(

@@ -17,9 +17,11 @@ from app.models.auth import (
     InstitutionMembership,
     MembershipInvitation,
     MembershipStatus,
+    Session,
     User,
     UserRole,
 )
+from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import hash_password, hash_secret, totp_code
 
 engine = create_async_engine(
@@ -263,3 +265,89 @@ async def test_membership_access_fails_closed_across_institutions_and_roles(
     sign_in(client, "student@campus-a.edu", "a secure student passphrase")
     student_access = client.get(f"/api/v1/institutions/{first.id}/memberships")
     assert student_access.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_auditor_has_tenant_scoped_read_only_audit_access_and_safe_export(
+    client: TestClient,
+) -> None:
+    first, second, _, _ = await seed_institution_memberships()
+    async with TestSession() as db:
+        auditor = User(
+            institution_id=first.id,
+            email="auditor@campus-a.edu",
+            password_hash=hash_password("a secure auditor passphrase"),
+            role=UserRole.TNP_AUDITOR.value,
+        )
+        db.add(auditor)
+        await db.flush()
+        db.add(
+            InstitutionMembership(
+                institution_id=first.id,
+                user_id=auditor.id,
+                role=UserRole.TNP_AUDITOR.value,
+                status=MembershipStatus.ACTIVE.value,
+                verified_by_user_id=auditor.id,
+            )
+        )
+        record_audit_event(
+            db,
+            actor_user_id=auditor.id,
+            institution_id=first.id,
+            event_type="governance.test",
+            resource_type="policy",
+            resource_id="policy-1",
+            reason="=2+2",
+            correlation_id="correlation-a",
+            details={"safe_count": 2, "resume_content": "must not persist"},
+        )
+        record_audit_event(
+            db,
+            institution_id=second.id,
+            event_type="governance.test",
+            resource_type="policy",
+            resource_id="policy-other-tenant",
+        )
+        await db.commit()
+
+    sign_in(client, "auditor@campus-a.edu", "a secure auditor passphrase")
+    response = client.get("/api/v1/admin/audit/events?action=governance.test")
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["details"] == {"safe_count": 2}
+
+    export = client.get("/api/v1/admin/audit/export.csv?action=governance.test")
+    assert export.status_code == 200
+    assert "'=2+2" in export.text
+    assert "policy-other-tenant" not in export.text
+
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    mutation = client.post(
+        "/api/v1/admin/recruitment/companies",
+        headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
+        json={"name": "Forbidden Company"},
+    )
+    assert mutation.status_code == 403
+    assert mutation.json()["error"]["code"] == "permission_denied"
+
+
+@pytest.mark.asyncio
+async def test_sensitive_membership_changes_require_recent_mfa(client: TestClient) -> None:
+    institution, _, admin, student = await seed_institution_memberships()
+    sign_in(client, "admin@campus-a.edu", "a secure administrator passphrase")
+    async with TestSession() as db:
+        session = await db.scalar(
+            select(Session).where(Session.user_id == admin.id, Session.revoked_at.is_(None))
+        )
+        assert session is not None
+        session.mfa_verified_at = datetime.now(UTC) - timedelta(minutes=11)
+        await db.commit()
+
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    response = client.post(
+        f"/api/v1/institutions/{institution.id}/memberships",
+        headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
+        json={"user_id": str(student.id), "role": UserRole.STUDENT.value},
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "reauthentication_required"

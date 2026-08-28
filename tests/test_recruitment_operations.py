@@ -27,6 +27,7 @@ from app.modules.recruitment.schemas import (
     ApplicationOverrideCreate,
     ApplicationStatusUpdate,
     ApplicationWithdrawal,
+    BulkApplicationStatusRequest,
     CompanyCreate,
     DriveCreate,
     RoleCreate,
@@ -35,16 +36,21 @@ from app.modules.recruitment.schemas import (
 from app.modules.recruitment.service import (
     RecruitmentError,
     application_deadline_calendar,
+    apply_bulk_application_status,
     create_application,
     create_application_appeal,
     create_company,
     create_drive,
     create_role,
     create_rule_set,
+    duplicate_drive,
     get_student_application,
     list_admin_applications,
     list_opportunities,
+    list_roles,
     override_application,
+    preview_bulk_application_status,
+    preview_role_eligibility,
     publish_role,
     publish_rule_set,
     resolve_application_appeal,
@@ -216,6 +222,38 @@ async def publish_sample_role(
 
 
 @pytest.mark.asyncio
+async def test_drive_duplication_is_draft_and_rule_preview_is_deterministic() -> None:
+    async with TestSession() as db:
+        institution, admin, _ = await seed_people(db, "duplicate")
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=True)
+
+        preview = await preview_role_eligibility(
+            db,
+            institution.id,
+            role.id,
+            {
+                "degree": "B.Tech",
+                "cgpa": 8.2,
+                "active_backlogs": None,
+            },
+        )
+        assert preview.status == "needs_manual_review"
+        assert preview.missing_evidence == ["Active backlogs"]
+
+        duplicate = await duplicate_drive(
+            db,
+            institution.id,
+            role.drive_id,
+            admin.id,
+        )
+        assert duplicate.status == "draft"
+        assert duplicate.title.endswith("— copy")
+        cloned_roles = await list_roles(db, institution.id, duplicate.id)
+        assert len(cloned_roles) == 1
+        assert cloned_roles[0].status == "draft"
+
+
+@pytest.mark.asyncio
 async def test_missing_facts_require_review_and_same_snapshot_is_deterministic() -> None:
     async with TestSession() as db:
         institution, admin, student = await seed_people(db)
@@ -282,6 +320,16 @@ async def test_application_is_idempotent_and_preserves_immutable_decision_inputs
         response = await response_for_application(db, application)
         assert response.facts_snapshot["cgpa"] == 8.4
         assert response.resume_snapshot["checksum"] == "checksum-one"
+        bulk_payload = BulkApplicationStatusRequest(
+            application_ids=[application.id],
+            status="under_review",
+            reason="Reviewed against the published eligibility evidence.",
+        )
+        preview = await preview_bulk_application_status(db, institution.id, bulk_payload)
+        assert preview.allowed_count == 1
+        assert preview.blocked_count == 0
+        updated = await apply_bulk_application_status(db, institution.id, admin.id, bulk_payload)
+        assert updated[0].status == "under_review"
         with pytest.raises(ResumeWorkflowError, match="resume_version_locked_by_application"):
             await delete_owned_version(
                 db,

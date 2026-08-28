@@ -3,12 +3,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from app.models.auth import UserRole
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     Database,
-    require_roles,
+    require_permissions,
     verify_authenticated_csrf,
 )
 from app.modules.operations.schemas import (
@@ -26,7 +25,7 @@ from app.modules.operations.service import (
 
 router = APIRouter(
     prefix="/admin/operations",
-    dependencies=[Depends(require_roles(UserRole.TNP_ADMIN.value))],
+    dependencies=[Depends(require_permissions("operations.read"))],
 )
 
 
@@ -71,7 +70,10 @@ async def read_operations_summary(
 @router.post(
     "/resume-jobs/{job_id}/cancel",
     response_model=ResumeJobOperatorResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("operations.manage")),
+    ],
 )
 async def cancel_job(
     request: Request, job_id: UUID, db: Database, principal: CurrentPrincipal
@@ -102,7 +104,10 @@ async def cancel_job(
 @router.post(
     "/resume-jobs/{job_id}/retry",
     response_model=ResumeJobOperatorResponse,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("operations.manage")),
+    ],
 )
 async def retry_job(
     request: Request, job_id: UUID, db: Database, principal: CurrentPrincipal

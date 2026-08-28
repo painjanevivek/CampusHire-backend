@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,9 @@ from app.modules.recruitment.schemas import (
     ApplicationResponse,
     ApplicationStatusUpdate,
     ApplicationWithdrawal,
+    BulkApplicationPreviewItem,
+    BulkApplicationPreviewResponse,
+    BulkApplicationStatusRequest,
     CompanyCreate,
     CompanyResponse,
     CompanyUpdate,
@@ -258,6 +261,79 @@ async def transition_drive(
     return drive
 
 
+async def duplicate_drive(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    drive_id: UUID,
+    actor_user_id: UUID,
+) -> PlacementDrive:
+    source = await _owned_drive(db, institution_id, drive_id)
+    clone = PlacementDrive(
+        institution_id=source.institution_id,
+        company_id=source.company_id,
+        title=f"{source.title} — copy",
+        description=source.description,
+        location=source.location,
+        work_mode=source.work_mode,
+        opens_at=source.opens_at,
+        deadline_at=source.deadline_at,
+        status=PublicationStatus.DRAFT.value,
+    )
+    db.add(clone)
+    await db.flush()
+    source_roles = (
+        await db.scalars(select(PlacementRole).where(PlacementRole.drive_id == source.id))
+    ).all()
+    source_role_ids = [item.id for item in source_roles]
+    rule_candidates = (
+        (
+            await db.scalars(
+                select(EligibilityRuleSet)
+                .where(EligibilityRuleSet.role_id.in_(source_role_ids))
+                .order_by(EligibilityRuleSet.role_id, EligibilityRuleSet.version.desc())
+            )
+        ).all()
+        if source_role_ids
+        else []
+    )
+    latest_rules_by_role: dict[UUID, EligibilityRuleSet] = {}
+    for rule_set in rule_candidates:
+        latest_rules_by_role.setdefault(rule_set.role_id, rule_set)
+    clones: list[PlacementRole | EligibilityRuleSet] = []
+    for source_role in source_roles:
+        role = PlacementRole(
+            id=uuid4(),
+            institution_id=source_role.institution_id,
+            drive_id=clone.id,
+            title=source_role.title,
+            description=source_role.description,
+            employment_type=source_role.employment_type,
+            location=source_role.location,
+            work_mode=source_role.work_mode,
+            salary_display=source_role.salary_display,
+            skills=list(source_role.skills),
+            requirements=list(source_role.requirements),
+            status=PublicationStatus.DRAFT.value,
+        )
+        clones.append(role)
+        latest_rules = latest_rules_by_role.get(source_role.id)
+        if latest_rules:
+            clones.append(
+                EligibilityRuleSet(
+                    institution_id=source_role.institution_id,
+                    role_id=role.id,
+                    version=1,
+                    status=RuleSetStatus.DRAFT.value,
+                    rules=list(latest_rules.rules),
+                    created_by_user_id=actor_user_id,
+                )
+            )
+    db.add_all(clones)
+    await db.flush()
+    await db.refresh(clone)
+    return clone
+
+
 async def _owned_role(
     db: AsyncSession, institution_id: UUID | None, role_id: UUID, *, lock: bool = False
 ) -> PlacementRole:
@@ -353,6 +429,9 @@ async def publish_role(
     role = await _owned_role(db, institution_id, role_id, lock=True)
     if role.status != PublicationStatus.DRAFT.value:
         raise RecruitmentError("role_publish_transition_invalid")
+    drive = await _owned_drive(db, institution_id, role.drive_id)
+    if _utc(drive.deadline_at) <= datetime.now(UTC):
+        raise RecruitmentError("role_deadline_elapsed")
     rules = await db.scalar(
         select(EligibilityRuleSet.id).where(
             EligibilityRuleSet.role_id == role.id,
@@ -366,6 +445,21 @@ async def publish_role(
     await db.flush()
     await db.refresh(role)
     return role
+
+
+async def preview_role_eligibility(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    role_id: UUID,
+    facts: dict[str, object | None],
+) -> EligibilityResponse:
+    await _owned_role(db, institution_id, role_id)
+    rule_set = await db.scalar(
+        select(EligibilityRuleSet)
+        .where(EligibilityRuleSet.role_id == role_id)
+        .order_by(EligibilityRuleSet.version.desc())
+    )
+    return _eligibility(rule_set, facts)
 
 
 def rule_set_response(rule_set: EligibilityRuleSet) -> RuleSetResponse:
@@ -1290,6 +1384,76 @@ async def update_application_status(
     await db.flush()
     await db.refresh(application)
     return application
+
+
+async def preview_bulk_application_status(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    payload: BulkApplicationStatusRequest,
+) -> BulkApplicationPreviewResponse:
+    institution = _institution(institution_id)
+    applications = (
+        await db.scalars(
+            select(Application).where(
+                Application.institution_id == institution,
+                Application.id.in_(payload.application_ids),
+            )
+        )
+    ).all()
+    by_id = {item.id: item for item in applications}
+    if len(by_id) != len(payload.application_ids):
+        raise RecruitmentError("bulk_application_not_found")
+    items: list[BulkApplicationPreviewItem] = []
+    for application_id in payload.application_ids:
+        application = by_id[application_id]
+        try:
+            validate_transition(
+                ApplicationStatus(application.status),
+                ApplicationStatus(payload.status),
+            )
+            allowed = True
+            explanation = "Transition follows the documented application lifecycle."
+        except ValueError as error:
+            allowed = False
+            explanation = str(error)
+        items.append(
+            BulkApplicationPreviewItem(
+                application_id=application.id,
+                current_status=application.status,
+                target_status=payload.status,
+                allowed=allowed,
+                explanation=explanation,
+            )
+        )
+    return BulkApplicationPreviewResponse(
+        items=items,
+        allowed_count=sum(item.allowed for item in items),
+        blocked_count=sum(not item.allowed for item in items),
+    )
+
+
+async def apply_bulk_application_status(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    actor_user_id: UUID,
+    payload: BulkApplicationStatusRequest,
+) -> list[Application]:
+    preview = await preview_bulk_application_status(db, institution_id, payload)
+    if preview.blocked_count:
+        raise RecruitmentError("bulk_application_transition_invalid")
+    updated: list[Application] = []
+    status_payload = ApplicationStatusUpdate(status=payload.status, reason=payload.reason)
+    for application_id in payload.application_ids:
+        updated.append(
+            await update_application_status(
+                db,
+                institution_id,
+                application_id,
+                actor_user_id,
+                status_payload,
+            )
+        )
+    return updated
 
 
 async def override_application(

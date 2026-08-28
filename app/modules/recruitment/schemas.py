@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.eligibility.engine import Rule
 
@@ -148,6 +148,20 @@ class EligibilityResponse(BaseModel):
     missing_evidence: list[str]
 
 
+class EligibilityPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    department: str | None = None
+    degree: str | None = None
+    branch: str | None = None
+    graduation_year: int | None = Field(default=None, ge=2000, le=2200)
+    cgpa: float | None = Field(default=None, ge=0, le=10)
+    active_backlogs: int | None = Field(default=None, ge=0, le=100)
+    github: str | None = None
+    portfolio: str | None = None
+    resume: bool | None = None
+
+
 class OpportunityResponse(RoleResponse):
     eligibility: EligibilityResponse
     saved: bool
@@ -270,6 +284,43 @@ class AdminApplicationPage(BaseModel):
 class ApplicationStatusUpdate(BaseModel):
     status: ApplicationDecision
     reason: str | None = Field(default=None, max_length=500)
+
+
+class BulkApplicationStatusRequest(BaseModel):
+    application_ids: list[UUID] = Field(min_length=1, max_length=100)
+    status: ApplicationDecision
+    reason: str = Field(min_length=10, max_length=500)
+
+    @field_validator("application_ids")
+    @classmethod
+    def unique_application_ids(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("Application IDs must be unique")
+        return value
+
+
+class BulkApplicationApplyRequest(BulkApplicationStatusRequest):
+    confirmation: Literal["APPLY BULK STATUS"]
+
+
+class BulkApplicationPreviewItem(BaseModel):
+    application_id: UUID
+    current_status: str
+    target_status: str
+    allowed: bool
+    explanation: str
+
+
+class BulkApplicationPreviewResponse(BaseModel):
+    items: list[BulkApplicationPreviewItem]
+    allowed_count: int
+    blocked_count: int
+
+
+class BulkApplicationApplyResponse(BaseModel):
+    updated_count: int
+    notification_count: int
+    application_ids: list[UUID]
 
 
 class ApplicationOverrideCreate(BaseModel):

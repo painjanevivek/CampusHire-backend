@@ -59,3 +59,15 @@ class RosterImportResponse(BaseModel):
     invited_rows: int
     committed_at: datetime | None
     rows: list[RosterRowResponse]
+
+
+class RosterImportSummary(BaseModel):
+    id: UUID
+    filename: str
+    status: str
+    total_rows: int
+    valid_rows: int
+    invalid_rows: int
+    invited_rows: int
+    committed_at: datetime | None
+    created_at: datetime

@@ -11,8 +11,20 @@ from app.models.base import Base, TimestampMixin
 
 class UserRole(StrEnum):
     STUDENT = "student"
+    TNP_OWNER = "tnp_owner"
     TNP_ADMIN = "tnp_admin"
     TNP_REVIEWER = "tnp_reviewer"
+    TNP_AUDITOR = "tnp_auditor"
+
+
+ADMIN_ROLE_VALUES = frozenset(
+    {
+        UserRole.TNP_OWNER.value,
+        UserRole.TNP_ADMIN.value,
+        UserRole.TNP_REVIEWER.value,
+        UserRole.TNP_AUDITOR.value,
+    }
+)
 
 
 class MembershipStatus(StrEnum):
