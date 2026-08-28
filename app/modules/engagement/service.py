@@ -13,8 +13,10 @@ from app.models.engagement import (
 )
 from app.models.intelligence import SemanticMatchEvidence
 from app.models.profile import StudentProfile
+from app.models.recruitment import Application
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.engagement.schemas import (
+    ActivationStage,
     DashboardEvidence,
     DashboardOpportunity,
     DashboardResponse,
@@ -379,6 +381,17 @@ async def dashboard(
         (item for item in resumes if item.status == ResumeStatus.REVIEW_REQUIRED.value), None
     )
     processing = any(item.status in {"queued", "processing"} for item in resumes)
+    application_count = int(
+        await db.scalar(
+            select(func.count())
+            .select_from(Application)
+            .where(
+                Application.institution_id == institution_id,
+                Application.student_user_id == student_user_id,
+            )
+        )
+        or 0
+    )
     roadmap = await current_roadmap(db, institution_id, student_user_id)
     notices = await list_notifications(db, institution_id, student_user_id)
     opportunity_page = await list_opportunities(
@@ -443,6 +456,8 @@ async def dashboard(
             href="/onboarding",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=["required_profile_facts_incomplete"],
+            estimated_minutes=8,
+            unlocks="Role-specific eligibility checks",
         )
     elif reviewing:
         action = NextAction(
@@ -455,6 +470,8 @@ async def dashboard(
             href=f"/resume/builder?version={reviewing.id}",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=[f"resume:{reviewing.id}:review_required"],
+            estimated_minutes=6,
+            unlocks="A selectable, verified resume version",
         )
     elif not reviewed:
         action = NextAction(
@@ -465,6 +482,8 @@ async def dashboard(
             href="/resume",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=["completed_resume_missing"],
+            estimated_minutes=10,
+            unlocks="Application submission with locked evidence",
         )
     elif not project_evidence:
         action = NextAction(
@@ -478,6 +497,8 @@ async def dashboard(
             href="/resume",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=[f"resume:{reviewed.id}:projects_missing"],
+            estimated_minutes=12,
+            unlocks="Stronger evidence-led role explanations",
         )
     elif roadmap is None:
         action = NextAction(
@@ -490,6 +511,8 @@ async def dashboard(
             href="/roadmap",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=["roadmap_not_selected"],
+            estimated_minutes=3,
+            unlocks="A prerequisite-aware next milestone",
         )
     else:
         next_node = next((item for item in roadmap.nodes if item.state == "next"), None)
@@ -507,7 +530,78 @@ async def dashboard(
             href="/roadmap" if next_node else "/opportunities",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=[f"roadmap:{roadmap.id}:v{roadmap.version}"],
+            estimated_minutes=next_node and 20 or 5,
+            unlocks=(
+                "The next roadmap milestone" if next_node else "A confident application decision"
+            ),
         )
+
+    profile_minimum = bool(
+        profile and profile.full_name and profile.department and profile.education
+    )
+    target_role = bool(profile and profile.target_roles)
+    opportunities_unlocked = identity_complete and bool(reviewed)
+    activation_facts = [
+        (
+            "account_activated",
+            "Account activated",
+            True,
+            "/profile",
+            1,
+            "Your private student workspace",
+        ),
+        (
+            "profile_minimum",
+            "Profile minimum",
+            profile_minimum,
+            "/onboarding",
+            8,
+            "Eligibility-ready education facts",
+        ),
+        ("target_role", "Target role", target_role, "/onboarding", 2, "A relevant curated roadmap"),
+        (
+            "resume_reviewed",
+            "Resume reviewed",
+            bool(reviewed),
+            "/resume",
+            10,
+            "A selectable evidence version",
+        ),
+        (
+            "opportunities_unlocked",
+            "Opportunities unlocked",
+            opportunities_unlocked,
+            "/opportunities",
+            5,
+            "Institution-published eligible roles",
+        ),
+        (
+            "first_application",
+            "First application",
+            application_count > 0,
+            "/applications",
+            5,
+            "Application tracking and status history",
+        ),
+    ]
+    first_incomplete = next(
+        (index for index, item in enumerate(activation_facts) if not item[2]), None
+    )
+    activation = [
+        ActivationStage(
+            key=key,
+            label=label,
+            status="complete"
+            if complete
+            else "current"
+            if index == first_incomplete
+            else "upcoming",
+            href=href,
+            estimated_minutes=minutes,
+            unlocks=unlocks,
+        )
+        for index, (key, label, complete, href, minutes, unlocks) in enumerate(activation_facts)
+    ]
 
     state = "processing" if processing else "incomplete" if not identity_complete else "ready"
     if state == "ready" and any(
@@ -530,6 +624,7 @@ async def dashboard(
         readiness=readiness,
         state=state,
         next_action=action,
+        activation=activation,
         evidence=[
             DashboardEvidence(
                 label="Required profile",

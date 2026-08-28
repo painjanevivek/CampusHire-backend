@@ -1,6 +1,59 @@
 {
   "components": {
     "schemas": {
+      "ActivationStage": {
+        "properties": {
+          "estimated_minutes": {
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Estimated Minutes",
+            "type": "integer"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "account_activated",
+              "profile_minimum",
+              "target_role",
+              "resume_reviewed",
+              "opportunities_unlocked",
+              "first_application"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "current",
+              "upcoming"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unlocks": {
+            "title": "Unlocks",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "status",
+          "href",
+          "estimated_minutes",
+          "unlocks"
+        ],
+        "title": "ActivationStage",
+        "type": "object"
+      },
       "AdminApplicationPage": {
         "properties": {
           "items": {
@@ -477,6 +530,13 @@
       },
       "DashboardResponse": {
         "properties": {
+          "activation": {
+            "items": {
+              "$ref": "#/components/schemas/ActivationStage"
+            },
+            "title": "Activation",
+            "type": "array"
+          },
           "evidence": {
             "items": {
               "$ref": "#/components/schemas/DashboardEvidence"
@@ -533,6 +593,7 @@
           "readiness",
           "state",
           "next_action",
+          "activation",
           "evidence",
           "opportunities",
           "roadmap",
@@ -1631,6 +1692,12 @@
             "title": "Description",
             "type": "string"
           },
+          "estimated_minutes": {
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Estimated Minutes",
+            "type": "integer"
+          },
           "href": {
             "title": "Href",
             "type": "string"
@@ -1657,6 +1724,10 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "unlocks": {
+            "title": "Unlocks",
+            "type": "string"
           }
         },
         "required": [
@@ -1666,7 +1737,9 @@
           "reason",
           "href",
           "policy_version",
-          "source_facts"
+          "source_facts",
+          "estimated_minutes",
+          "unlocks"
         ],
         "title": "NextAction",
         "type": "object"

@@ -61,6 +61,24 @@ class NextAction(BaseModel):
     href: str
     policy_version: str
     source_facts: list[str]
+    estimated_minutes: int = Field(ge=1, le=120)
+    unlocks: str
+
+
+class ActivationStage(BaseModel):
+    key: Literal[
+        "account_activated",
+        "profile_minimum",
+        "target_role",
+        "resume_reviewed",
+        "opportunities_unlocked",
+        "first_application",
+    ]
+    label: str
+    status: Literal["complete", "current", "upcoming"]
+    href: str
+    estimated_minutes: int = Field(ge=1, le=120)
+    unlocks: str
 
 
 class DashboardEvidence(BaseModel):
@@ -84,6 +102,7 @@ class DashboardResponse(BaseModel):
     readiness: int
     state: Literal["ready", "incomplete", "processing", "manual-review", "ai-unavailable"]
     next_action: NextAction
+    activation: list[ActivationStage]
     evidence: list[DashboardEvidence]
     opportunities: list[DashboardOpportunity]
     roadmap: RoadmapResponse | None
