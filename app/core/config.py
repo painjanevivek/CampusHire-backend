@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     gemini_timeout_ms: int = Field(default=15_000, ge=1_000, le=120_000)
     semantic_match_requests_per_minute: int = Field(default=10, ge=1, le=100)
     qdrant_url: str = "http://localhost:6333"
+    email_smtp_host: str | None = None
+    email_smtp_port: int = Field(default=587, ge=1, le=65535)
+    email_smtp_username: str | None = None
+    email_smtp_password: str | None = None
+    email_from_address: str = "no-reply@campushire.invalid"
+    email_monthly_quota: int = Field(default=3_000, ge=1)
+    email_optional_suppression_ratio: float = Field(default=0.8, ge=0.1, le=1)
+    email_delivery_max_attempts: int = Field(default=5, ge=1, le=20)
+    email_delivery_webhook_key: str | None = None
+    maintenance_message: str | None = None
 
     @model_validator(mode="after")
     def production_requires_real_malware_scanning(self) -> "Settings":
@@ -70,6 +80,10 @@ class Settings(BaseSettings):
                 raise ValueError("Staging and production require a strong OPERATOR_BOOTSTRAP_KEY")
             if self.mfa_encryption_key == "development-only-change-me":
                 raise ValueError("Staging and production require a dedicated MFA_ENCRYPTION_KEY")
+            if self.email_smtp_host and (
+                not self.email_delivery_webhook_key or len(self.email_delivery_webhook_key) < 24
+            ):
+                raise ValueError("Configured production email requires a strong webhook key")
         return self
 
     @property

@@ -21,6 +21,7 @@ from app.models.auth import (
 )
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import hash_secret, new_secret, normalize_email
+from app.modules.communications.service import enqueue_email, record_product_event
 
 email_adapter = TypeAdapter(EmailStr)
 
@@ -234,6 +235,9 @@ async def commit_roster(
     if roster.status == "committed":
         return roster, {}
     tokens: dict[UUID, str] = {}
+    institution = await db.get(Institution, institution_id)
+    institution_name = institution.name if institution else "Your institution"
+    frontend = str(get_settings().frontend_origins[0]).rstrip("/")
     for row in rows:
         if row.status != "valid" or row.email is None:
             continue
@@ -266,6 +270,18 @@ async def commit_roster(
         row.status = "invited"
         row.invitation_id = invitation.id
         tokens[row.id] = raw_token
+        await enqueue_email(
+            db,
+            institution_id=institution_id,
+            recipient_email=row.email,
+            category="account",
+            template_key="invitation",
+            variables={
+                "institution_name": institution_name,
+                "activation_url": f"{frontend}/activate?token={raw_token}",
+            },
+            dedupe_key=f"invitation:{invitation.id}",
+        )
     roster.status = "committed"
     roster.invited_rows = sum(item.status == "invited" for item in rows)
     roster.committed_at = datetime.now(UTC)
@@ -278,6 +294,13 @@ async def commit_roster(
         resource_id=str(roster.id),
         correlation_id=correlation_id,
         details={"invited_rows": roster.invited_rows},
+    )
+    await record_product_event(
+        db,
+        event_name="roster_import_committed",
+        route_group="admin_students",
+        institution_id=institution_id,
+        dedupe_key=f"roster-import:{roster.id}",
     )
     await db.commit()
     return roster, tokens

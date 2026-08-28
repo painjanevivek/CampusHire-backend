@@ -642,6 +642,21 @@
         "title": "Body_upload_resume_api_v1_resumes_post",
         "type": "object"
       },
+      "BounceEventCreate": {
+        "properties": {
+          "provider_message_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Provider Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_message_id"
+        ],
+        "title": "BounceEventCreate",
+        "type": "object"
+      },
       "BulkApplicationApplyRequest": {
         "properties": {
           "application_ids": {
@@ -811,6 +826,54 @@
           "reason"
         ],
         "title": "BulkApplicationStatusRequest",
+        "type": "object"
+      },
+      "CommunicationPreferencesResponse": {
+        "properties": {
+          "account_emails": {
+            "const": true,
+            "default": true,
+            "title": "Account Emails",
+            "type": "boolean"
+          },
+          "application_updates": {
+            "title": "Application Updates",
+            "type": "boolean"
+          },
+          "deadline_reminders": {
+            "title": "Deadline Reminders",
+            "type": "boolean"
+          },
+          "security_emails": {
+            "const": true,
+            "default": true,
+            "title": "Security Emails",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "application_updates",
+          "deadline_reminders"
+        ],
+        "title": "CommunicationPreferencesResponse",
+        "type": "object"
+      },
+      "CommunicationPreferencesUpdate": {
+        "properties": {
+          "application_updates": {
+            "title": "Application Updates",
+            "type": "boolean"
+          },
+          "deadline_reminders": {
+            "title": "Deadline Reminders",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "application_updates",
+          "deadline_reminders"
+        ],
+        "title": "CommunicationPreferencesUpdate",
         "type": "object"
       },
       "CompanyCreate": {
@@ -1656,6 +1719,129 @@
         "title": "EligibilityResponse",
         "type": "object"
       },
+      "EmailDeliveryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmailDeliveryResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EmailDeliveryPage",
+        "type": "object"
+      },
+      "EmailDeliveryResponse": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "bounced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bounced At"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "max_attempts": {
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "next_attempt_at": {
+            "format": "date-time",
+            "title": "Next Attempt At",
+            "type": "string"
+          },
+          "safe_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe Error Code"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "template_key": {
+            "title": "Template Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "template_key",
+          "status",
+          "attempts",
+          "max_attempts",
+          "safe_error_code",
+          "next_attempt_at",
+          "sent_at",
+          "failed_at",
+          "bounced_at",
+          "created_at"
+        ],
+        "title": "EmailDeliveryResponse",
+        "type": "object"
+      },
       "ExtractionCreate": {
         "properties": {
           "source_text": {
@@ -1863,6 +2049,45 @@
           "decisions"
         ],
         "title": "ExtractionReviewRequest",
+        "type": "object"
+      },
+      "FunnelMetric": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "event_name": {
+            "title": "Event Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_name",
+          "count"
+        ],
+        "title": "FunnelMetric",
+        "type": "object"
+      },
+      "FunnelResponse": {
+        "properties": {
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/FunnelMetric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "metrics",
+          "window_days"
+        ],
+        "title": "FunnelResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -5055,6 +5280,44 @@
         "title": "SemanticMatchResponse",
         "type": "object"
       },
+      "ServiceStatusResponse": {
+        "properties": {
+          "maintenance_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Message"
+          },
+          "status": {
+            "enum": [
+              "operational",
+              "maintenance"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transactional_email": {
+            "enum": [
+              "configured",
+              "degraded"
+            ],
+            "title": "Transactional Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "maintenance_message",
+          "transactional_email"
+        ],
+        "title": "ServiceStatusResponse",
+        "type": "object"
+      },
       "SessionResponse": {
         "properties": {
           "created_at": {
@@ -5365,6 +5628,68 @@
         "title": "SuggestionReviewBatch",
         "type": "object"
       },
+      "SupportRequestCreate": {
+        "properties": {
+          "category": {
+            "enum": [
+              "account",
+              "profile",
+              "eligibility",
+              "application",
+              "resume",
+              "roadmap",
+              "privacy",
+              "accessibility",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 1000,
+            "minLength": 20,
+            "title": "Message",
+            "type": "string"
+          },
+          "route_context": {
+            "pattern": "^/[a-z0-9/_-]{0,99}$",
+            "title": "Route Context",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "route_context",
+          "message"
+        ],
+        "title": "SupportRequestCreate",
+        "type": "object"
+      },
+      "SupportRequestResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "reference": {
+            "format": "uuid",
+            "title": "Reference",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "status",
+          "created_at"
+        ],
+        "title": "SupportRequestResponse",
+        "type": "object"
+      },
       "UserResponse": {
         "properties": {
           "email": {
@@ -5484,6 +5809,67 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/analytics/funnel": {
+      "get": {
+        "operationId": "read_funnel_api_v1_admin_analytics_funnel_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window_days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Window Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FunnelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Funnel",
+        "tags": [
+          "communications and guidance"
+        ]
+      }
+    },
     "/api/v1/admin/audit/events": {
       "get": {
         "operationId": "read_audit_events_api_v1_admin_audit_events_get",
@@ -5858,6 +6244,142 @@
         "summary": "Download Audit Export",
         "tags": [
           "audit"
+        ]
+      }
+    },
+    "/api/v1/admin/communications/email-deliveries": {
+      "get": {
+        "operationId": "read_email_deliveries_api_v1_admin_communications_email_deliveries_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "delivery_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Delivery Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDeliveryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Email Deliveries",
+        "tags": [
+          "communications and guidance"
+        ]
+      }
+    },
+    "/api/v1/admin/communications/email-deliveries/{delivery_id}/retry": {
+      "post": {
+        "operationId": "retry_failed_email_api_v1_admin_communications_email_deliveries__delivery_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Delivery Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDeliveryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Failed Email",
+        "tags": [
+          "communications and guidance"
         ]
       }
     },
@@ -9106,6 +9628,112 @@
         ]
       }
     },
+    "/api/v1/communications/preferences": {
+      "get": {
+        "operationId": "read_preferences_api_v1_communications_preferences_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunicationPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Preferences",
+        "tags": [
+          "communications and guidance"
+        ]
+      },
+      "put": {
+        "operationId": "write_preferences_api_v1_communications_preferences_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunicationPreferencesUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunicationPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Preferences",
+        "tags": [
+          "communications and guidance"
+        ]
+      }
+    },
     "/api/v1/dashboard": {
       "get": {
         "operationId": "read_dashboard_api_v1_dashboard_get",
@@ -9970,6 +10598,65 @@
         "summary": "Read Notification",
         "tags": [
           "readiness and communication"
+        ]
+      }
+    },
+    "/api/v1/operator/email/bounce": {
+      "post": {
+        "operationId": "receive_email_bounce_api_v1_operator_email_bounce_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-email-webhook-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Email-Webhook-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BounceEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDeliveryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receive Email Bounce",
+        "tags": [
+          "communications and guidance"
         ]
       }
     },
@@ -11765,6 +12452,86 @@
         "summary": "Read Roadmap Templates",
         "tags": [
           "readiness and communication"
+        ]
+      }
+    },
+    "/api/v1/service-status": {
+      "get": {
+        "operationId": "read_service_status_api_v1_service_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Service Status",
+        "tags": [
+          "communications and guidance"
+        ]
+      }
+    },
+    "/api/v1/support/requests": {
+      "post": {
+        "operationId": "submit_support_request_api_v1_support_requests_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Support Request",
+        "tags": [
+          "communications and guidance"
         ]
       }
     }

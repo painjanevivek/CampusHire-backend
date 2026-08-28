@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.logging import configure_logging
+from app.modules.communications.service import OciSmtpEmailProvider, process_next_email
 from app.modules.privacy.service import process_next_deletion_cleanup
 from app.modules.resumes.parser import build_pdf_parser
 from app.modules.resumes.pipeline import claim_next_job, process_job, recover_stale_jobs
@@ -26,6 +27,17 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
         extra={"event": "resume_worker_started", "worker_id": worker_identity},
     )
     while True:
+        if settings.email_smtp_host:
+            async with SessionFactory() as db:
+                email_id = await process_next_email(db, OciSmtpEmailProvider(settings))
+            if email_id is not None:
+                logger.info(
+                    "transactional_email_processed",
+                    extra={"event": "transactional_email_processed", "resource_id": str(email_id)},
+                )
+                if once:
+                    return
+                continue
         async with SessionFactory() as db:
             deletion_id = await process_next_deletion_cleanup(
                 db,

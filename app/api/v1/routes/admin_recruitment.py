@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from app.core.config import get_settings
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
@@ -10,6 +11,11 @@ from app.modules.auth.dependencies import (
     require_permissions,
     require_recent_reauthentication,
     verify_authenticated_csrf,
+)
+from app.modules.communications.service import (
+    enqueue_email,
+    get_preferences,
+    record_product_event,
 )
 from app.modules.engagement.service import upsert_notification
 from app.modules.recruitment.schemas import (
@@ -81,6 +87,32 @@ def _http_error(error: RecruitmentError) -> HTTPException:
     if code in {"company_name_exists", "application_appeal_already_resolved"}:
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=code)
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=code)
+
+
+async def _enqueue_application_update(
+    db: Database,
+    application: ApplicationResponse,
+    institution_id: UUID,
+    message: str | None,
+) -> None:
+    preference = await get_preferences(db, institution_id, application.student_user_id)
+    role_title = str(application.role_snapshot.get("title", "Placement role"))
+    frontend = str(get_settings().frontend_origins[0]).rstrip("/")
+    await enqueue_email(
+        db,
+        institution_id=institution_id,
+        recipient_email=application.student_email,
+        category="application",
+        template_key="application_status",
+        variables={
+            "role_title": role_title,
+            "status": application.status.replace("_", " "),
+            "message": message or "Your placement office updated this application.",
+            "application_url": f"{frontend}/applications/{application.id}",
+        },
+        dedupe_key=f"application-status:{application.id}:{application.status}",
+        optional_enabled=preference.application_updates,
+    )
 
 
 def _audit(
@@ -446,6 +478,13 @@ async def publish_admin_role(
         resource_type="placement_role",
         resource_id=role.id,
     )
+    await record_product_event(
+        db,
+        event_name="role_published",
+        route_group="admin_drives",
+        institution_id=principal.institution_id,
+        dedupe_key=f"role-published:{role.id}",
+    )
     await db.commit()
     return response
 
@@ -607,6 +646,7 @@ async def apply_bulk_application_change(
         raise _http_error(error) from error
     notification_count = 0
     for application in applications:
+        application_response = await response_for_application(db, application)
         await upsert_notification(
             db,
             institution_id=application.institution_id,
@@ -616,6 +656,9 @@ async def apply_bulk_application_change(
             body=payload.reason,
             deep_link=f"/applications/{application.id}",
             created_by_user_id=principal.user.id,
+        )
+        await _enqueue_application_update(
+            db, application_response, application.institution_id, payload.reason
         )
         notification_count += 1
     record_audit_event(
@@ -682,6 +725,9 @@ async def change_application_status(
         body=payload.reason or "Your placement application status has changed.",
         deep_link=f"/applications/{application.id}",
         created_by_user_id=principal.user.id,
+    )
+    await _enqueue_application_update(
+        db, response, application.institution_id, payload.reason
     )
     await db.commit()
     return response

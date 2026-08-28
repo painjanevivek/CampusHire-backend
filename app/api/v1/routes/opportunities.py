@@ -12,6 +12,7 @@ from app.modules.auth.dependencies import (
     require_roles,
     verify_authenticated_csrf,
 )
+from app.modules.communications.service import record_product_event
 from app.modules.recruitment.schemas import (
     ApplicationAppealCreate,
     ApplicationAppealResponse,
@@ -100,7 +101,16 @@ async def read_opportunity(
     role_id: UUID, db: Database, tenant: CurrentTenant
 ) -> OpportunityResponse:
     try:
-        return await get_opportunity(db, tenant.institution_id, tenant.user_id, role_id)
+        response = await get_opportunity(db, tenant.institution_id, tenant.user_id, role_id)
+        await record_product_event(
+            db,
+            event_name="first_opportunity_viewed",
+            route_group="opportunities",
+            institution_id=tenant.institution_id,
+            dedupe_key=f"first-opportunity:{tenant.user_id}",
+        )
+        await db.commit()
+        return response
     except RecruitmentError as error:
         raise _http_error(error) from error
 
@@ -158,6 +168,13 @@ async def withdraw_student_application(
     except RecruitmentError as error:
         raise _http_error(error) from error
     if not replayed:
+        await record_product_event(
+            db,
+            event_name="first_application_submitted",
+            route_group="applications",
+            institution_id=tenant.institution_id,
+            dedupe_key=f"first-application:{tenant.user_id}",
+        )
         record_audit_event(
             db,
             event_type="application.withdrawn",

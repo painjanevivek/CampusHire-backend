@@ -16,6 +16,7 @@ from app.modules.auth.dependencies import (
     require_roles,
     verify_authenticated_csrf,
 )
+from app.modules.communications.service import record_product_event
 from app.modules.resumes.builder import ResumeContent
 from app.modules.resumes.parser import InvalidResumeError
 from app.modules.resumes.schemas import (
@@ -162,6 +163,13 @@ async def generate_resume_version(
         resource_id=str(version.id),
         correlation_id=request.state.correlation_id,
         details={"version_number": version.version_number},
+    )
+    await record_product_event(
+        db,
+        event_name="resume_completed",
+        route_group="resume",
+        institution_id=principal.institution_id,
+        dedupe_key=f"resume-completed:{principal.user.id}",
     )
     await db.commit()
     return to_response(version)

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
 from app.models.profile import StudentProfile
+from app.modules.communications.service import record_product_event
 from app.modules.profiles.schemas import (
     EducationUpdate,
     IdentityUpdate,
@@ -92,6 +93,7 @@ async def update_profile(
     institution_id: UUID | None = None,
 ) -> StudentProfile:
     profile = await get_or_create(db, user, institution_id, lock=True)
+    was_complete = profile.is_complete
     data = payload.model_dump(exclude_unset=True)
     expected_revision = data.pop("expected_revision", None)
     if expected_revision is not None and expected_revision != profile.revision:
@@ -111,6 +113,21 @@ async def update_profile(
     profile.external_links = links
     profile.readiness, profile.is_complete, _ = readiness(profile)
     profile.revision += 1
+    await record_product_event(
+        db,
+        event_name="onboarding_step_completed",
+        route_group="profile",
+        institution_id=institution_id,
+        dedupe_key=f"onboarding-step:{user.id}:{profile.revision}",
+    )
+    if profile.is_complete and not was_complete:
+        await record_product_event(
+            db,
+            event_name="profile_completed",
+            route_group="profile",
+            institution_id=institution_id,
+            dedupe_key=f"profile-completed:{user.id}",
+        )
     await db.commit()
     await db.refresh(profile)
     return profile

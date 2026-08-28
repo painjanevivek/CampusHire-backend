@@ -12,6 +12,7 @@ from app.modules.auth.dependencies import (
     require_roles,
     verify_authenticated_csrf,
 )
+from app.modules.communications.service import record_product_event
 from app.modules.engagement.schemas import (
     DashboardResponse,
     NotificationCreate,
@@ -95,6 +96,13 @@ async def choose_roadmap(
         )
     except EngagementError as error:
         raise _error(error) from error
+    await record_product_event(
+        db,
+        event_name="roadmap_selected",
+        route_group="roadmap",
+        institution_id=tenant.institution_id,
+        dedupe_key=f"roadmap-selected:{tenant.user_id}",
+    )
     await db.commit()
     return response
 

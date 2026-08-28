@@ -31,6 +31,7 @@ from app.modules.auth.security import (
     verify_password,
     verify_totp,
 )
+from app.modules.communications.service import enqueue_email, record_product_event
 
 
 class DuplicateEmailError(Exception):
@@ -250,6 +251,13 @@ async def accept_invitation(
         correlation_id=correlation_id,
         details={"role": invitation.role},
     )
+    await record_product_event(
+        db,
+        event_name="invitation_accepted",
+        route_group="activation",
+        institution_id=invitation.institution_id,
+        dedupe_key=f"invitation-accepted:{invitation.id}",
+    )
     await db.commit()
     await db.refresh(user)
     return user
@@ -293,6 +301,16 @@ async def issue_password_reset(
         expires_at=datetime.now(UTC) + timedelta(minutes=get_settings().password_reset_ttl_minutes),
     )
     db.add(record)
+    frontend = str(get_settings().frontend_origins[0]).rstrip("/")
+    await enqueue_email(
+        db,
+        institution_id=user.institution_id,
+        recipient_email=user.email,
+        category="account",
+        template_key="password_reset",
+        variables={"reset_url": f"{frontend}/reset-password?token={token}"},
+        dedupe_key=f"password-reset:{record.id}",
+    )
     record_audit_event(
         db,
         actor_user_id=user.id,

@@ -13,6 +13,12 @@ from app.models.auth import (
     User,
 )
 from app.models.base import Base
+from app.models.communications import (
+    CommunicationPreference,
+    EmailDelivery,
+    ProductEvent,
+    SupportRequest,
+)
 from app.models.engagement import (
     InAppNotification,
     RoadmapProgress,
@@ -49,8 +55,11 @@ __all__ = [
     "ApplicationOverride",
     "ApplicationStatusEvent",
     "Base",
+    "CommunicationPreference",
+    "EmailDelivery",
     "InAppNotification",
     "PolicyDocument",
+    "ProductEvent",
     "RoleExtractionProposal",
     "RoadmapProgress",
     "RoadmapTemplate",
@@ -78,6 +87,7 @@ __all__ = [
     "Session",
     "StudentProfile",
     "StudentRoadmap",
+    "SupportRequest",
     "TermsAcceptance",
     "User",
 ]
