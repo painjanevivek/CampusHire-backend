@@ -16,6 +16,7 @@ from app.modules.engagement.schemas import (
     NotificationCreate,
     NotificationPage,
     NotificationResponse,
+    RoadmapAvailabilityResponse,
     RoadmapProgressUpdate,
     RoadmapResponse,
     RoadmapSelection,
@@ -29,6 +30,7 @@ from app.modules.engagement.service import (
     list_templates,
     mark_notification_read,
     publish_notification,
+    roadmap_availability,
     select_roadmap,
     update_roadmap_progress,
 )
@@ -60,6 +62,15 @@ async def read_dashboard(db: Database, tenant: CurrentTenant) -> DashboardRespon
 @student_router.get("/roadmaps/templates", response_model=list[RoadmapTemplateResponse])
 async def read_roadmap_templates(db: Database) -> list[RoadmapTemplateResponse]:
     response = await list_templates(db)
+    await db.commit()
+    return response
+
+
+@student_router.get("/roadmaps/availability", response_model=RoadmapAvailabilityResponse)
+async def read_roadmap_availability(
+    db: Database, tenant: CurrentTenant
+) -> RoadmapAvailabilityResponse:
+    response = await roadmap_availability(db, tenant.institution_id, tenant.user_id)
     await db.commit()
     return response
 

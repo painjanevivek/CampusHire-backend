@@ -13,7 +13,13 @@ from app.core.database import get_db
 from app.main import app
 from app.models import Base
 from app.models.auth import Session, User, UserRole
-from app.models.resume import ResumeProcessingJob, ResumeStatus, ScanStatus, SuggestionStatus
+from app.models.resume import (
+    ResumeProcessingJob,
+    ResumeStatus,
+    ResumeVersion,
+    ScanStatus,
+    SuggestionStatus,
+)
 from app.modules.auth.security import hash_password, hash_secret
 from app.modules.profiles.schemas import IdentityUpdate
 from app.modules.profiles.service import ProfileConflictError, get_or_create, update_profile
@@ -23,7 +29,9 @@ from app.modules.resumes.scanner import MarkerScanner, ScannerUnavailableError, 
 from app.modules.resumes.schemas import (
     ExtractionFieldDecision,
     ExtractionReviewRequest,
+    SuggestionBatchItem,
     SuggestionDecisionRequest,
+    SuggestionReviewBatch,
 )
 from app.modules.resumes.storage import LocalObjectStore
 from app.modules.resumes.workflow import (
@@ -31,8 +39,10 @@ from app.modules.resumes.workflow import (
     create_generated_version,
     create_uploaded_version,
     decide_suggestion,
+    delete_owned_version,
     get_owned_version,
     review_extraction,
+    review_suggestions_batch,
 )
 
 engine = create_async_engine(
@@ -177,9 +187,7 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
         await db.commit()
         assert await recover_stale_jobs(db, stale_after_seconds=1) == 1
         assert await claim_next_job(db) == job_id
-        await process_job(
-            db, job_id, store=store, scanner=MarkerScanner(), settings=settings
-        )
+        await process_job(db, job_id, store=store, scanner=MarkerScanner(), settings=settings)
 
         version = await get_owned_version(db, user.id, uploaded.id)
         assert version.status == ResumeStatus.REVIEW_REQUIRED.value
@@ -210,12 +218,18 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
                 ),
             )
 
-        completed = await decide_suggestion(
+        completed = await review_suggestions_batch(
             db,
             user_id=user.id,
             version_id=version.id,
-            suggestion_id=suggestion.id,
-            payload=SuggestionDecisionRequest(action="accept"),
+            payload=SuggestionReviewBatch(
+                decisions=[
+                    SuggestionBatchItem(
+                        suggestion_id=suggestion.id,
+                        action="accept",
+                    )
+                ]
+            ),
         )
         assert completed.status == ResumeStatus.COMPLETED.value
         assert completed.review_completed_at is not None
@@ -254,6 +268,15 @@ async def test_generated_versions_are_immutable_and_ownership_scoped(tmp_path: P
         with pytest.raises(ResumeWorkflowError, match="resume_not_found"):
             await get_owned_version(db, other.id, generated.id)
 
+        await delete_owned_version(
+            db,
+            user_id=owner.id,
+            version_id=generated.id,
+            store=store,
+        )
+        assert await db.get(ResumeVersion, generated.id) is None
+        assert not (Path(settings.resume_storage_path) / generated.storage_key).exists()
+
 
 @pytest.mark.asyncio
 async def test_scanner_outage_retries_without_losing_the_authoritative_job(
@@ -291,9 +314,7 @@ async def test_scanner_outage_retries_without_losing_the_authoritative_job(
         assert retrying.processing_job is not None
         assert retrying.processing_job.safe_error_code == "resume_scan_unavailable"
 
-        await process_job(
-            db, job_id, store=store, scanner=MarkerScanner(), settings=settings
-        )
+        await process_job(db, job_id, store=store, scanner=MarkerScanner(), settings=settings)
         recovered = await get_owned_version(db, user.id, uploaded.id)
         assert recovered.status == ResumeStatus.REVIEW_REQUIRED.value
         assert recovered.scan_status == ScanStatus.CLEAN.value

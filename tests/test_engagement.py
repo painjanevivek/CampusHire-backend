@@ -15,6 +15,7 @@ from app.modules.engagement.service import (
     list_notifications,
     list_templates,
     publish_notification,
+    roadmap_availability,
     select_roadmap,
     update_roadmap_progress,
 )
@@ -67,9 +68,23 @@ async def seed_people(db):  # type: ignore[no-untyped-def]
 async def test_eight_curated_paths_are_acyclic_and_progress_is_prerequisite_aware() -> None:
     async with Session() as db:
         institution, _, _, student, _ = await seed_people(db)
+        db.add(
+            StudentProfile(
+                user_id=student.id,
+                institution_id=institution.id,
+                full_name="Asha Patil",
+                target_roles=["Software Developer"],
+            )
+        )
+        await db.flush()
         templates = await list_templates(db)
         assert len(templates) == 8
-        selected = await select_roadmap(db, institution.id, student.id, templates[0].id)
+        availability = await roadmap_availability(db, institution.id, student.id)
+        assert availability.status == "available"
+        assert [item.title for item in availability.templates] == ["Software Developer"]
+        selected = await select_roadmap(
+            db, institution.id, student.id, availability.templates[0].id
+        )
         assert selected.version == 1
         assert [node.state for node in selected.nodes].count("next") == 2
         locked = next(node for node in selected.nodes if node.state == "locked")
@@ -94,6 +109,20 @@ async def test_eight_curated_paths_are_acyclic_and_progress_is_prerequisite_awar
             ),
         )
         assert progressed.completed_count == 1
+
+
+async def test_roadmap_availability_explains_missing_targets_and_institution_policy() -> None:
+    async with Session() as db:
+        institution, _, _, student, _ = await seed_people(db)
+        missing_target = await roadmap_availability(db, institution.id, student.id)
+        assert missing_target.status == "no_target_role"
+        assert missing_target.templates == []
+
+        institution.roadmaps_enabled = False
+        await db.flush()
+        restricted = await roadmap_availability(db, institution.id, student.id)
+        assert restricted.status == "institution_restriction"
+        assert restricted.reason
 
 
 async def test_notifications_are_tenant_scoped_deduplicated_and_internal_link_safe() -> None:

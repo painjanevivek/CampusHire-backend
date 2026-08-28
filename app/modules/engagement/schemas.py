@@ -40,6 +40,15 @@ class RoadmapSelection(BaseModel):
     template_id: UUID
 
 
+class RoadmapAvailabilityResponse(BaseModel):
+    status: Literal[
+        "available", "no_target_role", "no_approved_template", "institution_restriction"
+    ]
+    reason: str
+    guidance_provider_status: Literal["available", "unavailable"]
+    templates: list[RoadmapTemplateResponse]
+
+
 class RoadmapProgressUpdate(BaseModel):
     completed: bool
     evidence_label: str | None = Field(default=None, max_length=160)
@@ -63,6 +72,7 @@ class NextAction(BaseModel):
     source_facts: list[str]
     estimated_minutes: int = Field(ge=1, le=120)
     unlocks: str
+    completion_criteria: str
 
 
 class ActivationStage(BaseModel):

@@ -249,6 +249,7 @@ class ApplicationResponse(BaseModel):
     rule_snapshot: dict[str, object]
     eligibility_snapshot: dict[str, object]
     decision_snapshot: dict[str, object]
+    institution_timezone: str
     created_at: datetime
     updated_at: datetime
     withdrawn_at: datetime | None

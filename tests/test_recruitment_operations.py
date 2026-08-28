@@ -54,6 +54,13 @@ from app.modules.recruitment.service import (
     withdraw_application,
 )
 from app.modules.resumes.builder import ResumeContent, generate_pdf
+from app.modules.resumes.workflow import ResumeWorkflowError, delete_owned_version
+
+
+class StorageMustNotBeCalled:
+    def delete(self, key: str) -> None:
+        raise AssertionError(f"locked storage object was deleted: {key}")
+
 
 engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -275,6 +282,13 @@ async def test_application_is_idempotent_and_preserves_immutable_decision_inputs
         response = await response_for_application(db, application)
         assert response.facts_snapshot["cgpa"] == 8.4
         assert response.resume_snapshot["checksum"] == "checksum-one"
+        with pytest.raises(ResumeWorkflowError, match="resume_version_locked_by_application"):
+            await delete_owned_version(
+                db,
+                user_id=student.id,
+                version_id=resume.id,
+                store=StorageMustNotBeCalled(),  # type: ignore[arg-type]
+            )
 
 
 @pytest.mark.asyncio

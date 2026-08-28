@@ -15,6 +15,8 @@ def validate_upload_envelope(data: bytes, declared_type: str, max_bytes: int) ->
         raise InvalidResumeError("resume_too_large")
     if declared_type != "application/pdf" or not data.startswith(b"%PDF-"):
         raise InvalidResumeError("resume_not_pdf")
+
+
 def store_pdf(data: bytes, root: str) -> str:
     base = Path(root).resolve()
     base.mkdir(parents=True, exist_ok=True)

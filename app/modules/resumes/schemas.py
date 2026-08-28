@@ -39,6 +39,7 @@ class ResumeVersionResponse(BaseModel):
     created_at: datetime
     review_completed_at: datetime | None
     safe_error_code: str | None
+    locked_by_application: bool = False
     extracted_data: dict[str, Any] = Field(default_factory=dict)
     job: ResumeJobResponse | None = None
     suggestions: list[ResumeSuggestionResponse] = Field(default_factory=list)
@@ -79,4 +80,19 @@ class SuggestionDecisionRequest(BaseModel):
             raise ValueError("Edited suggestions require text")
         if self.action != "edit" and self.edited_text is not None:
             raise ValueError("Edited text is only valid for edit decisions")
+        return self
+
+
+class SuggestionBatchItem(SuggestionDecisionRequest):
+    suggestion_id: UUID
+
+
+class SuggestionReviewBatch(BaseModel):
+    decisions: list[SuggestionBatchItem] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def suggestion_ids_are_unique(self) -> "SuggestionReviewBatch":
+        ids = [item.suggestion_id for item in self.decisions]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Suggestion decisions must be unique")
         return self

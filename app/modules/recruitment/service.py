@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import User
+from app.models.auth import Institution, User
 from app.models.intelligence import SemanticMatchEvidence
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
@@ -741,6 +741,7 @@ async def toggle_saved(
 
 async def _application_response(db: AsyncSession, application: Application) -> ApplicationResponse:
     student = await db.get(User, application.student_user_id)
+    institution = await db.get(Institution, application.institution_id)
     profile = await db.scalar(
         select(StudentProfile).where(StudentProfile.user_id == application.student_user_id)
     )
@@ -785,6 +786,7 @@ async def _application_response(db: AsyncSession, application: Application) -> A
         rule_snapshot=dict(application.rule_snapshot),
         eligibility_snapshot=dict(application.eligibility_snapshot),
         decision_snapshot=dict(application.decision_snapshot),
+        institution_timezone=institution.timezone if institution else "UTC",
         created_at=application.created_at,
         updated_at=application.updated_at,
         withdrawn_at=application.withdrawn_at,

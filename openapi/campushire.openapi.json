@@ -322,6 +322,10 @@
             "title": "Id",
             "type": "string"
           },
+          "institution_timezone": {
+            "title": "Institution Timezone",
+            "type": "string"
+          },
           "overrides": {
             "items": {
               "$ref": "#/components/schemas/OverrideResponse"
@@ -414,6 +418,7 @@
           "rule_snapshot",
           "eligibility_snapshot",
           "decision_snapshot",
+          "institution_timezone",
           "created_at",
           "updated_at",
           "withdrawn_at",
@@ -1888,6 +1893,10 @@
       },
       "NextAction": {
         "properties": {
+          "completion_criteria": {
+            "title": "Completion Criteria",
+            "type": "string"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -1939,7 +1948,8 @@
           "policy_version",
           "source_facts",
           "estimated_minutes",
-          "unlocks"
+          "unlocks",
+          "completion_criteria"
         ],
         "title": "NextAction",
         "type": "object"
@@ -3568,6 +3578,11 @@
               }
             ]
           },
+          "locked_by_application": {
+            "default": false,
+            "title": "Locked By Application",
+            "type": "boolean"
+          },
           "original_name": {
             "title": "Original Name",
             "type": "string"
@@ -3650,6 +3665,47 @@
           "safe_error_code"
         ],
         "title": "ResumeVersionResponse",
+        "type": "object"
+      },
+      "RoadmapAvailabilityResponse": {
+        "properties": {
+          "guidance_provider_status": {
+            "enum": [
+              "available",
+              "unavailable"
+            ],
+            "title": "Guidance Provider Status",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "no_target_role",
+              "no_approved_template",
+              "institution_restriction"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/RoadmapTemplateResponse"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "guidance_provider_status",
+          "templates"
+        ],
+        "title": "RoadmapAvailabilityResponse",
         "type": "object"
       },
       "RoadmapNodeResponse": {
@@ -4745,6 +4801,43 @@
         "title": "StatusEventResponse",
         "type": "object"
       },
+      "SuggestionBatchItem": {
+        "properties": {
+          "action": {
+            "enum": [
+              "accept",
+              "edit",
+              "reject"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "edited_text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited Text"
+          },
+          "suggestion_id": {
+            "format": "uuid",
+            "title": "Suggestion Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "suggestion_id"
+        ],
+        "title": "SuggestionBatchItem",
+        "type": "object"
+      },
       "SuggestionDecisionRequest": {
         "properties": {
           "action": {
@@ -4774,6 +4867,24 @@
           "action"
         ],
         "title": "SuggestionDecisionRequest",
+        "type": "object"
+      },
+      "SuggestionReviewBatch": {
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionBatchItem"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "SuggestionReviewBatch",
         "type": "object"
       },
       "UserResponse": {
@@ -9707,6 +9818,56 @@
       }
     },
     "/api/v1/resumes/{resume_id}": {
+      "delete": {
+        "operationId": "delete_resume_version_api_v1_resumes__resume_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Resume Version",
+        "tags": [
+          "resumes"
+        ]
+      },
       "get": {
         "operationId": "read_resume_api_v1_resumes__resume_id__get",
         "parameters": [
@@ -9950,6 +10111,75 @@
         ]
       }
     },
+    "/api/v1/resumes/{resume_id}/suggestion-review": {
+      "post": {
+        "operationId": "review_resume_suggestions_api_v1_resumes__resume_id__suggestion_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestionReviewBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Resume Suggestions",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
     "/api/v1/resumes/{resume_id}/suggestions/{suggestion_id}": {
       "post": {
         "operationId": "review_resume_suggestion_api_v1_resumes__resume_id__suggestions__suggestion_id__post",
@@ -10026,6 +10256,55 @@
         "summary": "Review Resume Suggestion",
         "tags": [
           "resumes"
+        ]
+      }
+    },
+    "/api/v1/roadmaps/availability": {
+      "get": {
+        "operationId": "read_roadmap_availability_api_v1_roadmaps_availability_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapAvailabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Roadmap Availability",
+        "tags": [
+          "readiness and communication"
         ]
       }
     },

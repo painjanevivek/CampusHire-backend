@@ -240,8 +240,9 @@ async def process_job(
     job = await db.scalar(
         select(ResumeProcessingJob)
         .options(
-            selectinload(ResumeProcessingJob.resume_version)
-            .selectinload(ResumeVersion.suggestions),
+            selectinload(ResumeProcessingJob.resume_version).selectinload(
+                ResumeVersion.suggestions
+            ),
             selectinload(ResumeProcessingJob.events),
         )
         .where(ResumeProcessingJob.id == job_id)

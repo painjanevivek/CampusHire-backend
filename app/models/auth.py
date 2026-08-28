@@ -31,6 +31,8 @@ class Institution(Base, TimestampMixin):
     code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     is_active: Mapped[bool] = mapped_column(default=True)
+    roadmaps_enabled: Mapped[bool] = mapped_column(default=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata")
 
 
 class User(Base, TimestampMixin):

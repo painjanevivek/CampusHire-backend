@@ -4,7 +4,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import User
+from app.core.config import get_settings
+from app.models.auth import Institution, User
 from app.models.engagement import (
     InAppNotification,
     RoadmapProgress,
@@ -24,6 +25,7 @@ from app.modules.engagement.schemas import (
     NotificationCreate,
     NotificationPage,
     NotificationResponse,
+    RoadmapAvailabilityResponse,
     RoadmapNodeResponse,
     RoadmapProgressUpdate,
     RoadmapResponse,
@@ -99,6 +101,49 @@ async def list_templates(db: AsyncSession) -> list[RoadmapTemplateResponse]:
     ]
 
 
+async def roadmap_availability(
+    db: AsyncSession, institution_id: UUID, student_user_id: UUID
+) -> RoadmapAvailabilityResponse:
+    institution = await db.get(Institution, institution_id)
+    profile = await db.scalar(
+        select(StudentProfile).where(
+            StudentProfile.institution_id == institution_id,
+            StudentProfile.user_id == student_user_id,
+        )
+    )
+    provider_status = "available" if get_settings().gemini_api_key else "unavailable"
+    if institution is None or not institution.roadmaps_enabled:
+        return RoadmapAvailabilityResponse(
+            status="institution_restriction",
+            reason="Your institution has not enabled curated roadmaps for this membership.",
+            guidance_provider_status=provider_status,
+            templates=[],
+        )
+    if profile is None or not profile.target_roles:
+        return RoadmapAvailabilityResponse(
+            status="no_target_role",
+            reason="Choose a target role in your profile before selecting a roadmap.",
+            guidance_provider_status=provider_status,
+            templates=[],
+        )
+    templates = await list_templates(db)
+    targets = {str(value).strip().casefold() for value in profile.target_roles}
+    mapped = [item for item in templates if item.title.casefold() in targets]
+    if not mapped:
+        return RoadmapAvailabilityResponse(
+            status="no_approved_template",
+            reason="No approved roadmap currently maps to your selected target role.",
+            guidance_provider_status=provider_status,
+            templates=[],
+        )
+    return RoadmapAvailabilityResponse(
+        status="available",
+        reason="Approved curated paths mapped to your reviewed target role.",
+        guidance_provider_status=provider_status,
+        templates=mapped,
+    )
+
+
 def _node_models(template: RoadmapTemplate) -> list[RoadmapNode]:
     nodes = [
         RoadmapNode(
@@ -169,6 +214,11 @@ async def current_roadmap(
 async def select_roadmap(
     db: AsyncSession, institution_id: UUID, student_user_id: UUID, template_id: UUID
 ) -> RoadmapResponse:
+    availability = await roadmap_availability(db, institution_id, student_user_id)
+    if availability.status != "available":
+        raise EngagementError(f"roadmap_{availability.status}")
+    if template_id not in {item.id for item in availability.templates}:
+        raise EngagementError("roadmap_template_not_mapped_to_target_role")
     await ensure_templates(db)
     template = await db.scalar(
         select(RoadmapTemplate).where(
@@ -458,6 +508,7 @@ async def dashboard(
             source_facts=["required_profile_facts_incomplete"],
             estimated_minutes=8,
             unlocks="Role-specific eligibility checks",
+            completion_criteria="Required identity, education, and target-role facts are saved.",
         )
     elif reviewing:
         action = NextAction(
@@ -472,6 +523,9 @@ async def dashboard(
             source_facts=[f"resume:{reviewing.id}:review_required"],
             estimated_minutes=6,
             unlocks="A selectable, verified resume version",
+            completion_criteria=(
+                "Every extracted field has an explicit accept, edit, or reject decision."
+            ),
         )
     elif not reviewed:
         action = NextAction(
@@ -484,6 +538,7 @@ async def dashboard(
             source_facts=["completed_resume_missing"],
             estimated_minutes=10,
             unlocks="Application submission with locked evidence",
+            completion_criteria="A PDF passes safety checks and every proposed claim is reviewed.",
         )
     elif not project_evidence:
         action = NextAction(
@@ -499,6 +554,7 @@ async def dashboard(
             source_facts=[f"resume:{reviewed.id}:projects_missing"],
             estimated_minutes=12,
             unlocks="Stronger evidence-led role explanations",
+            completion_criteria="One factual project is present in reviewed resume evidence.",
         )
     elif roadmap is None:
         action = NextAction(
@@ -513,6 +569,7 @@ async def dashboard(
             source_facts=["roadmap_not_selected"],
             estimated_minutes=3,
             unlocks="A prerequisite-aware next milestone",
+            completion_criteria="One approved path mapped to your target role is selected.",
         )
     else:
         next_node = next((item for item in roadmap.nodes if item.state == "next"), None)
@@ -533,6 +590,11 @@ async def dashboard(
             estimated_minutes=next_node and 20 or 5,
             unlocks=(
                 "The next roadmap milestone" if next_node else "A confident application decision"
+            ),
+            completion_criteria=(
+                next_node.completion
+                if next_node
+                else "Review one eligible role and its published requirements."
             ),
         )
 

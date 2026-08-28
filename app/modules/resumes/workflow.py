@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings
+from app.models.recruitment import Application
 from app.models.resume import (
     JobStatus,
     Resume,
@@ -26,21 +27,18 @@ from app.modules.resumes.schemas import (
     ResumeUploadResponse,
     ResumeVersionResponse,
     SuggestionDecisionRequest,
+    SuggestionReviewBatch,
 )
 from app.modules.resumes.service import sanitize_filename
-from app.modules.resumes.storage import ObjectStore
+from app.modules.resumes.storage import ObjectStore, ObjectStoreError
 
 
 class ResumeWorkflowError(RuntimeError):
     pass
 
 
-async def _container(
-    db: AsyncSession, user_id: UUID, institution_id: UUID | None
-) -> Resume:
-    resume = await db.scalar(
-        select(Resume).where(Resume.user_id == user_id).with_for_update()
-    )
+async def _container(db: AsyncSession, user_id: UUID, institution_id: UUID | None) -> Resume:
+    resume = await db.scalar(select(Resume).where(Resume.user_id == user_id).with_for_update())
     if resume is None:
         resume = Resume(user_id=user_id, institution_id=institution_id)
         db.add(resume)
@@ -72,9 +70,7 @@ def _job_response(job: ResumeProcessingJob | None) -> ResumeJobResponse | None:
         attempts=job.attempts,
         max_attempts=job.max_attempts,
         safe_error_code=job.safe_error_code,
-        retryable=bool(
-            job.safe_error_code in RETRYABLE_ERRORS and job.attempts < job.max_attempts
-        ),
+        retryable=bool(job.safe_error_code in RETRYABLE_ERRORS and job.attempts < job.max_attempts),
         cancellable=job.status
         in {
             JobStatus.QUEUED.value,
@@ -132,9 +128,7 @@ async def create_uploaded_version(
     existing = await db.scalar(
         select(ResumeVersion)
         .options(selectinload(ResumeVersion.processing_job))
-        .where(
-            ResumeVersion.user_id == user_id, ResumeVersion.checksum == checksum
-        )
+        .where(ResumeVersion.user_id == user_id, ResumeVersion.checksum == checksum)
     )
     if existing:
         return ResumeUploadResponse(
@@ -255,9 +249,7 @@ async def get_owned_version_by_checksum(
     return version
 
 
-async def get_owned_version(
-    db: AsyncSession, user_id: UUID, version_id: UUID
-) -> ResumeVersion:
+async def get_owned_version(db: AsyncSession, user_id: UUID, version_id: UUID) -> ResumeVersion:
     version = await db.scalar(
         select(ResumeVersion)
         .options(
@@ -291,9 +283,11 @@ async def list_owned_versions(db: AsyncSession, user_id: UUID) -> list[ResumeVer
 def _finish_review_if_complete(version: ResumeVersion) -> None:
     proposed = version.extracted_data.get("proposed", {})
     decisions = version.extracted_data.get("decisions", {})
-    extraction_complete = isinstance(proposed, dict) and isinstance(decisions, dict) and set(
-        proposed
-    ).issubset(decisions)
+    extraction_complete = (
+        isinstance(proposed, dict)
+        and isinstance(decisions, dict)
+        and set(proposed).issubset(decisions)
+    )
     suggestions_complete = all(
         suggestion.status != SuggestionStatus.PENDING.value for suggestion in version.suggestions
     )
@@ -364,6 +358,77 @@ async def decide_suggestion(
     _finish_review_if_complete(version)
     await db.commit()
     return await get_owned_version(db, user_id, version_id)
+
+
+async def review_suggestions_batch(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    version_id: UUID,
+    payload: SuggestionReviewBatch,
+) -> ResumeVersion:
+    version = await get_owned_version(db, user_id, version_id)
+    if version.status != ResumeStatus.REVIEW_REQUIRED.value:
+        raise ResumeWorkflowError("resume_not_ready_for_review")
+    suggestions = {item.id: item for item in version.suggestions}
+    for decision in payload.decisions:
+        suggestion = suggestions.get(decision.suggestion_id)
+        if suggestion is None:
+            raise ResumeWorkflowError("resume_suggestion_not_found")
+        if suggestion.status != SuggestionStatus.PENDING.value:
+            raise ResumeWorkflowError("resume_suggestion_already_decided")
+        if decision.action == "edit":
+            assert decision.edited_text is not None
+            known_facts = {
+                term
+                for term in ("increased", "reduced", "million", "award", "certified")
+                if term in (version.extracted_text or "").casefold()
+            }
+            if not suggestion_is_supported(decision.edited_text, known_facts):
+                raise ResumeWorkflowError("resume_suggestion_unsupported_claim")
+
+    now = datetime.now(UTC)
+    for decision in payload.decisions:
+        suggestion = suggestions[decision.suggestion_id]
+        if decision.action == "edit":
+            suggestion.status = SuggestionStatus.EDITED.value
+            suggestion.decided_text = decision.edited_text
+        elif decision.action == "accept":
+            suggestion.status = SuggestionStatus.ACCEPTED.value
+            suggestion.decided_text = suggestion.proposed_text
+        else:
+            suggestion.status = SuggestionStatus.REJECTED.value
+            suggestion.decided_text = None
+        suggestion.decided_at = now
+    _finish_review_if_complete(version)
+    await db.commit()
+    return await get_owned_version(db, user_id, version_id)
+
+
+async def delete_owned_version(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    version_id: UUID,
+    store: ObjectStore,
+) -> None:
+    version = await get_owned_version(db, user_id, version_id)
+    application_id = await db.scalar(
+        select(Application.id).where(Application.resume_version_id == version.id).limit(1)
+    )
+    if application_id is not None:
+        raise ResumeWorkflowError("resume_version_locked_by_application")
+    if version.status in {ResumeStatus.QUEUED.value, ResumeStatus.PROCESSING.value}:
+        raise ResumeWorkflowError("resume_processing_in_progress")
+    storage_key = version.storage_key
+    await db.delete(version)
+    await db.flush()
+    try:
+        store.delete(storage_key)
+    except ObjectStoreError as error:
+        await db.rollback()
+        raise ResumeWorkflowError("resume_storage_unavailable") from error
+    await db.commit()
 
 
 async def retry_job(db: AsyncSession, *, user_id: UUID, version_id: UUID) -> ResumeVersion:
