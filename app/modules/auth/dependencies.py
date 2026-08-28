@@ -100,7 +100,20 @@ async def get_current_principal(session: CurrentSession) -> AuthenticatedPrincip
     membership = session.active_membership
     if membership is not None and membership.status != MembershipStatus.ACTIVE.value:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Institution membership is not active"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": f"membership_{membership.status}",
+                "message": "Institution access is restricted. Contact your placement office.",
+            },
+        )
+    effective_role = membership.role if membership is not None else session.user.role
+    if effective_role in {"tnp_admin", "tnp_reviewer"} and session.mfa_verified_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "mfa_required",
+                "message": "Complete administrator verification to continue.",
+            },
         )
     return AuthenticatedPrincipal(user=session.user, session=session, membership=membership)
 

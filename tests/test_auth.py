@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,11 +15,12 @@ from app.models.auth import (
     AuditEvent,
     Institution,
     InstitutionMembership,
+    MembershipInvitation,
     MembershipStatus,
     User,
     UserRole,
 )
-from app.modules.auth.security import hash_password
+from app.modules.auth.security import hash_password, hash_secret, totp_code
 
 engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -57,18 +59,49 @@ def csrf_headers(client: TestClient) -> dict[str, str]:
     return {"Origin": "http://localhost:3000", "X-CSRF-Token": token}
 
 
-def signup(client: TestClient) -> dict[str, str]:
+async def signup(client: TestClient) -> dict[str, str]:
+    token = "test-invitation-token"  # noqa: S105
+    async with TestSession() as db:
+        institution = Institution(code="student-campus", name="Student Campus")
+        db.add(institution)
+        await db.flush()
+        db.add(
+            MembershipInvitation(
+                institution_id=institution.id,
+                email="student@example.edu",
+                role=UserRole.STUDENT.value,
+                token_hash=hash_secret(token),
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
+        await db.commit()
     response = client.post(
-        "/api/v1/auth/signup",
+        f"/api/v1/auth/invitations/{token}/accept",
         headers=csrf_headers(client),
-        json={"email": "Student@Example.edu", "password": "a long campus passphrase"},
+        json={
+            "password": "a long campus passphrase",
+            "terms_version": "2026-08-28",
+            "privacy_version": "2026-08-28",
+        },
     )
     assert response.status_code == 201, response.text
     return response.json()
 
 
-def test_signup_normalizes_email_and_creates_student_session(client: TestClient) -> None:
-    payload = signup(client)
+async def test_signup_requires_an_invitation(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/signup",
+        headers=csrf_headers(client),
+        json={"email": "student@example.edu", "password": "a long campus passphrase"},
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "invitation_required"
+
+
+async def test_invitation_acceptance_normalizes_email_and_creates_student_session(
+    client: TestClient,
+) -> None:
+    payload = await signup(client)
     assert payload["email"] == "student@example.edu"
     assert payload["role"] == "student"
     me = client.get("/api/v1/auth/me")
@@ -76,34 +109,38 @@ def test_signup_normalizes_email_and_creates_student_session(client: TestClient)
     assert me.json()["id"] == payload["id"]
 
 
-def test_duplicate_email_is_rejected(client: TestClient) -> None:
-    signup(client)
+async def test_invitation_is_single_use(client: TestClient) -> None:
+    await signup(client)
     response = client.post(
-        "/api/v1/auth/signup",
+        "/api/v1/auth/invitations/test-invitation-token/accept",
         headers=csrf_headers(client),
-        json={"email": "student@example.edu", "password": "another strong passphrase"},
+        json={
+            "password": "another strong passphrase",
+            "terms_version": "2026-08-28",
+            "privacy_version": "2026-08-28",
+        },
     )
-    assert response.status_code == 409
+    assert response.status_code == 410
 
 
-def test_invalid_credentials_use_generic_error(client: TestClient) -> None:
-    signup(client)
+async def test_invalid_credentials_use_generic_error(client: TestClient) -> None:
+    await signup(client)
     response = client.post(
         "/api/v1/auth/sign-in",
         headers=csrf_headers(client),
         json={"email": "student@example.edu", "password": "wrong"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    assert response.json()["error"]["message"] == "Invalid email or password"
 
 
-def test_state_change_requires_csrf_and_origin(client: TestClient) -> None:
-    signup(client)
+async def test_state_change_requires_csrf_and_origin(client: TestClient) -> None:
+    await signup(client)
     assert client.post("/api/v1/auth/sign-out").status_code == 403
 
 
-def test_sign_out_revokes_current_session(client: TestClient) -> None:
-    signup(client)
+async def test_sign_out_revokes_current_session(client: TestClient) -> None:
+    await signup(client)
     token = client.cookies[get_settings().csrf_cookie_name]
     response = client.post(
         "/api/v1/auth/sign-out",
@@ -113,10 +150,10 @@ def test_sign_out_revokes_current_session(client: TestClient) -> None:
     assert client.get("/api/v1/auth/me").status_code == 401
 
 
-def test_authenticated_csrf_can_be_refreshed_without_reauthentication(
+async def test_authenticated_csrf_can_be_refreshed_without_reauthentication(
     client: TestClient,
 ) -> None:
-    signup(client)
+    await signup(client)
     client.cookies.delete(get_settings().csrf_cookie_name)
 
     refreshed = client.get("/api/v1/auth/csrf")
@@ -170,6 +207,17 @@ def sign_in(client: TestClient, email: str, password: str) -> None:
         json={"email": email, "password": password},
     )
     assert response.status_code == 200, response.text
+    if response.json()["next_step"] == "mfa_setup":
+        token = client.cookies[get_settings().csrf_cookie_name]
+        headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": token}
+        setup = client.post("/api/v1/auth/mfa/setup", headers=headers)
+        assert setup.status_code == 200, setup.text
+        confirmed = client.post(
+            "/api/v1/auth/mfa/confirm",
+            headers=headers,
+            json={"code": totp_code(setup.json()["secret"])},
+        )
+        assert confirmed.status_code == 200, confirmed.text
 
 
 @pytest.mark.asyncio

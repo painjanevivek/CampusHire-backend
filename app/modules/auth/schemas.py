@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -29,3 +30,57 @@ class UserResponse(BaseModel):
     institution_id: UUID | None = None
     membership_id: UUID | None = None
     membership_status: str | None = None
+
+
+class SignInResponse(BaseModel):
+    user: UserResponse
+    next_step: str = "complete"
+
+
+class InvitationResponse(BaseModel):
+    id: UUID
+    institution_id: UUID
+    email: EmailStr
+    role: str
+    expires_at: datetime
+
+
+class InvitationAcceptRequest(BaseModel):
+    password: str = Field(min_length=12, max_length=128)
+    terms_version: str = Field(min_length=1, max_length=64)
+    privacy_version: str = Field(min_length=1, max_length=64)
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    password: str = Field(min_length=12, max_length=128)
+
+
+class MfaCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=32)
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class MfaConfirmResponse(BaseModel):
+    recovery_codes: list[str]
+
+
+class MfaDisableRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+    code: str = Field(min_length=6, max_length=32)
+
+
+class SessionResponse(BaseModel):
+    id: UUID
+    created_at: datetime
+    last_activity_at: datetime
+    expires_at: datetime
+    device_summary: str | None
+    current: bool

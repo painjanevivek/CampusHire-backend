@@ -1,4 +1,17 @@
-from app.models.auth import AuditEvent, Institution, InstitutionMembership, Session, User
+from app.models.auth import (
+    AuditEvent,
+    Institution,
+    InstitutionMembership,
+    MembershipInvitation,
+    MfaEnrollment,
+    MfaRecoveryCode,
+    PasswordResetToken,
+    RosterImport,
+    RosterImportRow,
+    Session,
+    TermsAcceptance,
+    User,
+)
 from app.models.base import Base
 from app.models.engagement import (
     InAppNotification,
@@ -46,6 +59,10 @@ __all__ = [
     "EligibilityRuleSet",
     "Institution",
     "InstitutionMembership",
+    "MembershipInvitation",
+    "MfaEnrollment",
+    "MfaRecoveryCode",
+    "PasswordResetToken",
     "PlacementDrive",
     "PlacementRole",
     "Resume",
@@ -53,9 +70,12 @@ __all__ = [
     "ResumeProcessingJob",
     "ResumeSuggestion",
     "ResumeVersion",
+    "RosterImport",
+    "RosterImportRow",
     "SavedOpportunity",
     "Session",
     "StudentProfile",
     "StudentRoadmap",
+    "TermsAcceptance",
     "User",
 ]

@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.auth import InstitutionMembership, MembershipStatus, User
 from app.modules.audit.service import record_audit_event
@@ -12,11 +13,10 @@ class MembershipUserNotFoundError(Exception):
     pass
 
 
-async def list_memberships(
-    db: AsyncSession, institution_id: UUID
-) -> list[InstitutionMembership]:
+async def list_memberships(db: AsyncSession, institution_id: UUID) -> list[InstitutionMembership]:
     memberships = await db.scalars(
         select(InstitutionMembership)
+        .options(selectinload(InstitutionMembership.user))
         .where(InstitutionMembership.institution_id == institution_id)
         .order_by(InstitutionMembership.created_at, InstitutionMembership.id)
     )
@@ -64,6 +64,41 @@ async def verify_membership(
         resource_id=str(membership.id),
         correlation_id=correlation_id,
         details={"member_user_id": str(user_id), "role": role},
+    )
+    await db.commit()
+    await db.refresh(membership)
+    return membership
+
+
+async def update_membership_status(
+    db: AsyncSession,
+    *,
+    institution_id: UUID,
+    membership_id: UUID,
+    status: str,
+    reason: str,
+    actor_user_id: UUID,
+    correlation_id: str | None,
+) -> InstitutionMembership | None:
+    membership = await db.scalar(
+        select(InstitutionMembership).where(
+            InstitutionMembership.id == membership_id,
+            InstitutionMembership.institution_id == institution_id,
+        )
+    )
+    if membership is None:
+        return None
+    membership.status = status
+    record_audit_event(
+        db,
+        actor_user_id=actor_user_id,
+        institution_id=institution_id,
+        event_type="membership.status_changed",
+        resource_type="institution_membership",
+        resource_id=str(membership.id),
+        reason=reason,
+        correlation_id=correlation_id,
+        details={"status": status},
     )
     await db.commit()
     await db.refresh(membership)

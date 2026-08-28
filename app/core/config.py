@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     session_cookie_name: str = "campushire_session"
     csrf_cookie_name: str = "campushire_csrf"
     session_ttl_hours: int = Field(default=12, ge=1, le=720)
+    invitation_ttl_hours: int = Field(default=72, ge=1, le=720)
+    password_reset_ttl_minutes: int = Field(default=30, ge=5, le=1440)
+    auth_lockout_attempts: int = Field(default=5, ge=3, le=20)
+    auth_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    roster_max_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
+    operator_bootstrap_key: str | None = None
+    mfa_encryption_key: str = "development-only-change-me"
     resume_storage_path: str = ".data/resumes"
     resume_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
     resume_max_pages: int = Field(default=3, ge=1, le=20)
@@ -59,6 +66,10 @@ class Settings(BaseSettings):
                 raise ValueError("Staging and production require HTTPS FRONTEND_ORIGINS")
             if not self.trusted_hosts or "*" in self.trusted_hosts:
                 raise ValueError("Staging and production require explicit TRUSTED_HOSTS")
+            if not self.operator_bootstrap_key or len(self.operator_bootstrap_key) < 24:
+                raise ValueError("Staging and production require a strong OPERATOR_BOOTSTRAP_KEY")
+            if self.mfa_encryption_key == "development-only-change-me":
+                raise ValueError("Staging and production require a dedicated MFA_ENCRYPTION_KEY")
         return self
 
     @property

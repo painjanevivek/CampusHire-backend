@@ -224,6 +224,20 @@
         "title": "ApplicationStatusUpdate",
         "type": "object"
       },
+      "Body_preview_roster_import_api_v1_institutions__institution_id__roster_imports_preview_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_roster_import_api_v1_institutions__institution_id__roster_imports_preview_post",
+        "type": "object"
+      },
       "Body_upload_resume_api_v1_resumes_post": {
         "properties": {
           "file": {
@@ -1300,6 +1314,130 @@
         "title": "IdentityUpdate",
         "type": "object"
       },
+      "InstitutionProvisionRequest": {
+        "properties": {
+          "admin_email": {
+            "format": "email",
+            "title": "Admin Email",
+            "type": "string"
+          },
+          "institution_code": {
+            "pattern": "^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$",
+            "title": "Institution Code",
+            "type": "string"
+          },
+          "institution_name": {
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Institution Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "institution_code",
+          "institution_name",
+          "admin_email"
+        ],
+        "title": "InstitutionProvisionRequest",
+        "type": "object"
+      },
+      "InstitutionProvisionResponse": {
+        "properties": {
+          "admin_invitation_id": {
+            "format": "uuid",
+            "title": "Admin Invitation Id",
+            "type": "string"
+          },
+          "admin_invitation_token": {
+            "title": "Admin Invitation Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "institution_id": {
+            "format": "uuid",
+            "title": "Institution Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "institution_id",
+          "admin_invitation_id",
+          "admin_invitation_token",
+          "expires_at"
+        ],
+        "title": "InstitutionProvisionResponse",
+        "type": "object"
+      },
+      "InvitationAcceptRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          },
+          "privacy_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Privacy Version",
+            "type": "string"
+          },
+          "terms_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Terms Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "terms_version",
+          "privacy_version"
+        ],
+        "title": "InvitationAcceptRequest",
+        "type": "object"
+      },
+      "InvitationResponse": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "institution_id": {
+            "format": "uuid",
+            "title": "Institution Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "institution_id",
+          "email",
+          "role",
+          "expires_at"
+        ],
+        "title": "InvitationResponse",
+        "type": "object"
+      },
       "LinksUpdate": {
         "properties": {
           "expected_revision": {
@@ -1371,6 +1509,18 @@
       },
       "MembershipResponse": {
         "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1403,6 +1553,76 @@
           "status"
         ],
         "title": "MembershipResponse",
+        "type": "object"
+      },
+      "MembershipStatusUpdate": {
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "pattern": "^(active|suspended|revoked|graduated)$",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason"
+        ],
+        "title": "MembershipStatusUpdate",
+        "type": "object"
+      },
+      "MfaCodeRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 32,
+            "minLength": 6,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "MfaCodeRequest",
+        "type": "object"
+      },
+      "MfaConfirmResponse": {
+        "properties": {
+          "recovery_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recovery Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recovery_codes"
+        ],
+        "title": "MfaConfirmResponse",
+        "type": "object"
+      },
+      "MfaSetupResponse": {
+        "properties": {
+          "provisioning_uri": {
+            "title": "Provisioning Uri",
+            "type": "string"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "provisioning_uri"
+        ],
+        "title": "MfaSetupResponse",
         "type": "object"
       },
       "NextAction": {
@@ -1838,6 +2058,35 @@
           "created_at"
         ],
         "title": "OverrideResponse",
+        "type": "object"
+      },
+      "PasswordResetConfirm": {
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "PasswordResetConfirm",
+        "type": "object"
+      },
+      "PasswordResetRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "PasswordResetRequest",
         "type": "object"
       },
       "PolicyAnswer": {
@@ -3607,6 +3856,139 @@
         "title": "RoleUpdate",
         "type": "object"
       },
+      "RosterImportResponse": {
+        "properties": {
+          "committed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Committed At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invalid_rows": {
+            "title": "Invalid Rows",
+            "type": "integer"
+          },
+          "invited_rows": {
+            "title": "Invited Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/RosterRowResponse"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          },
+          "valid_rows": {
+            "title": "Valid Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "total_rows",
+          "valid_rows",
+          "invalid_rows",
+          "invited_rows",
+          "committed_at",
+          "rows"
+        ],
+        "title": "RosterImportResponse",
+        "type": "object"
+      },
+      "RosterRowResponse": {
+        "properties": {
+          "activation_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activation Token"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "enrollment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrollment Id"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "row_number": {
+            "title": "Row Number",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "row_number",
+          "email",
+          "enrollment_id",
+          "full_name",
+          "status",
+          "errors"
+        ],
+        "title": "RosterRowResponse",
+        "type": "object"
+      },
       "Rule": {
         "properties": {
           "field": {
@@ -3850,6 +4232,55 @@
         "title": "SemanticMatchResponse",
         "type": "object"
       },
+      "SessionResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "device_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Summary"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "last_activity_at",
+          "expires_at",
+          "device_summary",
+          "current"
+        ],
+        "title": "SessionResponse",
+        "type": "object"
+      },
       "SignInRequest": {
         "properties": {
           "email": {
@@ -3869,6 +4300,23 @@
           "password"
         ],
         "title": "SignInRequest",
+        "type": "object"
+      },
+      "SignInResponse": {
+        "properties": {
+          "next_step": {
+            "default": "complete",
+            "title": "Next Step",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "title": "SignInResponse",
         "type": "object"
       },
       "SignupRequest": {
@@ -6157,6 +6605,100 @@
         ]
       }
     },
+    "/api/v1/auth/invitations/{token}": {
+      "get": {
+        "operationId": "validate_invitation_api_v1_auth_invitations__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Invitation",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/invitations/{token}/accept": {
+      "post": {
+        "operationId": "activate_invitation_api_v1_auth_invitations__token__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Invitation",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "operationId": "me_api_v1_auth_me_get",
@@ -6206,6 +6748,361 @@
         ]
       }
     },
+    "/api/v1/auth/mfa/challenge": {
+      "post": {
+        "operationId": "challenge_mfa_api_v1_auth_mfa_challenge_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Challenge Mfa",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/confirm": {
+      "post": {
+        "operationId": "confirm_mfa_api_v1_auth_mfa_confirm_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaConfirmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Mfa",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/setup": {
+      "post": {
+        "operationId": "setup_mfa_api_v1_auth_mfa_setup_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaSetupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Setup Mfa",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/password-reset/request": {
+      "post": {
+        "operationId": "request_password_reset_api_v1_auth_password_reset_request_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Request Password Reset Api V1 Auth Password Reset Request Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Password Reset",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/password-reset/{token}/confirm": {
+      "post": {
+        "operationId": "reset_password_api_v1_auth_password_reset__token__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Password",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/sessions": {
+      "get": {
+        "operationId": "read_sessions_api_v1_auth_sessions_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionResponse"
+                  },
+                  "title": "Response Read Sessions Api V1 Auth Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Sessions",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/sessions/{session_id}": {
+      "delete": {
+        "operationId": "delete_session_api_v1_auth_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Session",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
     "/api/v1/auth/sign-in": {
       "post": {
         "operationId": "sign_in_api_v1_auth_sign_in_post",
@@ -6224,7 +7121,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
+                  "$ref": "#/components/schemas/SignInResponse"
                 }
               }
             },
@@ -6463,6 +7360,79 @@
         ]
       }
     },
+    "/api/v1/institutions/{institution_id}/invitations/{invitation_id}/resend": {
+      "post": {
+        "operationId": "resend_membership_invitation_api_v1_institutions__institution_id__invitations__invitation_id__resend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Resend Membership Invitation Api V1 Institutions  Institution Id  Invitations  Invitation Id  Resend Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend Membership Invitation",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
     "/api/v1/institutions/{institution_id}/memberships": {
       "get": {
         "operationId": "read_memberships_api_v1_institutions__institution_id__memberships_get",
@@ -6593,6 +7563,351 @@
         ]
       }
     },
+    "/api/v1/institutions/{institution_id}/memberships/{membership_id}": {
+      "patch": {
+        "operationId": "change_membership_status_api_v1_institutions__institution_id__memberships__membership_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipStatusUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Membership Status",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/roster-imports/preview": {
+      "post": {
+        "operationId": "preview_roster_import_api_v1_institutions__institution_id__roster_imports_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_roster_import_api_v1_institutions__institution_id__roster_imports_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Roster Import",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/roster-imports/template": {
+      "get": {
+        "operationId": "roster_template_api_v1_institutions__institution_id__roster_imports_template_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Roster Template",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/roster-imports/{roster_import_id}": {
+      "get": {
+        "operationId": "read_roster_import_api_v1_institutions__institution_id__roster_imports__roster_import_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "roster_import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Roster Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Roster Import",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/roster-imports/{roster_import_id}/commit": {
+      "post": {
+        "operationId": "commit_roster_import_api_v1_institutions__institution_id__roster_imports__roster_import_id__commit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "roster_import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Roster Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Commit Roster Import",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "operationId": "read_notifications_api_v1_notifications_get",
@@ -6698,6 +8013,65 @@
         "summary": "Read Notification",
         "tags": [
           "readiness and communication"
+        ]
+      }
+    },
+    "/api/v1/operator/institutions": {
+      "post": {
+        "operationId": "create_institution_api_v1_operator_institutions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-operator-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operator-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstitutionProvisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstitutionProvisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Institution",
+        "tags": [
+          "institution provisioning"
         ]
       }
     },

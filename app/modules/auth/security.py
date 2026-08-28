@@ -1,9 +1,16 @@
+import base64
 import hashlib
+import hmac
 import secrets
+import struct
+import time
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from argon2.low_level import Type
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from app.core.config import get_settings
 
 password_hasher = PasswordHasher(type=Type.ID)
 
@@ -29,3 +36,46 @@ def new_secret() -> str:
 
 def hash_secret(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def new_totp_secret() -> str:
+    return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+
+
+def _totp_key(secret: str) -> bytes:
+    padded = secret.upper() + "=" * ((8 - len(secret) % 8) % 8)
+    return base64.b32decode(padded, casefold=True)
+
+
+def totp_code(secret: str, *, at_time: int | None = None) -> str:
+    counter = int((at_time if at_time is not None else time.time()) // 30)
+    digest = hmac.new(_totp_key(secret), struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    value = (struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF) % 1_000_000
+    return f"{value:06d}"
+
+
+def verify_totp(secret: str, code: str, *, at_time: int | None = None) -> bool:
+    if len(code) != 6 or not code.isdigit():
+        return False
+    now = at_time if at_time is not None else int(time.time())
+    return any(
+        secrets.compare_digest(totp_code(secret, at_time=now + offset * 30), code)
+        for offset in (-1, 0, 1)
+    )
+
+
+def _encryption_key() -> bytes:
+    return hashlib.sha256(get_settings().mfa_encryption_key.encode("utf-8")).digest()
+
+
+def encrypt_totp_secret(secret: str) -> str:
+    nonce = secrets.token_bytes(12)
+    ciphertext = AESGCM(_encryption_key()).encrypt(nonce, secret.encode("ascii"), b"campushire-mfa")
+    return base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
+
+
+def decrypt_totp_secret(value: str) -> str:
+    payload = base64.urlsafe_b64decode(value.encode("ascii"))
+    plaintext = AESGCM(_encryption_key()).decrypt(payload[:12], payload[12:], b"campushire-mfa")
+    return plaintext.decode("ascii")
