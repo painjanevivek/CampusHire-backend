@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     operator_bootstrap_key: str | None = None
     mfa_encryption_key: str = "development-only-change-me"
     resume_storage_path: str = ".data/resumes"
+    resume_storage_backend: Literal["local", "oci"] = "local"
+    oci_object_namespace: str | None = None
+    oci_object_bucket: str | None = None
+    oci_object_uploads_enabled: bool = True
     resume_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
     resume_max_pages: int = Field(default=3, ge=1, le=20)
     resume_max_versions: int = Field(default=25, ge=1, le=100)
@@ -84,6 +88,10 @@ class Settings(BaseSettings):
                 not self.email_delivery_webhook_key or len(self.email_delivery_webhook_key) < 24
             ):
                 raise ValueError("Configured production email requires a strong webhook key")
+            if self.resume_storage_backend != "oci":
+                raise ValueError("Production requires private OCI Object Storage")
+            if not self.oci_object_namespace or not self.oci_object_bucket:
+                raise ValueError("Production requires OCI object namespace and bucket")
         return self
 
     @property

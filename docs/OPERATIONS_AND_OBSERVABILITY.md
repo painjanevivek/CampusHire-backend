@@ -34,3 +34,7 @@ The reviewed semantic scoring fixture is versioned at `tests/fixtures/semantic-m
 Until managed staging replaces them with approved service objectives, alert when critical-route error rate reaches 1% for five minutes, dashboard/opportunity p95 exceeds 1,000 ms, ordinary-read p95 exceeds 750 ms, or application-write p95 exceeds 1,500 ms. Warn on queue age above 120 seconds and page above 600 seconds. Warn at 70% database-pool utilization and page at 90%; correlate this with request concurrency before scaling. Treat a parser/scanner OOM, terminal cleanup failure, cross-tenant denial failure, or duplicate business effect as immediately release-blocking.
 
 The local baseline shows ClamAV is the dominant memory consumer. Allocate and monitor it independently from API/worker resources, and never bypass malware scanning to recover capacity.
+
+The bounded OCI production topology, off-host encrypted backup controls, quota stop conditions,
+credential rotation, availability objective, and paid-upgrade triggers are maintained in
+`docs/FREE_FIRST_PRODUCTION_OPERATIONS.md`.

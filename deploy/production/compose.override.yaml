@@ -1,0 +1,45 @@
+name: campushire-production
+
+services:
+  migrate:
+    environment: &production_environment
+      APP_ENV: production
+      HEALTHCHECK_HOST: ${PRODUCTION_HOST:?Set the owned production domain}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:?Set the single HTTPS production origin}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:?Set the production host allowlist}
+      RESUME_STORAGE_BACKEND: oci
+      OCI_OBJECT_NAMESPACE: ${OCI_OBJECT_NAMESPACE:?Set the OCI namespace}
+      OCI_OBJECT_BUCKET: ${OCI_OBJECT_BUCKET:?Set the private bucket}
+      OCI_OBJECT_UPLOADS_ENABLED: ${OCI_OBJECT_UPLOADS_ENABLED:-true}
+      OPERATOR_BOOTSTRAP_KEY: ${OPERATOR_BOOTSTRAP_KEY:?Set a protected operator key}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set a protected MFA encryption key}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:?Set the regional OCI SMTP endpoint}
+      EMAIL_SMTP_USERNAME: ${EMAIL_SMTP_USERNAME:?Set the workload SMTP user}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:?Set the workload SMTP credential}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:?Set the approved sender}
+      EMAIL_DELIVERY_WEBHOOK_KEY: ${EMAIL_DELIVERY_WEBHOOK_KEY:?Set the bounce webhook key}
+
+  api:
+    environment: *production_environment
+    volumes: []
+
+  worker:
+    environment:
+      <<: *production_environment
+      DOCKER_HOST: ${PARSER_DOCKER_HOST:?Set the isolated parser launcher}
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /run/parser-tls
+    volumes:
+      - parser_tls:/run/parser-tls:ro
+
+  frontend:
+    environment:
+      NEXT_PUBLIC_API_URL: https://${PRODUCTION_HOST:?Set the owned production domain}/api/v1
+
+  gateway:
+    environment:
+      PRODUCTION_HOST: ${PRODUCTION_HOST:?Set the owned production domain}
+    volumes:
+      - ${PRODUCTION_CADDYFILE_PATH:-./deploy/production/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config

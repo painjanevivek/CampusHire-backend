@@ -59,6 +59,9 @@ def test_production_configuration_accepts_only_the_sandbox_backend() -> None:
         trusted_hosts=["staging.example.edu"],
         operator_bootstrap_key="production-operator-key-with-entropy",
         mfa_encryption_key="production-mfa-encryption-key-with-entropy",
+        resume_storage_backend="oci",
+        oci_object_namespace="production-namespace",
+        oci_object_bucket="private-resumes",
     )
     assert settings.resume_parser_backend == "docker"
     with pytest.raises(ValueError, match="valid image reference"):

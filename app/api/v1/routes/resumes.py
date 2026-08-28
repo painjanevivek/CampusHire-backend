@@ -27,7 +27,7 @@ from app.modules.resumes.schemas import (
     SuggestionReviewBatch,
 )
 from app.modules.resumes.service import validate_upload_envelope
-from app.modules.resumes.storage import LocalObjectStore, ObjectStoreError
+from app.modules.resumes.storage import ObjectStore, ObjectStoreError, build_object_store
 from app.modules.resumes.workflow import (
     ResumeWorkflowError,
     create_generated_version,
@@ -45,8 +45,8 @@ from app.modules.resumes.workflow import (
 router = APIRouter(prefix="/resumes", dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
 
 
-def _store() -> LocalObjectStore:
-    return LocalObjectStore(get_settings().resume_storage_path)
+def _store() -> ObjectStore:
+    return build_object_store(get_settings())
 
 
 def _workflow_http_error(error: ResumeWorkflowError) -> HTTPException:

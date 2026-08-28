@@ -11,14 +11,14 @@ from app.modules.privacy.service import process_next_deletion_cleanup
 from app.modules.resumes.parser import build_pdf_parser
 from app.modules.resumes.pipeline import claim_next_job, process_job, recover_stale_jobs
 from app.modules.resumes.scanner import build_scanner
-from app.modules.resumes.storage import LocalObjectStore
+from app.modules.resumes.storage import build_object_store
 
 logger = logging.getLogger(__name__)
 
 
 async def run_worker(*, once: bool = False, worker_id: str | None = None) -> None:
     settings = get_settings()
-    store = LocalObjectStore(settings.resume_storage_path)
+    store = build_object_store(settings)
     scanner = build_scanner(settings)
     parser_backend = build_pdf_parser(settings)
     worker_identity = worker_id or f"resume-worker-{uuid4().hex[:12]}"
