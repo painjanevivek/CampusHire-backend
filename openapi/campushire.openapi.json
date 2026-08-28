@@ -85,6 +85,142 @@
         "title": "AdminApplicationPage",
         "type": "object"
       },
+      "ApplicationAppealCreate": {
+        "properties": {
+          "confirmation": {
+            "const": "SUBMIT APPEAL",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "appeal",
+              "manual_review"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 20,
+            "title": "Reason",
+            "type": "string"
+          },
+          "supporting_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Supporting Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "confirmation"
+        ],
+        "title": "ApplicationAppealCreate",
+        "type": "object"
+      },
+      "ApplicationAppealResolution": {
+        "properties": {
+          "administrator_response": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Administrator Response",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "approved",
+              "declined"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "administrator_response"
+        ],
+        "title": "ApplicationAppealResolution",
+        "type": "object"
+      },
+      "ApplicationAppealResponse": {
+        "properties": {
+          "administrator_response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Administrator Response"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "supporting_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Evidence",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "reason",
+          "supporting_evidence",
+          "administrator_response",
+          "created_at",
+          "updated_at",
+          "resolved_at"
+        ],
+        "title": "ApplicationAppealResponse",
+        "type": "object"
+      },
       "ApplicationCreate": {
         "properties": {
           "resume_version_id": {
@@ -143,10 +279,26 @@
       },
       "ApplicationResponse": {
         "properties": {
+          "appeals": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationAppealResponse"
+            },
+            "title": "Appeals",
+            "type": "array"
+          },
+          "can_withdraw": {
+            "title": "Can Withdraw",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "decision_snapshot": {
+            "additionalProperties": true,
+            "title": "Decision Snapshot",
+            "type": "object"
           },
           "eligibility_snapshot": {
             "additionalProperties": true,
@@ -223,6 +375,29 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "withdrawal_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Withdrawal Reason"
+          },
+          "withdrawn_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Withdrawn At"
           }
         },
         "required": [
@@ -238,8 +413,12 @@
           "facts_snapshot",
           "rule_snapshot",
           "eligibility_snapshot",
+          "decision_snapshot",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "withdrawn_at",
+          "withdrawal_reason",
+          "can_withdraw"
         ],
         "title": "ApplicationResponse",
         "type": "object"
@@ -275,6 +454,27 @@
           "status"
         ],
         "title": "ApplicationStatusUpdate",
+        "type": "object"
+      },
+      "ApplicationWithdrawal": {
+        "properties": {
+          "confirmation": {
+            "const": "WITHDRAW",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "confirmation"
+        ],
+        "title": "ApplicationWithdrawal",
         "type": "object"
       },
       "Body_preview_roster_import_api_v1_institutions__institution_id__roster_imports_preview_post": {
@@ -1912,6 +2112,22 @@
       },
       "OpportunityPage": {
         "properties": {
+          "empty_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_published_drive",
+                  "filters_exclude_results",
+                  "profile_incomplete"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empty Reason"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/OpportunityResponse"
@@ -5417,6 +5633,75 @@
         ]
       }
     },
+    "/api/v1/admin/recruitment/application-appeals/{appeal_id}/resolution": {
+      "post": {
+        "operationId": "resolve_appeal_api_v1_admin_recruitment_application_appeals__appeal_id__resolution_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "appeal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Appeal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationAppealResolution"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationAppealResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Appeal",
+        "tags": [
+          "placement administration"
+        ]
+      }
+    },
     "/api/v1/admin/recruitment/applications": {
       "get": {
         "operationId": "read_applications_api_v1_admin_recruitment_applications_get",
@@ -6659,6 +6944,271 @@
           }
         },
         "summary": "Submit Application",
+        "tags": [
+          "opportunities and applications"
+        ]
+      }
+    },
+    "/api/v1/applications/{application_id}": {
+      "get": {
+        "operationId": "read_student_application_api_v1_applications__application_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Student Application",
+        "tags": [
+          "opportunities and applications"
+        ]
+      }
+    },
+    "/api/v1/applications/{application_id}/appeals": {
+      "post": {
+        "operationId": "submit_application_appeal_api_v1_applications__application_id__appeals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationAppealCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationAppealResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Application Appeal",
+        "tags": [
+          "opportunities and applications"
+        ]
+      }
+    },
+    "/api/v1/applications/{application_id}/deadline.ics": {
+      "get": {
+        "operationId": "download_application_deadline_api_v1_applications__application_id__deadline_ics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Application Deadline",
+        "tags": [
+          "opportunities and applications"
+        ]
+      }
+    },
+    "/api/v1/applications/{application_id}/withdraw": {
+      "post": {
+        "operationId": "withdraw_student_application_api_v1_applications__application_id__withdraw_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationWithdrawal"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Withdraw Student Application",
         "tags": [
           "opportunities and applications"
         ]
@@ -8218,6 +8768,58 @@
                 }
               ],
               "title": "Skill"
+            }
+          },
+          {
+            "in": "query",
+            "name": "eligibility",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(eligible|ineligible|needs_manual_review|unavailable)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Eligibility"
+            }
+          },
+          {
+            "in": "query",
+            "name": "application_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(submitted|under_review|shortlisted|interview|offered|rejected|withdrawn)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Application State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "deadline_within_days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 90,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deadline Within Days"
             }
           },
           {

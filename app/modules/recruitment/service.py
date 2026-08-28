@@ -1,15 +1,17 @@
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
+from app.models.intelligence import SemanticMatchEvidence
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
+    ApplicationAppeal,
     ApplicationOverride,
     ApplicationStatusEvent,
     Company,
@@ -26,10 +28,14 @@ from app.modules.eligibility.engine import Rule, evaluate
 from app.modules.recruitment.domain import ApplicationStatus, validate_transition
 from app.modules.recruitment.schemas import (
     AdminApplicationPage,
+    ApplicationAppealCreate,
+    ApplicationAppealResolution,
+    ApplicationAppealResponse,
     ApplicationCreate,
     ApplicationOverrideCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
+    ApplicationWithdrawal,
     CompanyCreate,
     CompanyResponse,
     CompanyUpdate,
@@ -543,6 +549,9 @@ async def list_opportunities(
     saved_only: bool,
     page: int,
     page_size: int,
+    eligibility_status: str | None = None,
+    application_status: str | None = None,
+    deadline_within_days: int | None = None,
 ) -> OpportunityPage:
     institution = _institution(institution_id)
     now = datetime.now(UTC)
@@ -573,6 +582,10 @@ async def list_opportunities(
         statement = statement.where(PlacementRole.work_mode == work_mode)
     if skill:
         statement = statement.where(PlacementRole.skills.contains([skill]))
+    if deadline_within_days is not None:
+        statement = statement.where(
+            PlacementDrive.deadline_at <= now + timedelta(days=deadline_within_days)
+        )
     if saved_only:
         statement = statement.join(
             SavedOpportunity,
@@ -580,9 +593,7 @@ async def list_opportunities(
             & (SavedOpportunity.student_user_id == student_user_id),
         )
     all_roles = (await db.scalars(statement.order_by(PlacementDrive.deadline_at))).all()
-    total = len(all_roles)
-    roles = all_roles[(page - 1) * page_size : page * page_size]
-    role_ids = [item.id for item in roles]
+    role_ids = [item.id for item in all_roles]
     rules = await _published_rules(db, role_ids)
     facts = await _student_facts(db, institution, student_user_id)
     saved_ids = set(
@@ -606,11 +617,11 @@ async def list_opportunities(
             )
         ).all()
     }
-    items: list[OpportunityResponse] = []
-    for role in roles:
+    candidates: list[OpportunityResponse] = []
+    for role in all_roles:
         base = await role_response(db, role)
         application = applications.get(role.id)
-        items.append(
+        candidates.append(
             OpportunityResponse(
                 **base.model_dump(),
                 eligibility=_eligibility(rules.get(role.id), facts),
@@ -619,7 +630,44 @@ async def list_opportunities(
                 application_status=application.status if application else None,
             )
         )
-    return OpportunityPage(items=items, page=page, page_size=page_size, total=total)
+    filtered = [
+        item
+        for item in candidates
+        if (eligibility_status is None or item.eligibility.status == eligibility_status)
+        and (application_status is None or item.application_status == application_status)
+    ]
+    total = len(filtered)
+    items = filtered[(page - 1) * page_size : page * page_size]
+    filter_active = any(
+        value
+        for value in (
+            query,
+            location,
+            work_mode,
+            skill,
+            saved_only,
+            eligibility_status,
+            application_status,
+            deadline_within_days,
+        )
+    )
+    profile_incomplete = not facts.get("degree") or not facts.get("graduation_year")
+    empty_reason = None
+    if not items:
+        empty_reason = (
+            "filters_exclude_results"
+            if filter_active
+            else "profile_incomplete"
+            if all_roles and profile_incomplete
+            else "no_published_drive"
+        )
+    return OpportunityPage(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        empty_reason=empty_reason,
+    )
 
 
 async def get_opportunity(
@@ -710,6 +758,13 @@ async def _application_response(db: AsyncSession, application: Application) -> A
             .order_by(ApplicationOverride.created_at)
         )
     ).all()
+    appeals = (
+        await db.scalars(
+            select(ApplicationAppeal)
+            .where(ApplicationAppeal.application_id == application.id)
+            .order_by(ApplicationAppeal.created_at)
+        )
+    ).all()
     return ApplicationResponse(
         id=application.id,
         role_id=application.role_id,
@@ -729,8 +784,26 @@ async def _application_response(db: AsyncSession, application: Application) -> A
         facts_snapshot=dict(application.facts_snapshot),
         rule_snapshot=dict(application.rule_snapshot),
         eligibility_snapshot=dict(application.eligibility_snapshot),
+        decision_snapshot=dict(application.decision_snapshot),
         created_at=application.created_at,
         updated_at=application.updated_at,
+        withdrawn_at=application.withdrawn_at,
+        withdrawal_reason=application.withdrawal_reason,
+        can_withdraw=_can_withdraw(application),
+        appeals=[
+            ApplicationAppealResponse(
+                id=item.id,
+                kind=item.kind,
+                status=item.status,
+                reason=item.reason,
+                supporting_evidence=list(item.supporting_evidence),
+                administrator_response=item.administrator_response,
+                created_at=item.created_at,
+                updated_at=item.updated_at,
+                resolved_at=item.resolved_at,
+            )
+            for item in appeals
+        ],
         history=[
             StatusEventResponse(
                 id=item.id,
@@ -820,6 +893,27 @@ async def create_application(
     )
     db.add(evaluation)
     await db.flush()
+    semantic_match = await db.scalar(
+        select(SemanticMatchEvidence)
+        .where(
+            SemanticMatchEvidence.institution_id == institution,
+            SemanticMatchEvidence.student_user_id == student_user_id,
+            SemanticMatchEvidence.role_id == payload.role_id,
+            SemanticMatchEvidence.resume_version_id == resume.id,
+        )
+        .order_by(SemanticMatchEvidence.created_at.desc())
+    )
+    semantic_reference: dict[str, object] | None = None
+    if semantic_match is not None:
+        semantic_reference = {
+            "id": str(semantic_match.id),
+            "status": semantic_match.status,
+            "score": semantic_match.score,
+            "profile_revision": semantic_match.profile_revision,
+            "embedding_model": semantic_match.embedding_model,
+            "embedding_version": semantic_match.embedding_version,
+            "scoring_version": semantic_match.scoring_version,
+        }
     application = Application(
         institution_id=institution,
         role_id=payload.role_id,
@@ -841,6 +935,12 @@ async def create_application(
             "rules": rule_set.rules,
         },
         eligibility_snapshot=result,
+        decision_snapshot={
+            "captured_at": datetime.now(UTC).isoformat(),
+            "eligibility_evaluation_id": str(evaluation.id),
+            "eligibility_fingerprint": fingerprint,
+            "semantic_match": semantic_reference,
+        },
     )
     db.add(application)
     await db.flush()
@@ -875,6 +975,240 @@ async def list_student_applications(
     return [await _application_response(db, item) for item in items]
 
 
+def _application_deadline(application: Application) -> datetime | None:
+    raw = application.role_snapshot.get("deadline_at")
+    if not isinstance(raw, str):
+        return None
+    try:
+        return _utc(datetime.fromisoformat(raw.replace("Z", "+00:00")))
+    except ValueError:
+        return None
+
+
+def _can_withdraw(application: Application, now: datetime | None = None) -> bool:
+    deadline = _application_deadline(application)
+    current = now or datetime.now(UTC)
+    return (
+        application.status
+        in {
+            ApplicationStatus.SUBMITTED.value,
+            ApplicationStatus.UNDER_REVIEW.value,
+        }
+        and deadline is not None
+        and current <= deadline
+    )
+
+
+async def _owned_student_application(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    student_user_id: UUID,
+    application_id: UUID,
+) -> Application:
+    item = await db.scalar(
+        select(Application)
+        .where(
+            Application.id == application_id,
+            Application.institution_id == _institution(institution_id),
+            Application.student_user_id == student_user_id,
+        )
+        .with_for_update()
+    )
+    if item is None:
+        raise RecruitmentError("application_not_found")
+    return item
+
+
+async def get_student_application(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    student_user_id: UUID,
+    application_id: UUID,
+) -> ApplicationResponse:
+    application = await _owned_student_application(
+        db, institution_id, student_user_id, application_id
+    )
+    return await _application_response(db, application)
+
+
+async def withdraw_application(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    student_user_id: UUID,
+    application_id: UUID,
+    payload: ApplicationWithdrawal,
+) -> tuple[Application, bool]:
+    application = await _owned_student_application(
+        db, institution_id, student_user_id, application_id
+    )
+    if application.status == ApplicationStatus.WITHDRAWN.value:
+        return application, True
+    if not _can_withdraw(application):
+        deadline = _application_deadline(application)
+        if deadline is not None and datetime.now(UTC) > deadline:
+            raise RecruitmentError("application_withdrawal_deadline_passed")
+        raise RecruitmentError("application_withdrawal_not_permitted")
+    previous = application.status
+    now = datetime.now(UTC)
+    application.status = ApplicationStatus.WITHDRAWN.value
+    application.withdrawn_at = now
+    application.withdrawal_reason = payload.reason
+    db.add(
+        ApplicationStatusEvent(
+            application_id=application.id,
+            from_status=previous,
+            to_status=ApplicationStatus.WITHDRAWN.value,
+            actor_user_id=student_user_id,
+            reason=payload.reason,
+            created_at=now,
+        )
+    )
+    await db.flush()
+    await db.refresh(application)
+    return application, False
+
+
+async def create_application_appeal(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    student_user_id: UUID,
+    application_id: UUID,
+    idempotency_key: str,
+    payload: ApplicationAppealCreate,
+) -> tuple[ApplicationAppeal, bool]:
+    application = await _owned_student_application(
+        db, institution_id, student_user_id, application_id
+    )
+    existing = await db.scalar(
+        select(ApplicationAppeal).where(
+            ApplicationAppeal.application_id == application.id,
+            ApplicationAppeal.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        return existing, True
+    active = await db.scalar(
+        select(ApplicationAppeal.id).where(
+            ApplicationAppeal.application_id == application.id,
+            ApplicationAppeal.status.in_({"submitted", "under_review"}),
+        )
+    )
+    if active is not None:
+        raise RecruitmentError("application_appeal_already_open")
+    if application.status not in {
+        ApplicationStatus.SUBMITTED.value,
+        ApplicationStatus.UNDER_REVIEW.value,
+        ApplicationStatus.REJECTED.value,
+    }:
+        raise RecruitmentError("application_appeal_not_permitted")
+    appeal = ApplicationAppeal(
+        institution_id=_institution(institution_id),
+        application_id=application.id,
+        student_user_id=student_user_id,
+        idempotency_key=idempotency_key,
+        kind=payload.kind,
+        reason=payload.reason,
+        supporting_evidence=payload.supporting_evidence,
+    )
+    db.add(appeal)
+    await db.flush()
+    await db.refresh(appeal)
+    return appeal, False
+
+
+def application_appeal_response(appeal: ApplicationAppeal) -> ApplicationAppealResponse:
+    return ApplicationAppealResponse(
+        id=appeal.id,
+        kind=appeal.kind,
+        status=appeal.status,
+        reason=appeal.reason,
+        supporting_evidence=list(appeal.supporting_evidence),
+        administrator_response=appeal.administrator_response,
+        created_at=appeal.created_at,
+        updated_at=appeal.updated_at,
+        resolved_at=appeal.resolved_at,
+    )
+
+
+async def resolve_application_appeal(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    actor_user_id: UUID,
+    appeal_id: UUID,
+    payload: ApplicationAppealResolution,
+) -> ApplicationAppeal:
+    appeal = await db.scalar(
+        select(ApplicationAppeal)
+        .where(
+            ApplicationAppeal.id == appeal_id,
+            ApplicationAppeal.institution_id == _institution(institution_id),
+        )
+        .with_for_update()
+    )
+    if appeal is None:
+        raise RecruitmentError("application_appeal_not_found")
+    if appeal.status in {"approved", "declined"}:
+        raise RecruitmentError("application_appeal_already_resolved")
+    appeal.status = payload.status
+    appeal.administrator_response = payload.administrator_response
+    appeal.resolved_by_user_id = actor_user_id
+    appeal.resolved_at = datetime.now(UTC)
+    await db.flush()
+    await db.refresh(appeal)
+    return appeal
+
+
+async def get_application_deadline_calendar(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    student_user_id: UUID,
+    application_id: UUID,
+) -> str:
+    application = await _owned_student_application(
+        db, institution_id, student_user_id, application_id
+    )
+    return application_deadline_calendar(application)
+
+
+def application_deadline_calendar(application: Application) -> str:
+    deadline = _application_deadline(application)
+    if deadline is None:
+        raise RecruitmentError("application_deadline_unavailable")
+
+    def escape(value: object) -> str:
+        return (
+            str(value)
+            .replace("\\", "\\\\")
+            .replace("\r", " ")
+            .replace("\n", " ")
+            .replace(",", "\\,")
+            .replace(";", "\\;")
+        )
+
+    title = escape(application.role_snapshot.get("title", "Placement application deadline"))
+    company = escape(application.role_snapshot.get("company_name", "CampusHire"))
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    deadline_value = deadline.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return "\r\n".join(
+        [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//CampusHire//Application Deadline//EN",
+            "CALSCALE:GREGORIAN",
+            "BEGIN:VEVENT",
+            f"UID:application-{application.id}@campushire",
+            f"DTSTAMP:{stamp}",
+            f"DTSTART:{deadline_value}",
+            f"DTEND:{deadline_value}",
+            f"SUMMARY:{title} application deadline",
+            f"DESCRIPTION:{company} · CampusHire application {application.id}",
+            "END:VEVENT",
+            "END:VCALENDAR",
+            "",
+        ]
+    )
+
+
 async def list_admin_applications(
     db: AsyncSession,
     institution_id: UUID | None,
@@ -891,9 +1225,9 @@ async def list_admin_applications(
         statement = statement.where(Application.role_id == role_id)
     if status:
         statement = statement.where(Application.status == status)
-    total = await db.scalar(
-        select(func.count()).select_from(statement.order_by(None).subquery())
-    ) or 0
+    total = (
+        await db.scalar(select(func.count()).select_from(statement.order_by(None).subquery())) or 0
+    )
     items = (
         await db.scalars(
             statement.order_by(Application.created_at.desc())

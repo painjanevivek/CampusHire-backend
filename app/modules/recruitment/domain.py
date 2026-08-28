@@ -26,7 +26,11 @@ class ApplicationStatus(StrEnum):
 
 TRANSITIONS = {
     ApplicationStatus.SUBMITTED: {ApplicationStatus.UNDER_REVIEW, ApplicationStatus.WITHDRAWN},
-    ApplicationStatus.UNDER_REVIEW: {ApplicationStatus.SHORTLISTED, ApplicationStatus.REJECTED},
+    ApplicationStatus.UNDER_REVIEW: {
+        ApplicationStatus.SHORTLISTED,
+        ApplicationStatus.REJECTED,
+        ApplicationStatus.WITHDRAWN,
+    },
     ApplicationStatus.SHORTLISTED: {ApplicationStatus.INTERVIEW, ApplicationStatus.REJECTED},
     ApplicationStatus.INTERVIEW: {ApplicationStatus.OFFERED, ApplicationStatus.REJECTED},
 }

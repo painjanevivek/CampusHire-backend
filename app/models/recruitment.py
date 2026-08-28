@@ -164,6 +164,9 @@ class Application(Base, TimestampMixin):
     facts_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     rule_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     eligibility_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    decision_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    withdrawal_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class ApplicationStatusEvent(Base):
@@ -197,6 +200,36 @@ class ApplicationOverride(Base):
     reason: Mapped[str] = mapped_column(String(500))
     policy_reference: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class ApplicationAppeal(Base, TimestampMixin):
+    __tablename__ = "application_appeals"
+    __table_args__ = (
+        UniqueConstraint(
+            "application_id", "idempotency_key", name="uq_application_appeal_idempotency"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), index=True
+    )
+    application_id: Mapped[UUID] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    student_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="submitted", index=True)
+    reason: Mapped[str] = mapped_column(String(1000))
+    supporting_evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
+    administrator_response: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SavedOpportunity(Base):

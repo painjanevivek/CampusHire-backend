@@ -24,6 +24,7 @@ from app.models.privacy import DataDeletionRequest
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
+    ApplicationAppeal,
     ApplicationOverride,
     ApplicationStatusEvent,
     Company,
@@ -44,6 +45,7 @@ from app.models.resume import (
 __all__ = [
     "AuditEvent",
     "Application",
+    "ApplicationAppeal",
     "ApplicationOverride",
     "ApplicationStatusEvent",
     "Base",

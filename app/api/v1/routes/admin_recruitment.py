@@ -14,6 +14,8 @@ from app.modules.auth.dependencies import (
 from app.modules.engagement.service import upsert_notification
 from app.modules.recruitment.schemas import (
     AdminApplicationPage,
+    ApplicationAppealResolution,
+    ApplicationAppealResponse,
     ApplicationOverrideCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
@@ -31,6 +33,7 @@ from app.modules.recruitment.schemas import (
 )
 from app.modules.recruitment.service import (
     RecruitmentError,
+    application_appeal_response,
     company_response,
     create_company,
     create_drive,
@@ -45,6 +48,7 @@ from app.modules.recruitment.service import (
     override_application,
     publish_role,
     publish_rule_set,
+    resolve_application_appeal,
     response_for_application,
     role_response,
     transition_drive,
@@ -64,7 +68,7 @@ def _http_error(error: RecruitmentError) -> HTTPException:
     code = str(error)
     if code.endswith("_not_found"):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=code)
-    if code in {"company_name_exists"}:
+    if code in {"company_name_exists", "application_appeal_already_resolved"}:
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=code)
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=code)
 
@@ -180,6 +184,48 @@ async def add_drive(
     )
     await db.commit()
     return response
+
+
+@router.post(
+    "/application-appeals/{appeal_id}/resolution",
+    response_model=ApplicationAppealResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def resolve_appeal(
+    request: Request,
+    appeal_id: UUID,
+    payload: ApplicationAppealResolution,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ApplicationAppealResponse:
+    try:
+        appeal = await resolve_application_appeal(
+            db, principal.institution_id, principal.user.id, appeal_id, payload
+        )
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request,
+        db,
+        principal,
+        event_type="application.appeal_resolved",
+        resource_type="application_appeal",
+        resource_id=appeal.id,
+        reason=payload.administrator_response,
+        details={"status": payload.status, "application_id": str(appeal.application_id)},
+    )
+    await upsert_notification(
+        db,
+        institution_id=appeal.institution_id,
+        recipient_user_id=appeal.student_user_id,
+        event_key=f"application-appeal:{appeal.id}:{payload.status}",
+        title=f"Application review request {payload.status}",
+        body=payload.administrator_response,
+        deep_link=f"/applications/{appeal.application_id}",
+        created_by_user_id=principal.user.id,
+    )
+    await db.commit()
+    return application_appeal_response(appeal)
 
 
 @router.patch(
@@ -461,7 +507,7 @@ async def change_application_status(
         event_key=f"application:{application.id}:{payload.status}",
         title=f"Application {payload.status.replace('_', ' ')}",
         body=payload.reason or "Your placement application status has changed.",
-        deep_link=f"/opportunities/{application.role_id}",
+        deep_link=f"/applications/{application.id}",
         created_by_user_id=principal.user.id,
     )
     await db.commit()
@@ -507,7 +553,7 @@ async def override_application_decision(
         event_key=f"application:{application.id}:override:{payload.status}",
         title=f"Application {payload.status.replace('_', ' ')}",
         body=payload.reason,
-        deep_link=f"/opportunities/{application.role_id}",
+        deep_link=f"/applications/{application.id}",
         created_by_user_id=principal.user.id,
     )
     await db.commit()

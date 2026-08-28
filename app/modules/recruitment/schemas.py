@@ -160,6 +160,9 @@ class OpportunityPage(BaseModel):
     page: int
     page_size: int
     total: int
+    empty_reason: (
+        Literal["no_published_drive", "filters_exclude_results", "profile_incomplete"] | None
+    ) = None
 
 
 class SaveResponse(BaseModel):
@@ -191,6 +194,47 @@ class OverrideResponse(BaseModel):
     created_at: datetime
 
 
+class ApplicationWithdrawal(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+    confirmation: Literal["WITHDRAW"]
+
+
+class ApplicationAppealCreate(BaseModel):
+    kind: Literal["appeal", "manual_review"]
+    reason: str = Field(min_length=20, max_length=1000)
+    supporting_evidence: list[str] = Field(default_factory=list, max_length=10)
+    confirmation: Literal["SUBMIT APPEAL"]
+
+    @field_validator("supporting_evidence")
+    @classmethod
+    def validate_evidence(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value if item.strip()]
+        if any(len(item) > 300 or "\n" in item or "\r" in item for item in normalized):
+            raise ValueError(
+                "Supporting evidence labels must be single-line and at most 300 characters"
+            )
+        if len({item.casefold() for item in normalized}) != len(normalized):
+            raise ValueError("Supporting evidence labels must be unique")
+        return normalized
+
+
+class ApplicationAppealResponse(BaseModel):
+    id: UUID
+    kind: str
+    status: str
+    reason: str
+    supporting_evidence: list[str]
+    administrator_response: str | None
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: datetime | None
+
+
+class ApplicationAppealResolution(BaseModel):
+    status: Literal["approved", "declined"]
+    administrator_response: str = Field(min_length=10, max_length=2000)
+
+
 class ApplicationResponse(BaseModel):
     id: UUID
     role_id: UUID
@@ -204,8 +248,13 @@ class ApplicationResponse(BaseModel):
     facts_snapshot: dict[str, object]
     rule_snapshot: dict[str, object]
     eligibility_snapshot: dict[str, object]
+    decision_snapshot: dict[str, object]
     created_at: datetime
     updated_at: datetime
+    withdrawn_at: datetime | None
+    withdrawal_reason: str | None
+    can_withdraw: bool
+    appeals: list[ApplicationAppealResponse] = Field(default_factory=list)
     history: list[StatusEventResponse] = Field(default_factory=list)
     overrides: list[OverrideResponse] = Field(default_factory=list)
 

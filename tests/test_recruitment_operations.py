@@ -21,9 +21,12 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.security import hash_password, hash_secret
 from app.modules.recruitment.schemas import (
+    ApplicationAppealCreate,
+    ApplicationAppealResolution,
     ApplicationCreate,
     ApplicationOverrideCreate,
     ApplicationStatusUpdate,
+    ApplicationWithdrawal,
     CompanyCreate,
     DriveCreate,
     RoleCreate,
@@ -31,19 +34,24 @@ from app.modules.recruitment.schemas import (
 )
 from app.modules.recruitment.service import (
     RecruitmentError,
+    application_deadline_calendar,
     create_application,
+    create_application_appeal,
     create_company,
     create_drive,
     create_role,
     create_rule_set,
+    get_student_application,
     list_admin_applications,
     list_opportunities,
     override_application,
     publish_role,
     publish_rule_set,
+    resolve_application_appeal,
     response_for_application,
     transition_drive,
     update_application_status,
+    withdraw_application,
 )
 from app.modules.resumes.builder import ResumeContent, generate_pdf
 
@@ -270,6 +278,118 @@ async def test_application_is_idempotent_and_preserves_immutable_decision_inputs
 
 
 @pytest.mark.asyncio
+async def test_student_can_track_withdraw_and_appeal_without_losing_history() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "lifecycle")
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
+        resume = await db.scalar(select(ResumeVersion).where(ResumeVersion.user_id == student.id))
+        assert resume is not None
+        application, _ = await create_application(
+            db,
+            institution.id,
+            student.id,
+            "application-lifecycle-001",
+            ApplicationCreate(role_id=role.id, resume_version_id=resume.id),
+        )
+        first, replayed = await create_application_appeal(
+            db,
+            institution.id,
+            student.id,
+            application.id,
+            "appeal-lifecycle-001",
+            ApplicationAppealCreate(
+                kind="manual_review",
+                reason="Please review the equivalent coursework attached to my profile.",
+                supporting_evidence=["Reviewed education record in profile"],
+                confirmation="SUBMIT APPEAL",
+            ),
+        )
+        replay, was_replayed = await create_application_appeal(
+            db,
+            institution.id,
+            student.id,
+            application.id,
+            "appeal-lifecycle-001",
+            ApplicationAppealCreate(
+                kind="manual_review",
+                reason="Please review the equivalent coursework attached to my profile.",
+                supporting_evidence=["Reviewed education record in profile"],
+                confirmation="SUBMIT APPEAL",
+            ),
+        )
+        assert not replayed
+        assert was_replayed
+        assert replay.id == first.id
+        resolved = await resolve_application_appeal(
+            db,
+            institution.id,
+            admin.id,
+            first.id,
+            ApplicationAppealResolution(
+                status="approved",
+                administrator_response=(
+                    "The evidence was reviewed and accepted for this application."
+                ),
+            ),
+        )
+        assert resolved.resolved_by_user_id == admin.id
+
+        withdrawn, withdrawal_replayed = await withdraw_application(
+            db,
+            institution.id,
+            student.id,
+            application.id,
+            ApplicationWithdrawal(
+                reason="I accepted another placement opportunity.",
+                confirmation="WITHDRAW",
+            ),
+        )
+        replayed_withdrawal, second_withdrawal_replay = await withdraw_application(
+            db,
+            institution.id,
+            student.id,
+            application.id,
+            ApplicationWithdrawal(
+                reason="I accepted another placement opportunity.",
+                confirmation="WITHDRAW",
+            ),
+        )
+        assert not withdrawal_replayed
+        assert second_withdrawal_replay
+        assert replayed_withdrawal.id == withdrawn.id
+        response = await get_student_application(db, institution.id, student.id, application.id)
+        assert response.status == "withdrawn"
+        assert response.withdrawn_at is not None
+        assert response.can_withdraw is False
+        assert [event.to_status for event in response.history] == ["submitted", "withdrawn"]
+        assert response.appeals[0].status == "approved"
+        assert response.appeals[0].administrator_response is not None
+        calendar = application_deadline_calendar(application)
+        assert "BEGIN:VCALENDAR\r\n" in calendar
+        assert "Software Engineer application deadline" in calendar
+        assert "DTSTART:" in calendar
+
+
+@pytest.mark.asyncio
+async def test_student_application_detail_is_default_deny_across_tenants() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "owned-detail")
+        other, _, outsider = await seed_people(db, "outsider-detail")
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
+        resume = await db.scalar(select(ResumeVersion).where(ResumeVersion.user_id == student.id))
+        assert resume is not None
+        application, _ = await create_application(
+            db,
+            institution.id,
+            student.id,
+            "application-owned-detail-001",
+            ApplicationCreate(role_id=role.id, resume_version_id=resume.id),
+        )
+        with pytest.raises(RecruitmentError, match="application_not_found"):
+            await get_student_application(db, other.id, outsider.id, application.id)
+
+
+@pytest.mark.asyncio
 async def test_admin_transition_and_reasoned_override_are_append_only() -> None:
     async with TestSession() as db:
         institution, admin, student = await seed_people(db)
@@ -349,8 +469,8 @@ async def test_recruitment_queries_default_deny_across_institutions() -> None:
                             "label": "Degree",
                         }
                     ]
-            ),
-        )
+                ),
+            )
 
 
 @pytest.mark.asyncio
