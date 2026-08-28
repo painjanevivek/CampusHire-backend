@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     password_reset_ttl_minutes: int = Field(default=30, ge=5, le=1440)
     auth_lockout_attempts: int = Field(default=5, ge=3, le=20)
     auth_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    mfa_max_attempts: int = Field(default=5, ge=3, le=20)
+    mfa_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    request_body_overhead_bytes: int = Field(default=65_536, ge=1024, le=1_048_576)
     roster_max_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
     operator_bootstrap_key: str | None = None
     mfa_encryption_key: str = "development-only-change-me"

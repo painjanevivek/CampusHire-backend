@@ -13,7 +13,9 @@ from app.models.auth import (
     InstitutionMembership,
     MembershipInvitation,
     MembershipStatus,
+    MfaEnrollment,
     RosterImport,
+    Session,
     TermsAcceptance,
     User,
     UserRole,
@@ -148,9 +150,187 @@ async def test_roster_preview_rejects_formula_injection_and_commit_is_idempotent
     )
     assert first.status_code == second.status_code == 200
     assert first.json()["invited_rows"] == second.json()["invited_rows"] == 1
+    assert all("activation_token" not in row for row in first.json()["rows"])
     async with TestSession() as db:
         stored = await db.scalar(select(RosterImport).where(RosterImport.id == UUID(body["id"])))
         assert stored is not None and stored.status == "committed"
+
+
+async def test_password_only_session_cannot_replace_an_enrolled_mfa_factor(
+    client: TestClient,
+) -> None:
+    _, admin = await _seed_admin()
+    await _sign_in_admin(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+    setup = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    confirmed = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(setup.json()["secret"])},
+    )
+    assert confirmed.status_code == 200
+
+    client.cookies.clear()
+    signed_in = await _sign_in_admin(client)
+    assert signed_in["next_step"] == "mfa_challenge"
+    attacker_csrf = client.cookies[get_settings().csrf_cookie_name]
+    replacement = client.post(
+        "/api/v1/auth/mfa/setup",
+        headers={"Origin": "http://localhost:3000", "X-CSRF-Token": attacker_csrf},
+    )
+    assert replacement.status_code == 403
+    assert replacement.json()["error"]["code"] == "mfa_reauthentication_required"
+    async with TestSession() as db:
+        enrollment = await db.scalar(select(MfaEnrollment).where(MfaEnrollment.user_id == admin.id))
+        assert enrollment is not None and enrollment.enrolled_at is not None
+
+
+async def test_mfa_replacement_preserves_the_active_factor_until_confirmation(
+    client: TestClient,
+) -> None:
+    _, admin = await _seed_admin()
+    await _sign_in_admin(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+    initial = client.post("/api/v1/auth/mfa/setup", headers=headers).json()
+    assert client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(initial["secret"])},
+    ).status_code == 200
+
+    async with TestSession() as db:
+        enrollment = await db.scalar(select(MfaEnrollment).where(MfaEnrollment.user_id == admin.id))
+        assert enrollment is not None
+        original_secret = enrollment.encrypted_secret
+
+    replacement = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    assert replacement.status_code == 200
+    async with TestSession() as db:
+        enrollment = await db.scalar(select(MfaEnrollment).where(MfaEnrollment.user_id == admin.id))
+        assert enrollment is not None
+        assert enrollment.encrypted_secret == original_secret
+        assert enrollment.pending_encrypted_secret is not None
+
+    rejected = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": "000000"},
+    )
+    assert rejected.status_code == 422
+    async with TestSession() as db:
+        enrollment = await db.scalar(select(MfaEnrollment).where(MfaEnrollment.user_id == admin.id))
+        assert enrollment is not None
+        assert enrollment.encrypted_secret == original_secret
+        assert enrollment.pending_encrypted_secret is not None
+
+    accepted = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(replacement.json()["secret"])},
+    )
+    assert accepted.status_code == 200
+    async with TestSession() as db:
+        enrollment = await db.scalar(select(MfaEnrollment).where(MfaEnrollment.user_id == admin.id))
+        assert enrollment is not None
+        assert enrollment.encrypted_secret != original_secret
+        assert enrollment.pending_encrypted_secret is None
+
+
+async def test_repeated_invalid_mfa_codes_revoke_the_pending_session(
+    client: TestClient,
+) -> None:
+    _, admin = await _seed_admin()
+    await _sign_in_admin(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+    setup = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(setup.json()["secret"])},
+    )
+    client.cookies.clear()
+    await _sign_in_admin(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+
+    for _ in range(get_settings().mfa_max_attempts):
+        response = client.post(
+            "/api/v1/auth/mfa/challenge", headers=headers, json={"code": "000000"}
+        )
+        assert response.status_code == 401
+    assert client.post(
+        "/api/v1/auth/mfa/challenge", headers=headers, json={"code": "000000"}
+    ).status_code == 401
+    async with TestSession() as db:
+        pending = await db.scalar(
+            select(Session)
+            .where(Session.user_id == admin.id)
+            .order_by(Session.created_at.desc())
+        )
+        assert pending is not None and pending.revoked_at is not None
+
+
+async def test_mfa_attempt_budget_survives_new_sign_in_sessions(client: TestClient) -> None:
+    _, admin = await _seed_admin()
+    await _sign_in_admin(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+    setup = client.post("/api/v1/auth/mfa/setup", headers=headers).json()
+    assert client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(setup["secret"])},
+    ).status_code == 200
+
+    for _ in range(get_settings().mfa_max_attempts):
+        client.cookies.clear()
+        signed_in = await _sign_in_admin(client)
+        assert signed_in["next_step"] == "mfa_challenge"
+        csrf = client.cookies[get_settings().csrf_cookie_name]
+        response = client.post(
+            "/api/v1/auth/mfa/challenge",
+            headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
+            json={"code": "000000"},
+        )
+        assert response.status_code == 401
+
+    client.cookies.clear()
+    assert (await _sign_in_admin(client))["next_step"] == "mfa_challenge"
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    still_locked = client.post(
+        "/api/v1/auth/mfa/challenge",
+        headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
+        json={"code": totp_code(setup["secret"])},
+    )
+    assert still_locked.status_code == 401
+    async with TestSession() as db:
+        enrollment = await db.scalar(select(MfaEnrollment).where(MfaEnrollment.user_id == admin.id))
+        assert enrollment is not None
+        assert enrollment.failed_attempts == get_settings().mfa_max_attempts
+        assert enrollment.locked_until is not None
+
+
+async def test_suspended_administrator_cannot_create_a_new_session(client: TestClient) -> None:
+    _, admin = await _seed_admin()
+    async with TestSession() as db:
+        membership = await db.scalar(
+            select(InstitutionMembership).where(InstitutionMembership.user_id == admin.id)
+        )
+        assert membership is not None
+        membership.status = MembershipStatus.SUSPENDED.value
+        await db.commit()
+    response = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "email": "admin@lifecycle.edu",
+            "password": "a secure administrator passphrase",
+        },
+    )
+    assert response.status_code == 401
 
 
 async def test_password_reset_is_generic_single_use_and_revokes_sessions(

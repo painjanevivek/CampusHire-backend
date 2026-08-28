@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import json
 import secrets
 import struct
 import time
@@ -79,3 +80,21 @@ def decrypt_totp_secret(value: str) -> str:
     payload = base64.urlsafe_b64decode(value.encode("ascii"))
     plaintext = AESGCM(_encryption_key()).decrypt(payload[:12], payload[12:], b"campushire-mfa")
     return plaintext.decode("ascii")
+
+
+def encrypt_sensitive_payload(payload: dict[str, object], purpose: str) -> str:
+    nonce = secrets.token_bytes(12)
+    plaintext = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    ciphertext = AESGCM(_encryption_key()).encrypt(nonce, plaintext, purpose.encode("ascii"))
+    return base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
+
+
+def decrypt_sensitive_payload(value: str, purpose: str) -> dict[str, object]:
+    payload = base64.urlsafe_b64decode(value.encode("ascii"))
+    plaintext = AESGCM(_encryption_key()).decrypt(
+        payload[:12], payload[12:], purpose.encode("ascii")
+    )
+    decoded = json.loads(plaintext)
+    if not isinstance(decoded, dict):
+        raise ValueError("sensitive_payload_invalid")
+    return decoded

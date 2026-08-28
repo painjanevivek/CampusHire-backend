@@ -278,7 +278,7 @@ async def commit_roster(
             template_key="invitation",
             variables={
                 "institution_name": institution_name,
-                "activation_url": f"{frontend}/activate?token={raw_token}",
+                "activation_url": f"{frontend}/activate/{raw_token}",
             },
             dedupe_key=f"invitation:{invitation.id}",
         )
@@ -328,6 +328,23 @@ async def resend_invitation(
     invitation.token_hash = hash_secret(raw_token)
     invitation.expires_at = datetime.now(UTC) + timedelta(hours=get_settings().invitation_ttl_hours)
     invitation.resend_count += 1
+    institution = await db.get(Institution, institution_id)
+    if institution is None:  # pragma: no cover - foreign key guarantees this
+        return None, None
+    await enqueue_email(
+        db,
+        institution_id=institution_id,
+        recipient_email=invitation.email,
+        category="account",
+        template_key="invitation",
+        variables={
+            "institution_name": institution.name,
+            "activation_url": (
+                f"{str(get_settings().frontend_origins[0]).rstrip('/')}/activate/{raw_token}"
+            ),
+        },
+        dedupe_key=f"invitation-resend:{invitation.id}:{invitation.resend_count}",
+    )
     record_audit_event(
         db,
         actor_user_id=actor_user_id,

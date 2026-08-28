@@ -5,6 +5,7 @@ from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from app.core import rate_limit
+from app.core.config import get_settings
 from app.core.rate_limit import enforce_fixed_window_limit
 from app.core.resilience import CircuitBreaker
 from app.main import app
@@ -104,3 +105,38 @@ def test_semantic_match_contract_is_a_csrf_protected_mutation() -> None:
     operation = app.openapi()["paths"]["/api/v1/opportunities/{role_id}/match"]
     assert "post" in operation
     assert "get" not in operation
+
+
+def test_request_logs_use_route_templates_instead_of_bearer_tokens(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    token = "secret-reset-capability"  # noqa: S105
+    with TestClient(app) as client:
+        client.post(
+            f"/api/v1/auth/password-reset/{token}/confirm",
+            json={"password": "a replacement passphrase"},
+        )
+    logs = [
+        line
+        for line in capsys.readouterr().err.splitlines()
+        if '"logger": "app.core.middleware"' in line
+    ]
+    assert all(token not in line for line in logs)
+    assert any('"route": "/auth/password-reset/{token}/confirm"' in line for line in logs)
+
+
+def test_oversized_resume_body_is_rejected_before_route_processing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RESUME_MAX_BYTES", "1024")
+    monkeypatch.setenv("REQUEST_BODY_OVERHEAD_BYTES", "1024")
+    get_settings.cache_clear()
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/resumes",
+                files={"file": ("large.pdf", b"%PDF" + b"x" * 4096, "application/pdf")},
+            )
+        assert response.status_code == 413
+    finally:
+        get_settings.cache_clear()

@@ -31,8 +31,20 @@ async def request_student_deletion(
     user_id: UUID,
     institution_id: UUID | None,
     correlation_id: str | None,
+    account_wide: bool,
     max_cleanup_attempts: int = 5,
 ) -> DataDeletionResponse:
+    if not account_wide:
+        raise PrivacyError("account_wide_confirmation_required")
+    affected_institutions = list(
+        (
+            await db.scalars(
+                select(InstitutionMembership.institution_id).where(
+                    InstitutionMembership.user_id == user_id
+                )
+            )
+        ).all()
+    )
     application_exists = await db.scalar(
         select(Application.id).where(Application.student_user_id == user_id).limit(1)
     )
@@ -101,7 +113,11 @@ async def request_student_deletion(
             outcome="success",
             reason="student_confirmed_deletion",
             correlation_id=correlation_id,
-            details={"cleanup_status": "pending"},
+            details={
+                "cleanup_status": "pending",
+                "deletion_scope": "account_all_memberships",
+                "affected_institution_count": len(affected_institutions),
+            },
             created_at=datetime.now(UTC),
         )
     )

@@ -54,6 +54,16 @@ async def enforce_auth_rate_limit(request: Request) -> None:
         request,
         namespace="auth",
         identity=request.client.host if request.client else "unknown",
+        limit=60,
+        unavailable_detail="Authentication is temporarily unavailable",
+    )
+
+
+async def enforce_auth_identity_rate_limit(request: Request, identity: str) -> None:
+    await enforce_fixed_window_limit(
+        request,
+        namespace="auth-account",
+        identity=identity.strip().casefold(),
         limit=10,
         unavailable_detail="Authentication is temporarily unavailable",
     )

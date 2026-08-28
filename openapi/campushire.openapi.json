@@ -1179,10 +1179,16 @@
             "const": "DELETE MY CAMPUSHIRE DATA",
             "title": "Confirmation",
             "type": "string"
+          },
+          "scope": {
+            "const": "account_all_memberships",
+            "title": "Scope",
+            "type": "string"
           }
         },
         "required": [
-          "confirmation"
+          "confirmation",
+          "scope"
         ],
         "title": "DataDeletionCreate",
         "type": "object"
@@ -4966,17 +4972,6 @@
       },
       "RosterRowResponse": {
         "properties": {
-          "activation_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Activation Token"
-          },
           "email": {
             "anyOf": [
               {

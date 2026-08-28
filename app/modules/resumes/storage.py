@@ -156,7 +156,7 @@ def build_object_store(settings: Settings) -> ObjectStore:
     if not settings.oci_object_namespace or not settings.oci_object_bucket:
         raise ObjectStoreError("resume_storage_configuration")
     try:
-        import oci  # type: ignore[import-not-found]
+        import oci  # type: ignore[import-untyped]
 
         signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
         client = oci.object_storage.ObjectStorageClient(config={}, signer=signer)

@@ -23,4 +23,4 @@ CMD ["python", "-m", "app.worker"]
 FROM application AS api
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["python", "-c", "import os, urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/health/live', headers={'Host': os.getenv('HEALTHCHECK_HOST', 'localhost')}); urllib.request.urlopen(request, timeout=3)"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*", "--no-access-log"]

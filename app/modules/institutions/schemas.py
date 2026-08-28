@@ -47,7 +47,6 @@ class RosterRowResponse(BaseModel):
     full_name: str | None
     status: str
     errors: list[str]
-    activation_token: str | None = None
 
 
 class RosterImportResponse(BaseModel):

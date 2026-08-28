@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.core.config import get_settings
-from app.core.rate_limit import enforce_auth_rate_limit
+from app.core.rate_limit import enforce_auth_identity_rate_limit, enforce_auth_rate_limit
 from app.models.auth import ADMIN_ROLE_VALUES, InstitutionMembership, User
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
@@ -32,6 +32,7 @@ from app.modules.auth.service import (
     ExpiredOrUsedTokenError,
     InvalidCredentialsError,
     InvalidMfaCodeError,
+    MfaReauthenticationRequiredError,
     accept_invitation,
     authenticate,
     begin_mfa_setup,
@@ -127,6 +128,7 @@ async def sign_in(
     _: Annotated[None, Depends(verify_public_csrf)],
     __: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> SignInResponse:
+    await enforce_auth_identity_rate_limit(request, str(payload.email))
     try:
         auth_session = await authenticate(
             db,
@@ -212,6 +214,7 @@ async def request_password_reset(
     _: Annotated[None, Depends(verify_public_csrf)],
     __: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> dict[str, str]:
+    await enforce_auth_identity_rate_limit(request, str(payload.email))
     await issue_password_reset(db, str(payload.email), request.state.correlation_id)
     return {"message": "If the account exists, password reset instructions will be sent."}
 
@@ -241,6 +244,14 @@ async def reset_password(
 
 
 def _require_admin_session(session: CurrentSession) -> None:
+    if (
+        session.active_membership is not None
+        and session.active_membership.status != "active"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "membership_inactive", "message": "Membership is inactive."},
+        )
     role = (
         session.active_membership.role
         if session.active_membership is not None
@@ -257,7 +268,16 @@ def _require_admin_session(session: CurrentSession) -> None:
 )
 async def setup_mfa(db: Database, session: CurrentSession) -> MfaSetupResponse:
     _require_admin_session(session)
-    secret = await begin_mfa_setup(db, session)
+    try:
+        secret = await begin_mfa_setup(db, session)
+    except MfaReauthenticationRequiredError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "mfa_reauthentication_required",
+                "message": "Verify the enrolled factor before replacing it.",
+            },
+        ) from None
     label = quote(session.user.email)
     uri = f"otpauth://totp/CampusHire:{label}?secret={secret}&issuer=CampusHire&digits=6&period=30"
     return MfaSetupResponse(secret=secret, provisioning_uri=uri)
@@ -274,6 +294,14 @@ async def confirm_mfa(
     _require_admin_session(session)
     try:
         codes = await confirm_mfa_setup(db, session, payload.code)
+    except MfaReauthenticationRequiredError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "mfa_reauthentication_required",
+                "message": "Verify the enrolled factor before replacing it.",
+            },
+        ) from None
     except InvalidMfaCodeError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -9,7 +9,11 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from app.core.middleware import (
+    RequestBodyLimitMiddleware,
+    RequestContextMiddleware,
+    SecurityHeadersMiddleware,
+)
 
 
 @asynccontextmanager
@@ -37,6 +41,7 @@ def create_app() -> FastAPI:
     application.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
     application.add_middleware(RequestContextMiddleware)
     application.add_middleware(SecurityHeadersMiddleware)
+    application.add_middleware(RequestBodyLimitMiddleware)
     install_exception_handlers(application)
     application.include_router(api_router, prefix="/api/v1")
     return application

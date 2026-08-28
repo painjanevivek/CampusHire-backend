@@ -3,7 +3,9 @@
 
   @api path /api/*
   handle @api {
-    reverse_proxy api:8000
+    reverse_proxy api:8000 {
+      header_up X-Forwarded-For {remote_host}
+    }
   }
 
   handle {
@@ -18,8 +20,4 @@
     -Server
   }
 
-  log {
-    output stdout
-    format json
-  }
 }

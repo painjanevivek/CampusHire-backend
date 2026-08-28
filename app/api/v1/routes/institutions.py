@@ -197,9 +197,7 @@ async def change_membership_status(
 def _roster_response(
     roster: RosterImport,
     rows: Sequence[RosterImportRow],
-    tokens: dict[UUID, str] | None = None,
 ) -> RosterImportResponse:
-    token_map = tokens or {}
     return RosterImportResponse(
         id=roster.id,
         status=roster.status,
@@ -216,7 +214,6 @@ def _roster_response(
                 full_name=row.full_name,
                 status=row.status,
                 errors=row.errors,
-                activation_token=token_map.get(row.id),
             )
             for row in rows
         ],
@@ -297,7 +294,7 @@ async def commit_roster_import(
     principal: InstitutionAdmin,
 ) -> RosterImportResponse:
     require_institution(principal, institution_id)
-    roster, tokens = await commit_roster(
+    roster, _ = await commit_roster(
         db,
         institution_id=institution_id,
         roster_import_id=roster_import_id,
@@ -309,12 +306,12 @@ async def commit_roster_import(
             status_code=status.HTTP_404_NOT_FOUND, detail="Roster import was not found"
         )
     _, rows = await get_roster_import(db, institution_id, roster.id)
-    return _roster_response(roster, rows, tokens)
+    return _roster_response(roster, rows)
 
 
 @router.post(
     "/invitations/{invitation_id}/resend",
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[Depends(verify_authenticated_csrf), Depends(require_recent_reauthentication)],
 )
 async def resend_membership_invitation(
     institution_id: UUID,
@@ -335,7 +332,10 @@ async def resend_membership_invitation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invitation was not found"
         )
-    return {"activation_token": token, "expires_at": invitation.expires_at.isoformat()}
+    return {
+        "message": "A replacement invitation was queued for delivery.",
+        "expires_at": invitation.expires_at.isoformat(),
+    }
 
 
 @operator_router.post(

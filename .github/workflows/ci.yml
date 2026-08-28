@@ -29,8 +29,8 @@ jobs:
       APP_ENV: test
       DATABASE_URL: postgresql+asyncpg://campushire:campushire@127.0.0.1:5432/campushire_ci
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
           cache: pip
@@ -66,8 +66,8 @@ jobs:
       - name: Rehearse the latest PostgreSQL migration
         run: |
           alembic upgrade head
-          alembic downgrade 20260824_0009
+          alembic downgrade 20260828_0014
           alembic upgrade head
-          test "$(alembic current | awk '{print $1}')" = "20260824_0010"
+          test "$(alembic current | awk '{print $1}')" = "20260828_0015"
       - name: Reject committed private keys
         run: '! git grep -n -E "BEGIN (RSA|OPENSSH) PRIVATE KEY" -- .'

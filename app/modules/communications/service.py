@@ -1,6 +1,7 @@
 import hashlib
 import html
 import smtplib
+import ssl
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from typing import Any, Protocol
@@ -17,6 +18,7 @@ from app.models.communications import (
     ProductEvent,
     SupportRequest,
 )
+from app.modules.auth.security import decrypt_sensitive_payload, encrypt_sensitive_payload
 from app.modules.communications.schemas import (
     CommunicationPreferencesResponse,
     CommunicationPreferencesUpdate,
@@ -96,7 +98,7 @@ class OciSmtpEmailProvider:
         message["Subject"] = subject
         message.set_content(text_body)
         with smtplib.SMTP(settings.email_smtp_host, settings.email_smtp_port, timeout=20) as smtp:
-            smtp.starttls()
+            smtp.starttls(context=ssl.create_default_context())
             smtp.login(settings.email_smtp_username, settings.email_smtp_password)
             smtp.send_message(message)
         return message["Message-ID"] or f"smtp-{datetime.now(UTC).timestamp():.0f}"
@@ -149,12 +151,17 @@ async def enqueue_email(
         suppress_optional = suppress_optional or sent_this_month >= int(
             settings.email_monthly_quota * settings.email_optional_suppression_ratio
         )
+    stored_variables: dict[str, Any] = variables
+    if template_key in {"invitation", "password_reset"}:
+        stored_variables = {
+            "encrypted": encrypt_sensitive_payload(variables, f"campushire-email:{template_key}")
+        }
     item = EmailDelivery(
         institution_id=institution_id,
         recipient_email=recipient_email.strip().casefold(),
         category=category,
         template_key=template_key,
-        template_variables=variables,
+        template_variables=stored_variables,
         dedupe_key=dedupe_key,
         priority=_priority(category),
         status="suppressed" if suppress_optional else "queued",
@@ -192,16 +199,27 @@ async def process_next_email(db: AsyncSession, provider: EmailProvider) -> UUID 
     item.attempts += 1
     await db.flush()
     try:
-        subject, body = render_email(item.template_key, dict(item.template_variables))
+        variables = dict(item.template_variables)
+        if item.template_key in {"invitation", "password_reset"}:
+            encrypted = variables.get("encrypted")
+            if not isinstance(encrypted, str):
+                raise ValueError("sensitive_email_payload_unavailable")
+            variables = decrypt_sensitive_payload(
+                encrypted, f"campushire-email:{item.template_key}"
+            )
+        subject, body = render_email(item.template_key, variables)
         item.provider_message_id = provider.deliver(item.recipient_email, subject, body)[:200]
         item.status = "sent"
         item.sent_at = now
         item.safe_error_code = None
+        item.template_variables = {}
     except Exception:
         item.safe_error_code = "email_delivery_failed"
         if item.attempts >= item.max_attempts:
             item.status = "failed"
             item.failed_at = now
+            if item.template_key in {"invitation", "password_reset"}:
+                item.template_variables = {}
         else:
             item.status = "retrying"
             item.next_attempt_at = now + timedelta(seconds=min(2**item.attempts * 30, 3600))

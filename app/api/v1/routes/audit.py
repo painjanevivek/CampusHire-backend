@@ -1,10 +1,12 @@
 import csv
 import io
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 
 from app.modules.audit.schemas import AuditEventPage
 from app.modules.audit.service import export_audit_events, list_audit_events, record_audit_event
@@ -74,9 +76,9 @@ async def download_audit_export(
     start_at: datetime | None = None,
     end_at: datetime | None = None,
     sort: Literal["asc", "desc"] = "desc",
-) -> Response:
+) -> StreamingResponse:
     institution_id = _institution(principal)
-    events = await export_audit_events(
+    events = export_audit_events(
         db,
         institution_id,
         actor_user_id=actor_user_id,
@@ -88,46 +90,59 @@ async def download_audit_export(
         end_at=end_at,
         sort=sort,
     )
-    output = io.StringIO(newline="")
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "timestamp",
-            "action",
-            "outcome",
-            "actor_user_id",
-            "resource_type",
-            "resource_id",
-            "reason",
-            "correlation_id",
-        ]
-    )
-    for event in events:
+    async def stream_csv() -> AsyncIterator[str]:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
         writer.writerow(
             [
-                _csv_cell(event.created_at.isoformat()),
-                _csv_cell(event.event_type),
-                _csv_cell(event.outcome),
-                _csv_cell(event.actor_user_id),
-                _csv_cell(event.resource_type),
-                _csv_cell(event.resource_id),
-                _csv_cell(event.reason),
-                _csv_cell(event.correlation_id),
+                "timestamp",
+                "action",
+                "outcome",
+                "actor_user_id",
+                "resource_type",
+                "resource_id",
+                "reason",
+                "correlation_id",
             ]
         )
-    record_audit_event(
-        db,
-        event_type="audit.exported",
-        actor_user_id=principal.user.id,
-        institution_id=institution_id,
-        resource_type="audit_event",
-        outcome="success",
-        correlation_id=request.state.correlation_id,
-        details={"row_count": len(events)},
-    )
-    await db.commit()
-    return Response(
-        content=output.getvalue(),
+        yield output.getvalue()
+        row_count = 0
+        completed = False
+        try:
+            async for event in events:
+                output.seek(0)
+                output.truncate(0)
+                writer.writerow(
+                    [
+                        _csv_cell(event.created_at.isoformat()),
+                        _csv_cell(event.event_type),
+                        _csv_cell(event.outcome),
+                        _csv_cell(event.actor_user_id),
+                        _csv_cell(event.resource_type),
+                        _csv_cell(event.resource_id),
+                        _csv_cell(event.reason),
+                        _csv_cell(event.correlation_id),
+                    ]
+                )
+                row_count += 1
+                yield output.getvalue()
+            completed = True
+        finally:
+            record_audit_event(
+                db,
+                event_type="audit.exported",
+                actor_user_id=principal.user.id,
+                institution_id=institution_id,
+                resource_type="audit_event",
+                outcome="success" if completed else "failure",
+                reason=None if completed else "client_disconnected",
+                correlation_id=request.state.correlation_id,
+                details={"row_count": row_count},
+            )
+            await db.commit()
+
+    return StreamingResponse(
+        content=stream_csv(),
         media_type="text/csv",
         headers={
             "Content-Disposition": 'attachment; filename="campushire-audit.csv"',

@@ -50,6 +50,10 @@ class InvalidMfaCodeError(Exception):
     pass
 
 
+class MfaReauthenticationRequiredError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class AuthenticatedSession:
     user: User
@@ -130,10 +134,18 @@ async def authenticate(
     token, csrf_token = new_secret(), new_secret()
     membership = await db.scalar(
         select(InstitutionMembership)
-        .where(InstitutionMembership.user_id == user.id)
+        .where(
+            InstitutionMembership.user_id == user.id,
+            InstitutionMembership.status == MembershipStatus.ACTIVE.value,
+        )
         .order_by(InstitutionMembership.created_at, InstitutionMembership.id)
         .limit(1)
     )
+    has_membership = await db.scalar(
+        select(InstitutionMembership.id).where(InstitutionMembership.user_id == user.id).limit(1)
+    )
+    if has_membership is not None and membership is None:
+        raise InvalidCredentialsError
     effective_role = membership.role if membership is not None else user.role
     requires_mfa = effective_role in ADMIN_ROLE_VALUES
     enrollment = await db.scalar(
@@ -359,15 +371,32 @@ async def confirm_password_reset(
 
 
 async def begin_mfa_setup(db: AsyncSession, session: Session) -> str:
-    secret = new_totp_secret()
     enrollment = await db.scalar(
         select(MfaEnrollment).where(MfaEnrollment.user_id == session.user_id)
     )
+    now = datetime.now(UTC)
+    active_enrollment = (
+        enrollment is not None
+        and enrollment.enrolled_at is not None
+        and enrollment.disabled_at is None
+    )
+    if active_enrollment:
+        verified_at = session.mfa_verified_at
+        normalized = (
+            verified_at
+            if verified_at is None or verified_at.tzinfo
+            else verified_at.replace(tzinfo=UTC)
+        )
+        if normalized is None or now - normalized > timedelta(minutes=10):
+            raise MfaReauthenticationRequiredError
+    secret = new_totp_secret()
     if enrollment is None:
         enrollment = MfaEnrollment(
             user_id=session.user_id, encrypted_secret=encrypt_totp_secret(secret)
         )
         db.add(enrollment)
+    elif active_enrollment:
+        enrollment.pending_encrypted_secret = encrypt_totp_secret(secret)
     else:
         enrollment.encrypted_secret = encrypt_totp_secret(secret)
         enrollment.enrolled_at = None
@@ -380,14 +409,56 @@ async def confirm_mfa_setup(db: AsyncSession, session: Session, code: str) -> li
     enrollment = await db.scalar(
         select(MfaEnrollment).where(MfaEnrollment.user_id == session.user_id)
     )
-    if enrollment is None or not verify_totp(
-        decrypt_totp_secret(enrollment.encrypted_secret), code
-    ):
-        raise InvalidMfaCodeError
     now = datetime.now(UTC)
+    if enrollment is not None and enrollment.locked_until is not None:
+        locked_until = (
+            enrollment.locked_until
+            if enrollment.locked_until.tzinfo
+            else enrollment.locked_until.replace(tzinfo=UTC)
+        )
+        if locked_until > now:
+            raise InvalidMfaCodeError
+        enrollment.locked_until = None
+        enrollment.failed_attempts = 0
+    if (
+        enrollment is not None
+        and enrollment.pending_encrypted_secret is not None
+        and (
+            session.mfa_verified_at is None
+            or now
+            - (
+                session.mfa_verified_at
+                if session.mfa_verified_at.tzinfo
+                else session.mfa_verified_at.replace(tzinfo=UTC)
+            )
+            > timedelta(minutes=10)
+        )
+    ):
+        raise MfaReauthenticationRequiredError
+    if enrollment is None:
+        session.mfa_failed_attempts += 1
+        await db.commit()
+        raise InvalidMfaCodeError
+    encrypted = enrollment.pending_encrypted_secret or enrollment.encrypted_secret
+    if not verify_totp(decrypt_totp_secret(encrypted), code):
+        enrollment.failed_attempts += 1
+        session.mfa_failed_attempts += 1
+        if enrollment.failed_attempts >= get_settings().mfa_max_attempts:
+            enrollment.locked_until = now + timedelta(
+                minutes=get_settings().mfa_lockout_minutes
+            )
+            session.revoked_at = datetime.now(UTC)
+        await db.commit()
+        raise InvalidMfaCodeError
+    if enrollment.pending_encrypted_secret is not None:
+        enrollment.encrypted_secret = enrollment.pending_encrypted_secret
+        enrollment.pending_encrypted_secret = None
     enrollment.enrolled_at = now
     enrollment.disabled_at = None
+    enrollment.failed_attempts = 0
+    enrollment.locked_until = None
     session.mfa_verified_at = now
+    session.mfa_failed_attempts = 0
     await db.execute(delete(MfaRecoveryCode).where(MfaRecoveryCode.user_id == session.user_id))
     codes = [f"{new_secret()[:5]}-{new_secret()[:5]}" for _ in range(10)]
     db.add_all(
@@ -415,7 +486,19 @@ async def verify_mfa(db: AsyncSession, session: Session, code: str) -> bool:
     )
     valid = False
     recovery: MfaRecoveryCode | None = None
+    now = datetime.now(UTC)
     if enrollment is not None:
+        locked_until = enrollment.locked_until
+        normalized_lock = (
+            locked_until
+            if locked_until is None or locked_until.tzinfo
+            else locked_until.replace(tzinfo=UTC)
+        )
+        if normalized_lock is not None and normalized_lock > now:
+            raise InvalidMfaCodeError
+        if normalized_lock is not None:
+            enrollment.locked_until = None
+            enrollment.failed_attempts = 0
         valid = verify_totp(decrypt_totp_secret(enrollment.encrypted_secret), code)
         if not valid:
             recovery = await db.scalar(
@@ -427,9 +510,31 @@ async def verify_mfa(db: AsyncSession, session: Session, code: str) -> bool:
             )
             valid = recovery is not None
     if not valid:
+        if enrollment is not None:
+            enrollment.failed_attempts += 1
+        session.mfa_failed_attempts += 1
+        if enrollment is not None and enrollment.failed_attempts >= get_settings().mfa_max_attempts:
+            enrollment.locked_until = now + timedelta(
+                minutes=get_settings().mfa_lockout_minutes
+            )
+            session.revoked_at = datetime.now(UTC)
+            record_audit_event(
+                db,
+                actor_user_id=session.user_id,
+                institution_id=session.user.institution_id,
+                event_type="auth.mfa_challenge_locked",
+                resource_type="session",
+                resource_id=str(session.id),
+                outcome="denied",
+                reason="repeated_invalid_mfa_code",
+            )
+        await db.commit()
         raise InvalidMfaCodeError
-    now = datetime.now(UTC)
     session.mfa_verified_at = now
+    session.mfa_failed_attempts = 0
+    if enrollment is not None:
+        enrollment.failed_attempts = 0
+        enrollment.locked_until = None
     if recovery is not None:
         recovery.used_at = now
     await db.commit()

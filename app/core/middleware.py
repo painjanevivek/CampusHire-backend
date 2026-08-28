@@ -6,11 +6,78 @@ from uuid import uuid4
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import get_settings
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
 logger = logging.getLogger(__name__)
+
+
+class RequestBodyLimitMiddleware:
+    """Reject oversized multipart bodies before Starlette spools upload content."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("method") != "POST":
+            await self.app(scope, receive, send)
+            return
+        path = str(scope.get("path", ""))
+        settings = get_settings()
+        limit: int | None = None
+        if path == "/api/v1/resumes":
+            limit = settings.resume_max_bytes + settings.request_body_overhead_bytes
+        elif path.endswith("/roster-imports/preview"):
+            limit = settings.roster_max_bytes + settings.request_body_overhead_bytes
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length")
+        if content_length is not None and int(content_length) > limit:
+            await self._reject(send)
+            return
+        received = 0
+
+        async def limited_receive() -> Message:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    raise ValueError("request_body_too_large")
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except ValueError as error:
+            if str(error) != "request_body_too_large":
+                raise
+            await self._reject(send)
+
+    @staticmethod
+    async def _reject(send: Send) -> None:
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"cache-control", b"no-store"),
+                ],
+            }
+        )
+        await send(
+            {
+                "type": "http.response.body",
+                "body": (
+                    b'{"error":{"code":"request_body_too_large",'
+                    b'"message":"Upload is too large."}}'
+                ),
+            }
+        )
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -28,7 +95,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     "event": "http_request_completed",
                     "correlation_id": correlation_id,
                     "http_method": request.method,
-                    "route": request.url.path,
+                    "route": self._route_template(request),
                     "status_code": 500,
                     "duration_ms": round((perf_counter() - started) * 1_000),
                 },
@@ -41,12 +108,17 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 "event": "http_request_completed",
                 "correlation_id": correlation_id,
                 "http_method": request.method,
-                "route": request.url.path,
+                "route": self._route_template(request),
                 "status_code": response.status_code,
                 "duration_ms": round((perf_counter() - started) * 1_000),
             },
         )
         return response
+
+    @staticmethod
+    def _route_template(request: Request) -> str:
+        route = request.scope.get("route")
+        return str(getattr(route, "path", "<unmatched>"))
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

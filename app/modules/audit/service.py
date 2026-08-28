@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -153,12 +154,17 @@ async def export_audit_events(
     db: AsyncSession,
     institution_id: UUID,
     **filters: Any,
-) -> list[AuditEventResponse]:
-    page = await list_audit_events(
-        db,
-        institution_id,
-        page=1,
-        page_size=100,
-        **filters,
+) -> AsyncIterator[AuditEventResponse]:
+    conditions = _audit_filters(
+        institution_id, **{key: value for key, value in filters.items() if key != "sort"}
     )
-    return page.items
+    sort = filters.get("sort", "desc")
+    order = AuditEvent.created_at.asc() if sort == "asc" else AuditEvent.created_at.desc()
+    events = await db.stream_scalars(
+        select(AuditEvent)
+        .where(*conditions)
+        .order_by(order, AuditEvent.id)
+        .execution_options(yield_per=500)
+    )
+    async for event in events:
+        yield audit_response(event)

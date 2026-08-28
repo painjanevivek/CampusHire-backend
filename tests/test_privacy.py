@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.models import Base
-from app.models.auth import Institution, User, UserRole
+from app.models.auth import Institution, InstitutionMembership, MembershipStatus, User, UserRole
 from app.models.privacy import DataDeletionRequest
 from app.models.profile import StudentProfile
 from app.models.recruitment import Application
@@ -93,6 +93,7 @@ async def test_deletion_removes_authoritative_data_then_retries_private_cleanup(
             user_id=student.id,
             institution_id=institution.id,
             correlation_id="privacy-request-123",
+            account_wide=True,
         )
         assert response.status == "pending"
         assert await db.get(User, student.id) is None
@@ -139,8 +140,53 @@ async def test_application_snapshot_creates_an_explicit_retention_hold() -> None
                 user_id=student.id,
                 institution_id=institution.id,
                 correlation_id="privacy-hold-123",
+                account_wide=True,
             )
         assert await db.get(User, student.id) is not None
+
+
+async def test_account_wide_deletion_requires_explicit_scope_and_covers_all_memberships() -> None:
+    async with Session() as db:
+        first, student = await seed_student(db)
+        second = Institution(code="PRIVACY-B", name="Second Privacy Institute")
+        db.add(second)
+        await db.flush()
+        db.add_all(
+            [
+                InstitutionMembership(
+                    institution_id=first.id,
+                    user_id=student.id,
+                    role=UserRole.STUDENT.value,
+                    status=MembershipStatus.ACTIVE.value,
+                ),
+                InstitutionMembership(
+                    institution_id=second.id,
+                    user_id=student.id,
+                    role=UserRole.STUDENT.value,
+                    status=MembershipStatus.ACTIVE.value,
+                ),
+            ]
+        )
+        await db.commit()
+
+        with pytest.raises(PrivacyError, match="account_wide_confirmation_required"):
+            await request_student_deletion(
+                db,
+                user_id=student.id,
+                institution_id=first.id,
+                correlation_id="privacy-scope-missing",
+                account_wide=False,
+            )
+        assert await db.get(User, student.id) is not None
+
+        await request_student_deletion(
+            db,
+            user_id=student.id,
+            institution_id=first.id,
+            correlation_id="privacy-account-wide",
+            account_wide=True,
+        )
+        assert await db.get(User, student.id) is None
 
 
 async def test_private_cleanup_recovers_an_expired_processing_lease(tmp_path: Path) -> None:

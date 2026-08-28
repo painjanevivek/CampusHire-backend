@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 class DataDeletionCreate(BaseModel):
     confirmation: Literal["DELETE MY CAMPUSHIRE DATA"]
+    scope: Literal["account_all_memberships"]
 
 
 class DataDeletionResponse(BaseModel):

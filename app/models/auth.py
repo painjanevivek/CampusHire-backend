@@ -105,6 +105,7 @@ class Session(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
     )
     mfa_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mfa_failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     device_summary: Mapped[str | None] = mapped_column(String(200), nullable=True)
     user: Mapped[User] = relationship(back_populates="sessions")
@@ -198,6 +199,9 @@ class MfaEnrollment(Base):
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
     encrypted_secret: Mapped[str] = mapped_column(String(512))
+    pending_encrypted_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     enrolled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -38,11 +38,13 @@ class RecordingProvider:
     def __init__(self, fail: bool = False) -> None:
         self.fail = fail
         self.subjects: list[str] = []
+        self.bodies: list[str] = []
 
     def deliver(self, recipient: str, subject: str, text_body: str) -> str:
         if self.fail:
             raise RuntimeError("provider details must not be persisted")
         self.subjects.append(subject)
+        self.bodies.append(text_body)
         return f"provider-{len(self.subjects)}"
 
 
@@ -115,6 +117,71 @@ async def test_delivery_failure_records_only_a_safe_code() -> None:
         assert stored is not None
         assert stored.status == "retrying"
         assert stored.safe_error_code == "email_delivery_failed"
+        assert "https://example.test/reset" not in str(stored.template_variables)
+
+
+async def test_sensitive_outbox_payload_is_encrypted_then_purged_after_delivery() -> None:
+    secret_url = "https://example.test/reset?token=raw-capability"  # noqa: S105
+    async with Session() as db:
+        item = await enqueue_email(
+            db,
+            institution_id=None,
+            recipient_email="student@example.edu",
+            category="account",
+            template_key="password_reset",
+            variables={"reset_url": secret_url},
+            dedupe_key="reset-sensitive-1",
+        )
+        await db.commit()
+        assert secret_url not in str(item.template_variables)
+
+    provider = RecordingProvider()
+    async with Session() as db:
+        assert await process_next_email(db, provider) == item.id
+        stored = await db.get(EmailDelivery, item.id)
+        assert stored is not None and stored.template_variables == {}
+    assert secret_url in provider.bodies[0]
+
+
+def test_smtp_starttls_uses_a_verifying_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ssl import CERT_REQUIRED
+    from types import SimpleNamespace
+
+    from app.modules.communications import service
+
+    captured: dict[str, object] = {}
+
+    class FakeSmtp:
+        def __init__(self, *_: object, **__: object) -> None:
+            pass
+
+        def __enter__(self) -> "FakeSmtp":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def starttls(self, *, context: object) -> None:
+            captured["context"] = context
+
+        def login(self, *_: object) -> None:
+            return None
+
+        def send_message(self, *_: object) -> None:
+            return None
+
+    monkeypatch.setattr(service.smtplib, "SMTP", FakeSmtp)
+    settings = SimpleNamespace(
+        email_smtp_host="smtp.example.test",
+        email_smtp_port=587,
+        email_smtp_username="user",
+        email_smtp_password="password",  # noqa: S106
+        email_from_address="no-reply@example.test",
+    )
+    service.OciSmtpEmailProvider(settings).deliver("student@example.edu", "Subject", "Body")  # type: ignore[arg-type]
+    context = captured["context"]
+    assert context.check_hostname is True  # type: ignore[union-attr]
+    assert context.verify_mode == CERT_REQUIRED  # type: ignore[union-attr]
 
 
 async def test_product_event_hashes_dedupe_identity_and_is_idempotent() -> None:

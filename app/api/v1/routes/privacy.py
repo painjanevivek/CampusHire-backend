@@ -25,7 +25,7 @@ router = APIRouter(prefix="/privacy")
 )
 async def create_deletion_request(
     request: Request,
-    _: DataDeletionCreate,
+    payload: DataDeletionCreate,
     db: Database,
     principal: CurrentPrincipal,
 ) -> DataDeletionResponse:
@@ -35,6 +35,7 @@ async def create_deletion_request(
             user_id=principal.user.id,
             institution_id=principal.institution_id,
             correlation_id=request.state.correlation_id,
+            account_wide=payload.scope == "account_all_memberships",
             max_cleanup_attempts=get_settings().privacy_cleanup_max_attempts,
         )
     except PrivacyError as error:

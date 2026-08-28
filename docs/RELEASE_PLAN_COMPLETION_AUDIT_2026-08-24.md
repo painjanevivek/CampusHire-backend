@@ -40,7 +40,7 @@ Exit criterion: **locally proven; not closed for pilot** until managed policy an
 
 ### Phase 7B
 
-On 2026-08-24 the user explicitly deferred further Deep Scan work and requested cancellation of the active Frontend run. Cancellation completed with no active workers and no report available; the Backend run was not started. Standard tests and reviews remain controls, not substitutes. Resumption requires a new explicit user decision and the scanner's managed read-only worker profile. Exit criterion: **not met**.
+Historical state: on 2026-08-24 the user deferred further Deep Scan work and canceled the active Frontend run. That state was superseded on 2026-08-28 when separate frontend/backend Deep Security Scans completed and sealed and their validated findings were remediated and regression-tested. Current evidence is in `docs/PHASE10_SECURITY_CLOSURE_2026-08-28.md` and `docs/RELEASE_PLAN_STATUS_2026-08-25.md`. Exit criterion: **met for repository-controlled scanning and remediation; external release authority remains pending**.
 
 ### Phase 7C
 

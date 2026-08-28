@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.main import app
@@ -39,11 +40,13 @@ async def override_db() -> AsyncIterator[AsyncSession]:
 
 @pytest.fixture(autouse=True)
 async def database() -> AsyncIterator[None]:
+    rate_limit._fallback.clear()
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     app.dependency_overrides[get_db] = override_db
     yield
     app.dependency_overrides.clear()
+    rate_limit._fallback.clear()
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
 
@@ -329,6 +332,46 @@ async def test_auditor_has_tenant_scoped_read_only_audit_access_and_safe_export(
     )
     assert mutation.status_code == 403
     assert mutation.json()["error"]["code"] == "permission_denied"
+
+
+async def test_audit_export_does_not_silently_truncate_after_one_hundred_rows(
+    client: TestClient,
+) -> None:
+    institution, _, _, _ = await seed_institution_memberships()
+    async with TestSession() as db:
+        auditor = User(
+            institution_id=institution.id,
+            email="bulk-auditor@campus-a.edu",
+            password_hash=hash_password("a secure auditor passphrase"),
+            role=UserRole.TNP_AUDITOR.value,
+        )
+        db.add(auditor)
+        await db.flush()
+        db.add(
+            InstitutionMembership(
+                institution_id=institution.id,
+                user_id=auditor.id,
+                role=UserRole.TNP_AUDITOR.value,
+                status=MembershipStatus.ACTIVE.value,
+            )
+        )
+        db.add_all(
+            [
+                AuditEvent(
+                    actor_user_id=auditor.id,
+                    institution_id=institution.id,
+                    event_type="governance.bulk_test",
+                    resource_type="test",
+                    resource_id=str(index),
+                )
+                for index in range(125)
+            ]
+        )
+        await db.commit()
+    sign_in(client, auditor.email, "a secure auditor passphrase")
+    export = client.get("/api/v1/admin/audit/export.csv?action=governance.bulk_test")
+    assert export.status_code == 200
+    assert len(export.text.strip().splitlines()) == 126
 
 
 @pytest.mark.asyncio

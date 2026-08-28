@@ -45,6 +45,6 @@
 - Performance: repeated local HTTP measurements recorded p95 latency and idempotent concurrent application replay without representing local results as production SLOs.
 - Source control: both candidates match `origin/main`; `AGENTS.md`, `design.md`, skill metadata, local data, generated visuals, and local build evidence are not tracked release artifacts.
 
-## Deferred and external gates
+## Security closure and external gates
 
-The user explicitly deferred separate exhaustive frontend/backend Deep Security Scans on 2026-08-24. They are not counted as passed and remain available for a later security review. Real-data pilot promotion also requires credential-free PDF parser isolation, managed-staging recovery and load evidence, approved privacy/retention/incident ownership, and named student, administrator, accessibility, privacy, security, and product acceptance. The implementation candidate is technically assembled and verified; this audit does not authorize production promotion.
+The 2026-08-24 Deep Scan deferral was lifted. Separate frontend/backend Deep Security Scans completed and sealed on 2026-08-28, and their validated findings were remediated and regression-tested; see `docs/PHASE10_SECURITY_CLOSURE_2026-08-28.md`. Real-data pilot promotion still requires managed-staging recovery and load evidence for the final immutable candidate, approved privacy/retention/incident ownership, and named student, administrator, accessibility, privacy, security, and product acceptance. The implementation candidate is technically assembled and verified; this audit does not authorize production promotion.
