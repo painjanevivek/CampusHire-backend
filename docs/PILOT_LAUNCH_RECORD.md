@@ -2,6 +2,10 @@
 
 Status: **Not launched — authorization and release gates pending**
 
+Use [the real-data pilot release dossier](REAL_DATA_PILOT_RELEASE_DOSSIER.md) as the controlled
+source for charter limits, independent review, and final authorization. This launch record begins
+only after its strict manifest has no blockers.
+
 ## Approval authority
 
 | Field | Recorded value |
