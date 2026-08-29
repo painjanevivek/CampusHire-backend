@@ -8,33 +8,35 @@ from typing import Any
 
 Snapshot = Mapping[str, int | float | bool]
 
-REQUIRED_FIELDS = {
-    "authorized_go": bool,
-    "consecutive_threshold_windows": int,
-    "cpu_percent": (int, float),
-    "memory_percent": (int, float),
-    "disk_percent": (int, float),
-    "object_allocation_percent": (int, float),
-    "error_rate_percent": (int, float),
-    "latency_budget_utilization_percent": (int, float),
-    "backup_age_hours": (int, float),
-    "certificate_days_remaining": (int, float),
-    "database_pool_percent": (int, float),
-    "worker_missed_lease_periods": int,
-}
+REQUIRED_NUMERIC_FIELDS = (
+    "consecutive_threshold_windows",
+    "cpu_percent",
+    "memory_percent",
+    "disk_percent",
+    "object_allocation_percent",
+    "error_rate_percent",
+    "latency_budget_utilization_percent",
+    "backup_age_hours",
+    "certificate_days_remaining",
+    "database_pool_percent",
+    "worker_missed_lease_periods",
+)
 
 
 def validate_snapshot(value: object) -> Snapshot:
     if not isinstance(value, dict):
         raise ValueError("snapshot must be a JSON object")
     errors: list[str] = []
-    for field, expected_type in REQUIRED_FIELDS.items():
+    authorized_go = value.get("authorized_go")
+    if not isinstance(authorized_go, bool):
+        errors.append("authorized_go must be a boolean")
+    for field in REQUIRED_NUMERIC_FIELDS:
         current = value.get(field)
         if current is None:
             errors.append(f"missing {field}")
-        elif not isinstance(current, expected_type) or isinstance(current, bool) and expected_type is not bool:
+        elif isinstance(current, bool) or not isinstance(current, (int, float)):
             errors.append(f"{field} has an invalid type")
-        elif isinstance(current, (int, float)) and current < 0:
+        elif current < 0:
             errors.append(f"{field} must not be negative")
     if errors:
         raise ValueError("invalid snapshot: " + "; ".join(errors))
