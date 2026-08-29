@@ -48,6 +48,10 @@ These values describe the locally verified immutable runtime pair. Before Stage 
 
 At each stage record health/readiness, error rate, latency percentiles, database/Redis saturation, queue age/retries/failures, scanner/parser/provider health, authorization/security events, restore readiness, and support observations. Compare only with approved thresholds and dataset labels.
 
+Before admitting the chartered institution or reopening an onboarding window, run the sanitized
+health guard in `docs/PILOT_ACTIVATION_CONTROL.md`. A pause result blocks new onboarding but must
+not bypass data-rights, deletion, download, or support workflows.
+
 ## Stop and rollback record
 
 Record trigger, UTC time, detector, affected tenant/workflow, action owner, traffic/worker state, rollback artifact, database decision, validation checks, communications authority, and recovery result. Never downgrade or overwrite a database without the migration-specific approved procedure and verified backup.
