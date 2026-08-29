@@ -4,9 +4,15 @@ services:
   migrate:
     environment: &production_environment
       APP_ENV: production
+      STAGING_HOST: ${PRODUCTION_HOST:?Set the owned production domain}
       HEALTHCHECK_HOST: ${PRODUCTION_HOST:?Set the owned production domain}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:?Set the single HTTPS production origin}
       TRUSTED_HOSTS: ${TRUSTED_HOSTS:?Set the production host allowlist}
+      DATABASE_URL: ${DATABASE_URL:?Set the protected production PostgreSQL URL}
+      REDIS_URL: ${REDIS_URL:?Set the protected production Redis URL}
+      PARSER_DOCKER_HOST: ${PARSER_DOCKER_HOST:?Set the isolated parser launcher}
+      PARSER_CLIENT_CERT_DIR: ${PARSER_CLIENT_CERT_DIR:?Set the protected parser client certificate directory}
+      STAGING_SECRET_DIR: ${PRODUCTION_SECRET_DIR:?Set the protected production secret directory}
       RESUME_STORAGE_BACKEND: oci
       OCI_OBJECT_NAMESPACE: ${OCI_OBJECT_NAMESPACE:?Set the OCI namespace}
       OCI_OBJECT_BUCKET: ${OCI_OBJECT_BUCKET:?Set the private bucket}
@@ -43,3 +49,9 @@ services:
       - ${PRODUCTION_CADDYFILE_PATH:-./deploy/production/Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+
+secrets:
+  postgres_password:
+    file: ${PRODUCTION_SECRET_DIR:?Set the protected production secret directory}/postgres_password
+  redis_password:
+    file: ${PRODUCTION_SECRET_DIR:?Set the protected production secret directory}/redis_password

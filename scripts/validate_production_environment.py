@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
 from scripts.validate_oci_environment import IMAGE_REFERENCE, IMAGE_VARIABLES, parse_environment
@@ -14,6 +14,11 @@ REQUIRED = (
     *IMAGE_VARIABLES,
     "OCI_OBJECT_NAMESPACE",
     "OCI_OBJECT_BUCKET",
+    "PRODUCTION_SECRET_DIR",
+    "PARSER_DOCKER_HOST",
+    "PARSER_CLIENT_CERT_DIR",
+    "DATABASE_URL",
+    "REDIS_URL",
     "BACKUP_AGE_RECIPIENT",
     "EMAIL_SMTP_HOST",
     "EMAIL_SMTP_USERNAME",
@@ -52,6 +57,21 @@ def validate_production_environment(values: dict[str, str]) -> list[str]:
         value = values.get(variable, "")
         if value and not IMAGE_REFERENCE.fullmatch(value):
             errors.append(f"{variable} must be an immutable GHCR digest")
+    parser_host = values.get("PARSER_DOCKER_HOST", "")
+    if parser_host and parser_host != "tcp://host.docker.internal:2376":
+        errors.append(
+            "PARSER_DOCKER_HOST must use the authenticated same-VM rootless launcher endpoint"
+        )
+    for variable in ("PRODUCTION_SECRET_DIR", "PARSER_CLIENT_CERT_DIR"):
+        value = values.get(variable, "")
+        if value and not PurePosixPath(value).is_absolute():
+            errors.append(f"{variable} must be an absolute path outside the repository")
+    database_url = values.get("DATABASE_URL", "")
+    if database_url and not database_url.startswith("postgresql+asyncpg://"):
+        errors.append("DATABASE_URL must use postgresql+asyncpg")
+    redis_url = values.get("REDIS_URL", "")
+    if redis_url and not redis_url.startswith("redis://:"):
+        errors.append("REDIS_URL must include an authenticated Redis connection")
     for variable in ("EMAIL_DELIVERY_WEBHOOK_KEY", "OPERATOR_BOOTSTRAP_KEY"):
         value = values.get(variable, "")
         if value and len(value) < 24:

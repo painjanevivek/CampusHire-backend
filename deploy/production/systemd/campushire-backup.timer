@@ -1,0 +1,10 @@
+[Unit]
+Description=Run CampusHire encrypted OCI PostgreSQL backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+Persistent=true
+RandomizedDelaySec=20m
+
+[Install]
+WantedBy=timers.target
