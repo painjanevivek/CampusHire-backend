@@ -1,0 +1,298 @@
+name: Deploy authorized OCI production pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_source_sha:
+        description: Immutable frontend source SHA paired with this backend release
+        required: true
+        type: string
+      frontend_image:
+        description: Immutable frontend GHCR reference including @sha256 digest
+        required: true
+        type: string
+      backend_api_image:
+        description: Immutable API GHCR reference including @sha256 digest
+        required: true
+        type: string
+      backend_worker_image:
+        description: Immutable worker GHCR reference including @sha256 digest
+        required: true
+        type: string
+      parser_image:
+        description: Immutable parser GHCR reference including @sha256 digest
+        required: true
+        type: string
+      clamav_image:
+        description: Immutable ClamAV GHCR reference including @sha256 digest
+        required: true
+        type: string
+      candidate_archive_sha256:
+        description: Candidate archive sha256 digest
+        required: true
+        type: string
+      rollback_archive_sha256:
+        description: Rollback archive sha256 digest
+        required: true
+        type: string
+      sbom_bundle_sha256:
+        description: Candidate and rollback SBOM bundle sha256 digest
+        required: true
+        type: string
+      config_manifest_hash:
+        description: Release configuration sha256 digest
+        required: true
+        type: string
+      migration_head:
+        description: Alembic migration head captured from the candidate image
+        required: true
+        type: string
+      rollback_frontend_sha:
+        description: Full frontend source SHA for the approved rollback pair
+        required: true
+        type: string
+      rollback_backend_sha:
+        description: Full backend source SHA for the approved rollback pair
+        required: true
+        type: string
+      provenance_reference:
+        description: Immutable provenance evidence reference
+        required: true
+        type: string
+      signature_reference:
+        description: Immutable signature evidence reference
+        required: true
+        type: string
+      frontend_deep_scan:
+        description: Sealed frontend scan evidence reference
+        required: true
+        type: string
+      backend_deep_scan:
+        description: Sealed backend scan evidence reference
+        required: true
+        type: string
+      managed_staging:
+        description: Managed staging evidence reference
+        required: true
+        type: string
+      managed_recovery:
+        description: Managed recovery evidence reference
+        required: true
+        type: string
+      managed_capacity_and_cost:
+        description: Approved capacity and cost evidence reference
+        required: true
+        type: string
+      representative_uat:
+        description: Authorized representative UAT evidence reference
+        required: true
+        type: string
+      governance_signoff:
+        description: Authorized governance evidence reference
+        required: true
+        type: string
+      authorized_go_no_go:
+        description: Vivek's final authorized GO evidence reference
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oci-production-pilot
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Verify and deploy authorized immutable pilot
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+      SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+      PRODUCTION_HOST: ${{ vars.PRODUCTION_HOST }}
+      OCI_OBJECT_NAMESPACE: ${{ vars.OCI_OBJECT_NAMESPACE }}
+      OCI_OBJECT_BUCKET: ${{ vars.OCI_OBJECT_BUCKET }}
+      BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+      EMAIL_SMTP_HOST: ${{ vars.EMAIL_SMTP_HOST }}
+      EMAIL_SMTP_USERNAME: ${{ vars.EMAIL_SMTP_USERNAME }}
+      EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS }}
+      BACKEND_API_IMAGE: ${{ inputs.backend_api_image }}
+      BACKEND_WORKER_IMAGE: ${{ inputs.backend_worker_image }}
+      FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+      RESUME_PARSER_IMAGE: ${{ inputs.parser_image }}
+      CLAMAV_IMAGE: ${{ inputs.clamav_image }}
+      REMOTE_RELEASE: /opt/campushire/releases/${{ github.sha }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      EMAIL_SMTP_PASSWORD: ${{ secrets.EMAIL_SMTP_PASSWORD }}
+      EMAIL_DELIVERY_WEBHOOK_KEY: ${{ secrets.EMAIL_DELIVERY_WEBHOOK_KEY }}
+      OPERATOR_BOOTSTRAP_KEY: ${{ secrets.OPERATOR_BOOTSTRAP_KEY }}
+      MFA_ENCRYPTION_KEY: ${{ secrets.MFA_ENCRYPTION_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: painjanevivek/CampusHire
+          ref: ${{ inputs.frontend_source_sha }}
+          path: Frontend
+
+      - name: Verify authorization inputs and immutable release pair
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.PRODUCTION_SSH_HOST_KEY }}
+        run: |
+          git switch --force-create release-candidate
+          git branch --set-upstream-to=origin/main release-candidate
+          git -C Frontend switch --force-create release-candidate
+          git -C Frontend branch --set-upstream-to=origin/main release-candidate
+          python - <<'PY'
+          import os
+
+          required = (
+              "SSH_HOST", "SSH_USER", "PRODUCTION_HOST", "SSH_PRIVATE_KEY", "SSH_HOST_KEY",
+              "OCI_OBJECT_NAMESPACE", "OCI_OBJECT_BUCKET", "BACKUP_AGE_RECIPIENT",
+              "EMAIL_SMTP_HOST", "EMAIL_SMTP_USERNAME", "EMAIL_FROM_ADDRESS",
+              "POSTGRES_PASSWORD", "REDIS_PASSWORD", "EMAIL_SMTP_PASSWORD",
+              "EMAIL_DELIVERY_WEBHOOK_KEY", "OPERATOR_BOOTSTRAP_KEY", "MFA_ENCRYPTION_KEY",
+          )
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              raise SystemExit("missing protected production configuration: " + ", ".join(missing))
+          PY
+          python scripts/build_release_candidate_manifest.py \
+            --frontend Frontend --backend . --output release-candidate.json --strict \
+            --frontend-image-digest "${FRONTEND_IMAGE##*@}" \
+            --frontend-image-reference "${{ inputs.frontend_image }}" \
+            --backend-image-digest "${BACKEND_API_IMAGE##*@}" \
+            --backend-image-reference "${BACKEND_API_IMAGE}" \
+            --backend-worker-image-digest "${BACKEND_WORKER_IMAGE##*@}" \
+            --backend-worker-image-reference "${BACKEND_WORKER_IMAGE}" \
+            --parser-image-digest "${RESUME_PARSER_IMAGE##*@}" \
+            --parser-image-reference "${RESUME_PARSER_IMAGE}" \
+            --candidate-archive-sha256 "${{ inputs.candidate_archive_sha256 }}" \
+            --rollback-archive-sha256 "${{ inputs.rollback_archive_sha256 }}" \
+            --sbom-bundle-sha256 "${{ inputs.sbom_bundle_sha256 }}" \
+            --provenance-reference "${{ inputs.provenance_reference }}" \
+            --signature-reference "${{ inputs.signature_reference }}" \
+            --migration-head "${{ inputs.migration_head }}" \
+            --config-manifest-hash "${{ inputs.config_manifest_hash }}" \
+            --rollback-frontend-sha "${{ inputs.rollback_frontend_sha }}" \
+            --rollback-backend-sha "${{ inputs.rollback_backend_sha }}" \
+            --approved-gate "frontend_deep_scan=${{ inputs.frontend_deep_scan }}" \
+            --approved-gate "backend_deep_scan=${{ inputs.backend_deep_scan }}" \
+            --approved-gate "managed_staging=${{ inputs.managed_staging }}" \
+            --approved-gate "managed_recovery=${{ inputs.managed_recovery }}" \
+            --approved-gate "managed_capacity_and_cost=${{ inputs.managed_capacity_and_cost }}" \
+            --approved-gate "representative_uat=${{ inputs.representative_uat }}" \
+            --approved-gate "governance_signoff=${{ inputs.governance_signoff }}" \
+            --approved-gate "authorized_go_no_go=${{ inputs.authorized_go_no_go }}"
+
+      - name: Build the protected production deployment bundle
+        env:
+          RELEASE_DIRECTORY: ${{ runner.temp }}/campushire-${{ github.sha }}
+        run: |
+          install -d -m 700 "${RELEASE_DIRECTORY}" "${RELEASE_DIRECTORY}/config/secrets"
+          cp -R deploy scripts "${RELEASE_DIRECTORY}/"
+          cp release-candidate.json "${RELEASE_DIRECTORY}/"
+          chmod +x "${RELEASE_DIRECTORY}/deploy/production/deploy.sh"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from urllib.parse import quote
+
+          release = Path(os.environ["RELEASE_DIRECTORY"])
+          password_values = {
+              "postgres_password": os.environ["POSTGRES_PASSWORD"],
+              "redis_password": os.environ["REDIS_PASSWORD"],
+          }
+          if any("\n" in value for value in password_values.values()):
+              raise SystemExit("database credentials must be single-line values")
+
+          host = os.environ["PRODUCTION_HOST"]
+          values = {
+              "PRODUCTION_HOST": host,
+              "FRONTEND_ORIGINS": f'["https://{host}"]',
+              "TRUSTED_HOSTS": f'["{host}"]',
+              "DATABASE_URL": "postgresql+asyncpg://campushire:"
+              f"{quote(password_values['postgres_password'], safe='')}@postgres:5432/campushire",
+              "REDIS_URL": f"redis://:{quote(password_values['redis_password'], safe='')}@redis:6379/0",
+              "PRODUCTION_SECRET_DIR": "/opt/campushire/config/secrets",
+              "PARSER_DOCKER_HOST": "tcp://host.docker.internal:2376",
+              "PARSER_CLIENT_CERT_DIR": "/opt/campushire/config/parser-client-tls",
+              "BACKEND_API_IMAGE": os.environ["BACKEND_API_IMAGE"],
+              "BACKEND_WORKER_IMAGE": os.environ["BACKEND_WORKER_IMAGE"],
+              "FRONTEND_IMAGE": os.environ["FRONTEND_IMAGE"],
+              "RESUME_PARSER_IMAGE": os.environ["RESUME_PARSER_IMAGE"],
+              "CLAMAV_IMAGE": os.environ["CLAMAV_IMAGE"],
+              "OCI_OBJECT_NAMESPACE": os.environ["OCI_OBJECT_NAMESPACE"],
+              "OCI_OBJECT_BUCKET": os.environ["OCI_OBJECT_BUCKET"],
+              "OCI_OBJECT_QUOTA_BYTES": "14000000000",
+              "OCI_OBJECT_UPLOADS_ENABLED": "true",
+              "BACKUP_AGE_RECIPIENT": os.environ["BACKUP_AGE_RECIPIENT"],
+              "EMAIL_SMTP_HOST": os.environ["EMAIL_SMTP_HOST"],
+              "EMAIL_SMTP_USERNAME": os.environ["EMAIL_SMTP_USERNAME"],
+              "EMAIL_SMTP_PASSWORD": os.environ["EMAIL_SMTP_PASSWORD"],
+              "EMAIL_FROM_ADDRESS": os.environ["EMAIL_FROM_ADDRESS"],
+              "EMAIL_DELIVERY_WEBHOOK_KEY": os.environ["EMAIL_DELIVERY_WEBHOOK_KEY"],
+              "OPERATOR_BOOTSTRAP_KEY": os.environ["OPERATOR_BOOTSTRAP_KEY"],
+              "MFA_ENCRYPTION_KEY": os.environ["MFA_ENCRYPTION_KEY"],
+              "PRODUCTION_CADDYFILE_PATH": f"{os.environ['REMOTE_RELEASE']}/deploy/production/Caddyfile",
+          }
+          environment = release / "config" / "production.env"
+          environment.write_text(
+              "\n".join(f"{name}={value}" for name, value in values.items()) + "\n",
+              encoding="utf-8",
+          )
+          environment.chmod(0o600)
+          for name, value in password_values.items():
+              path = release / "config" / "secrets" / name
+              path.write_text(value, encoding="utf-8")
+              path.chmod(0o600)
+          PY
+          python scripts/validate_production_environment.py "${RELEASE_DIRECTORY}/config/production.env"
+          tar -C "${RELEASE_DIRECTORY}" -czf "${RUNNER_TEMP}/campushire-${GITHUB_SHA}.tar.gz" .
+
+      - name: Configure pinned SSH identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.PRODUCTION_SSH_HOST_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${SSH_HOST_KEY}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload and activate the authorized release
+        run: |
+          ssh "${SSH_USER}@${SSH_HOST}" "install -d -m 700 '${REMOTE_RELEASE}'"
+          scp "${RUNNER_TEMP}/campushire-${GITHUB_SHA}.tar.gz" \
+            "${SSH_USER}@${SSH_HOST}:${REMOTE_RELEASE}/release.tar.gz"
+          ssh "${SSH_USER}@${SSH_HOST}" "
+            set -eu
+            tar -C '${REMOTE_RELEASE}' -xzf '${REMOTE_RELEASE}/release.tar.gz'
+            rm '${REMOTE_RELEASE}/release.tar.gz'
+            install -d -m 700 /opt/campushire/config /opt/campushire/config/secrets
+            install -m 600 '${REMOTE_RELEASE}/config/production.env' /opt/campushire/config/production.env
+            install -m 600 '${REMOTE_RELEASE}/config/secrets/postgres_password' /opt/campushire/config/secrets/postgres_password
+            install -m 600 '${REMOTE_RELEASE}/config/secrets/redis_password' /opt/campushire/config/secrets/redis_password
+            rm -rf '${REMOTE_RELEASE}/config'
+            '${REMOTE_RELEASE}/deploy/production/deploy.sh' /opt/campushire/config/production.env
+            ln -sfn '${REMOTE_RELEASE}' /opt/campushire/current
+          "
+
+      - name: Record non-secret production evidence
+        run: |
+          {
+            echo "## Authorized OCI pilot deployment"
+            echo
+            echo "- Host: \`https://${PRODUCTION_HOST}\`"
+            echo "- Backend commit: \`${GITHUB_SHA}\`"
+            echo "- Frontend source: \`${{ inputs.frontend_source_sha }}\`"
+            echo "- API: \`${BACKEND_API_IMAGE}\`"
+            echo "- Worker: \`${BACKEND_WORKER_IMAGE}\`"
+            echo "- Frontend: \`${FRONTEND_IMAGE}\`"
+            echo "- Parser: \`${RESUME_PARSER_IMAGE}\`"
+            echo "- ClamAV: \`${CLAMAV_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

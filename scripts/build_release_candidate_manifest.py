@@ -30,6 +30,9 @@ REQUIRED_EXTERNAL_GATES = {
     "authorized_go_no_go",
 }
 SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+REGISTRY_IMAGE_PATTERN = re.compile(
+    r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$"
+)
 GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 MIGRATION_HEAD_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -129,6 +132,15 @@ def sha256_digest(value: str) -> str:
     return normalized
 
 
+def registry_image_reference(value: str) -> str:
+    normalized = value.lower()
+    if not REGISTRY_IMAGE_PATTERN.fullmatch(normalized):
+        raise argparse.ArgumentTypeError(
+            "expected a lowercase GHCR digest-pinned image reference"
+        )
+    return normalized
+
+
 def git_sha(value: str) -> str:
     normalized = value.lower()
     if not GIT_SHA_PATTERN.fullmatch(normalized):
@@ -176,12 +188,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backend", type=Path, default=Path("."))
     parser.add_argument("--output", type=Path, default=Path(".data/release-candidate.json"))
     parser.add_argument("--frontend-image-digest", type=sha256_digest)
+    parser.add_argument("--frontend-image-reference", type=registry_image_reference)
     parser.add_argument("--backend-image-digest", type=sha256_digest)
+    parser.add_argument("--backend-image-reference", type=registry_image_reference)
     parser.add_argument("--backend-worker-image-digest", type=sha256_digest)
+    parser.add_argument("--backend-worker-image-reference", type=registry_image_reference)
     parser.add_argument("--parser-image-digest", type=sha256_digest)
+    parser.add_argument("--parser-image-reference", type=registry_image_reference)
     parser.add_argument("--candidate-archive-sha256", type=sha256_digest)
     parser.add_argument("--rollback-archive-sha256", type=sha256_digest)
     parser.add_argument("--sbom-bundle-sha256", type=sha256_digest)
+    parser.add_argument("--provenance-reference")
+    parser.add_argument("--signature-reference")
     parser.add_argument("--migration-head", type=migration_head)
     parser.add_argument("--config-manifest-hash", type=sha256_digest)
     parser.add_argument("--rollback-frontend-sha", type=git_sha)
@@ -199,14 +217,29 @@ def main() -> None:
         collect_repository("backend", args.backend),
     ]
     openapi_path = args.frontend / "openapi" / "campushire.openapi.json"
+    image_pairs = (
+        ("frontend", args.frontend_image_reference, args.frontend_image_digest),
+        ("backend", args.backend_image_reference, args.backend_image_digest),
+        ("backend_worker", args.backend_worker_image_reference, args.backend_worker_image_digest),
+        ("parser", args.parser_image_reference, args.parser_image_digest),
+    )
+    for name, reference, digest in image_pairs:
+        if reference and digest and not reference.endswith(f"@{digest}"):
+            raise SystemExit(f"{name} image reference and digest must identify the same artifact")
     immutable_artifacts = {
         "frontend_image_digest": args.frontend_image_digest,
+        "frontend_image_reference": args.frontend_image_reference,
         "backend_image_digest": args.backend_image_digest,
+        "backend_image_reference": args.backend_image_reference,
         "backend_worker_image_digest": args.backend_worker_image_digest,
+        "backend_worker_image_reference": args.backend_worker_image_reference,
         "parser_image_digest": args.parser_image_digest,
+        "parser_image_reference": args.parser_image_reference,
         "candidate_archive_sha256": args.candidate_archive_sha256,
         "rollback_archive_sha256": args.rollback_archive_sha256,
         "sbom_bundle_sha256": args.sbom_bundle_sha256,
+        "provenance_reference": args.provenance_reference,
+        "signature_reference": args.signature_reference,
         "migration_head": args.migration_head,
         "config_manifest_hash": args.config_manifest_hash,
         "rollback_frontend_sha": args.rollback_frontend_sha,

@@ -1,9 +1,11 @@
+import argparse
 from pathlib import Path
 
 from scripts.build_release_candidate_manifest import (
     RepositoryState,
     parse_gate_evidence,
     prohibited_tracked_paths,
+    registry_image_reference,
     release_blockers,
     sha256_digest,
     sha256_file,
@@ -55,6 +57,19 @@ def test_gate_evidence_and_hash_are_deterministic(tmp_path: Path) -> None:
         "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
     )
     assert sha256_digest("sha256:" + "A" * 64) == "sha256:" + "a" * 64
+
+
+def test_registry_image_reference_requires_a_digest_pinned_ghcr_image() -> None:
+    digest = "sha256:" + "a" * 64
+    assert registry_image_reference(f"ghcr.io/campushire/api@{digest}") == (
+        f"ghcr.io/campushire/api@{digest}"
+    )
+    try:
+        registry_image_reference("ghcr.io/campushire/api:latest")
+    except argparse.ArgumentTypeError as error:
+        assert "GHCR digest-pinned" in str(error)
+    else:  # pragma: no cover - makes the negative requirement explicit
+        raise AssertionError("mutable image references must be rejected")
 
 
 def test_release_configuration_hash_covers_both_deployables(tmp_path: Path) -> None:
