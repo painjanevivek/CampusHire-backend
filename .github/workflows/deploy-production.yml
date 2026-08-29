@@ -132,11 +132,14 @@ jobs:
       MFA_ENCRYPTION_KEY: ${{ secrets.MFA_ENCRYPTION_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: painjanevivek/CampusHire
           ref: ${{ inputs.frontend_source_sha }}
           path: Frontend
+          fetch-depth: 0
 
       - name: Verify authorization inputs and immutable release pair
         env:
