@@ -225,10 +225,10 @@ class ApplicationAppealCreate(BaseModel):
         normalized = [item.strip() for item in value if item.strip()]
         if any(len(item) > 300 or "\n" in item or "\r" in item for item in normalized):
             raise ValueError(
-                "Supporting evidence labels must be single-line and at most 300 characters"
+                "Supporting detail labels must use one line and be at most 300 characters"
             )
         if len({item.casefold() for item in normalized}) != len(normalized):
-            raise ValueError("Supporting evidence labels must be unique")
+            raise ValueError("Supporting detail labels must be unique")
         return normalized
 
 

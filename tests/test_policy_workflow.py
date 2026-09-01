@@ -32,7 +32,7 @@ def test_policy_graph_does_not_invent_missing_evidence() -> None:
     result = policy_graph.invoke(
         {"question": "unknown rule", "chunks": [], "citations": [], "answer": "", "iterations": 0}
     )
-    assert result["answer"] == "Policy evidence not found."
+    assert result["answer"] == "Answer not found in the approved policy."
 
 
 def test_policy_retrieval_normalizes_punctuation() -> None:

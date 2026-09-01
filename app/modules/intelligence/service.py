@@ -181,7 +181,9 @@ async def semantic_match(
     if embedder is None:
         status = "unavailable"
         safe_error_code = "semantic_provider_unavailable"
-        explanation = ["Semantic relevance is temporarily unavailable; eligibility is unchanged."]
+        explanation = [
+            "Skills matching is temporarily unavailable. Your eligibility has not changed."
+        ]
     else:
         try:
             student_vector, role_vector = await to_thread.run_sync(
@@ -202,15 +204,15 @@ async def semantic_match(
             }
             explanation = [
                 f"{round(result.skill_coverage * 100)}% of published role skills are represented.",
-                "Project evidence and semantic similarity contribute separately "
+                "Project details and skills similarity are checked separately "
                 "to this relevance score.",
-                "This score never changes deterministic eligibility.",
+                "This score never changes your rule-based eligibility.",
             ]
         except Exception:
             status = "unavailable"
             safe_error_code = "semantic_provider_unavailable"
             explanation = [
-                "Semantic relevance is temporarily unavailable; eligibility is unchanged."
+                "Skills matching is temporarily unavailable. Your eligibility has not changed."
             ]
 
     evidence = SemanticMatchEvidence(
@@ -364,7 +366,7 @@ async def answer_policy_question(
         None,
     )
     return PolicyAnswer(
-        answer=str(result.get("answer", "Policy evidence not found.")),
+        answer=str(result.get("answer", "Answer not found in the approved policy.")),
         citations=citations,
         policy_id=matched.id if matched else None,
         policy_version=matched.version if matched else None,

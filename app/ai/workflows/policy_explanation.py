@@ -40,7 +40,7 @@ def retrieve(state: PolicyState) -> dict[str, object]:
 def explain(state: PolicyState) -> dict[str, object]:
     if not state["chunks"]:
         return {
-            "answer": "Policy evidence not found.",
+            "answer": "Answer not found in the approved policy.",
             "citations": [],
             "iterations": state["iterations"] + 1,
         }

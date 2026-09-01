@@ -502,7 +502,7 @@ async def dashboard(
             description=(
                 "Add the required education and target-role facts used by eligibility rules."
             ),
-            reason="Deterministic eligibility cannot be evaluated without these verified facts.",
+            reason="CampusHire cannot check eligibility until these verified details are added.",
             href="/onboarding",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=["required_profile_facts_incomplete"],
@@ -513,7 +513,7 @@ async def dashboard(
     elif reviewing:
         action = NextAction(
             key="review_resume",
-            title="Review your extracted resume evidence",
+            title="Review the details found in your resume",
             description=(
                 "Accept, edit, or reject each proposed field before it can support an application."
             ),
@@ -531,39 +531,39 @@ async def dashboard(
         action = NextAction(
             key="add_resume",
             title="Add a reviewed resume",
-            description="Upload a PDF and review the extracted evidence before applying.",
+            description="Upload a PDF and review the details found before applying.",
             reason="Applications preserve a selected clean resume version.",
             href="/resume",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=["completed_resume_missing"],
             estimated_minutes=10,
-            unlocks="Application submission with locked evidence",
+            unlocks="Applications with saved resume details",
             completion_criteria="A PDF passes safety checks and every proposed claim is reviewed.",
         )
     elif not project_evidence:
         action = NextAction(
             key="add_project_evidence",
-            title="Add project evidence",
+            title="Add a project",
             description=(
                 "Document one project, the work you completed, "
-                "and a safe internal evidence reference."
+                "and a safe CampusHire link."
             ),
-            reason="Your profile has the core facts but no reviewed project evidence yet.",
+            reason="Your profile has the required details but no reviewed project yet.",
             href="/resume",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=[f"resume:{reviewed.id}:projects_missing"],
             estimated_minutes=12,
-            unlocks="Stronger evidence-led role explanations",
-            completion_criteria="One factual project is present in reviewed resume evidence.",
+            unlocks="Clearer role-match explanations",
+            completion_criteria="One accurate project is present in your reviewed resume.",
         )
     elif roadmap is None:
         action = NextAction(
             key="select_roadmap",
             title="Choose your career roadmap",
             description=(
-                "Select one reviewed path so CampusHire can sequence the next evidence milestone."
+                "Select one reviewed path so CampusHire can show the next milestone."
             ),
-            reason="A curated path keeps recommendations bounded and prerequisite-aware.",
+            reason="A reviewed path keeps suggestions focused and in the right order.",
             href="/roadmap",
             policy_version=READINESS_POLICY_VERSION,
             source_facts=["roadmap_not_selected"],
@@ -582,7 +582,7 @@ async def dashboard(
             reason=(
                 "Its prerequisites are complete and it is the first unfinished reviewed milestone."
                 if next_node
-                else "Your current roadmap evidence is complete; eligibility remains role-specific."
+                else "Your current roadmap is complete; eligibility is still checked for each role."
             ),
             href="/roadmap" if next_node else "/opportunities",
             policy_version=READINESS_POLICY_VERSION,
@@ -627,7 +627,7 @@ async def dashboard(
             bool(reviewed),
             "/resume",
             10,
-            "A selectable evidence version",
+            "A resume version you can select",
         ),
         (
             "opportunities_unlocked",
@@ -635,7 +635,7 @@ async def dashboard(
             opportunities_unlocked,
             "/opportunities",
             5,
-            "Institution-published eligible roles",
+            "Eligible roles published by your institution",
         ),
         (
             "first_application",
@@ -699,7 +699,7 @@ async def dashboard(
                 status="verified" if reviewed else "review" if reviewing else "pending",
             ),
             DashboardEvidence(
-                label="Project evidence",
+                label="Project details",
                 value="Attached" if project_evidence else "Missing",
                 status="verified" if project_evidence else "pending",
             ),

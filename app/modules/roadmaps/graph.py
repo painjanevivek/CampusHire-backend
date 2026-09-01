@@ -48,10 +48,13 @@ AI_ENGINEER = [
         ("python", "math"),
     ),
     RoadmapNode(
-        "llm", "LLM application safety", "Build a grounded workflow with injection tests", ("ml",)
+        "llm", "LLM application safety", "Build a source-based workflow with safety tests", ("ml",)
     ),
     RoadmapNode(
-        "deploy", "Deploy evidence", "Publish a monitored API and project write-up", ("llm",)
+        "deploy",
+        "Show your deployed work",
+        "Publish a monitored API and project write-up",
+        ("llm",),
     ),
 ]
 
@@ -62,7 +65,7 @@ def _software_path(final_title: str, final_completion: str) -> list[RoadmapNode]
             "fundamentals", "Programming foundations", "Build and test one focused application"
         ),
         RoadmapNode(
-            "problem-solving", "Problem-solving evidence", "Document three explained solutions"
+            "problem-solving", "Problem-solving work", "Document three explained solutions"
         ),
         RoadmapNode(
             "delivery",
@@ -73,8 +76,8 @@ def _software_path(final_title: str, final_completion: str) -> list[RoadmapNode]
         RoadmapNode("specialization", final_title, final_completion, ("delivery",)),
         RoadmapNode(
             "placement-proof",
-            "Placement evidence pack",
-            "Attach the project, impact note, and reviewed resume evidence",
+            "Placement project pack",
+            "Attach the project, impact note, and reviewed resume",
             ("specialization",),
         ),
     ]
@@ -90,7 +93,7 @@ CURATED_ROADMAPS: dict[str, tuple[str, str, list[RoadmapNode]]] = {
     ),
     "frontend-developer": (
         "Frontend Developer",
-        "Create accessible, responsive product interfaces with evidence.",
+        "Create accessible, responsive product interfaces and show your work.",
         _software_path("Accessible frontend", "Ship a responsive interface with keyboard tests"),
     ),
     "backend-developer": (
@@ -114,17 +117,17 @@ CURATED_ROADMAPS: dict[str, tuple[str, str, list[RoadmapNode]]] = {
         "Data Analyst",
         "Turn reviewed data into reproducible decisions and narratives.",
         _software_path(
-            "Analytical evidence", "Publish a reproducible analysis with stated assumptions"
+            "Analysis project", "Publish an analysis that others can repeat, with clear assumptions"
         ),
     ),
     "machine-learning-engineer": (
         "Machine Learning Engineer",
-        "Build evaluated ML systems with versioned data and model evidence.",
+        "Build tested ML systems with saved data and model versions.",
         _software_path("Evaluated ML workflow", "Train and evaluate a documented baseline model"),
     ),
     "ai-engineer": (
         "AI Engineer",
-        "Build grounded AI workflows with evaluation and deployment evidence.",
+        "Build source-based AI workflows with testing and deployment records.",
         AI_ENGINEER,
     ),
 }
