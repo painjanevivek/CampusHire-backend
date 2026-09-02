@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -325,7 +326,11 @@ async def test_admin_can_verify_membership_inside_active_institution(
     response = client.post(
         f"/api/v1/institutions/{institution.id}/memberships",
         headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
-        json={"user_id": str(student.id), "role": UserRole.STUDENT.value},
+        json={
+            "user_id": str(student.id),
+            "role": UserRole.STUDENT.value,
+            "reason": "Verified against the institution enrollment record.",
+        },
     )
 
     assert response.status_code == 201, response.text
@@ -357,6 +362,137 @@ async def test_membership_access_fails_closed_across_institutions_and_roles(
     sign_in(client, "student@campus-a.edu", "a secure student passphrase")
     student_access = client.get(f"/api/v1/institutions/{first.id}/memberships")
     assert student_access.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_only_owner_can_manage_administrator_memberships(
+    client: TestClient,
+) -> None:
+    institution, _, admin, student = await seed_institution_memberships()
+    async with TestSession() as db:
+        owner = User(
+            email="owner@campus-a.edu",
+            password_hash=hash_password("a secure owner passphrase"),
+            role=UserRole.TNP_OWNER.value,
+        )
+        db.add(owner)
+        await db.flush()
+        owner_membership = InstitutionMembership(
+            institution_id=institution.id,
+            user_id=owner.id,
+            role=UserRole.TNP_OWNER.value,
+            status=MembershipStatus.ACTIVE.value,
+            verified_by_user_id=owner.id,
+        )
+        db.add(owner_membership)
+        await db.commit()
+        await db.refresh(owner_membership)
+
+    sign_in(client, admin.email, "a secure administrator passphrase")
+    headers = {
+        "Origin": "http://localhost:3000",
+        "X-CSRF-Token": client.cookies[get_settings().csrf_cookie_name],
+    }
+    assigned = client.post(
+        f"/api/v1/institutions/{institution.id}/memberships",
+        headers=headers,
+        json={
+            "user_id": str(student.id),
+            "role": UserRole.TNP_REVIEWER.value,
+            "reason": "Assign reviewer access for the current placement cycle.",
+        },
+    )
+    assert assigned.status_code == 403
+    assert assigned.json()["error"]["code"] == "membership_permission_denied"
+
+    suspended = client.patch(
+        f"/api/v1/institutions/{institution.id}/memberships/{owner_membership.id}",
+        headers=headers,
+        json={
+            "status": MembershipStatus.SUSPENDED.value,
+            "reason": "Attempted change outside the administrator authority boundary.",
+        },
+    )
+    assert suspended.status_code == 403
+    assert suspended.json()["error"]["code"] == "membership_permission_denied"
+
+    client.cookies.clear()
+    sign_in(client, owner.email, "a secure owner passphrase")
+    owner_headers = {
+        "Origin": "http://localhost:3000",
+        "X-CSRF-Token": client.cookies[get_settings().csrf_cookie_name],
+    }
+    self_change = client.patch(
+        f"/api/v1/institutions/{institution.id}/memberships/{owner_membership.id}",
+        headers=owner_headers,
+        json={
+            "status": MembershipStatus.REVOKED.value,
+            "reason": "Attempt to remove the currently authenticated institution owner.",
+        },
+    )
+    assert self_change.status_code == 403
+    assert self_change.json()["error"]["code"] == "membership_permission_denied"
+
+
+@pytest.mark.asyncio
+async def test_membership_directory_is_server_paginated_and_tenant_filtered(
+    client: TestClient,
+) -> None:
+    institution, other_institution, _, _ = await seed_institution_memberships()
+    async with TestSession() as db:
+        users = [
+            User(
+                email=f"student-{index:02d}@campus-a.edu",
+                password_hash=hash_password("a secure student passphrase"),
+                role=UserRole.STUDENT.value,
+            )
+            for index in range(23)
+        ]
+        outsider = User(
+            email="student-outsider@campus-b.edu",
+            password_hash=hash_password("a secure student passphrase"),
+            role=UserRole.STUDENT.value,
+        )
+        db.add_all([*users, outsider])
+        await db.flush()
+        db.add_all(
+            [
+                InstitutionMembership(
+                    institution_id=institution.id,
+                    user_id=user.id,
+                    role=UserRole.STUDENT.value,
+                    status=MembershipStatus.ACTIVE.value,
+                )
+                for user in users
+            ]
+            + [
+                InstitutionMembership(
+                    institution_id=other_institution.id,
+                    user_id=outsider.id,
+                    role=UserRole.STUDENT.value,
+                    status=MembershipStatus.ACTIVE.value,
+                )
+            ]
+        )
+        await db.commit()
+
+    sign_in(client, "admin@campus-a.edu", "a secure administrator passphrase")
+    first_page = client.get(
+        f"/api/v1/institutions/{institution.id}/memberships"
+        "?role=student&page=1&page_size=10&sort=email"
+    )
+    assert first_page.status_code == 200, first_page.text
+    assert first_page.json()["total"] == 23
+    assert len(first_page.json()["items"]) == 10
+    assert all(item["email"].endswith("@campus-a.edu") for item in first_page.json()["items"])
+
+    filtered = client.get(
+        f"/api/v1/institutions/{institution.id}/memberships"
+        "?role=student&query=student-22&page=1&page_size=10"
+    )
+    assert filtered.status_code == 200, filtered.text
+    assert filtered.json()["total"] == 1
+    assert filtered.json()["items"][0]["email"] == "student-22@campus-a.edu"
 
 
 @pytest.mark.asyncio
@@ -423,6 +559,60 @@ async def test_auditor_has_tenant_scoped_read_only_audit_access_and_safe_export(
     assert mutation.json()["error"]["code"] == "permission_denied"
 
 
+@pytest.mark.asyncio
+async def test_reviewer_cannot_apply_bulk_or_override_decisions(client: TestClient) -> None:
+    institution, _, _, _ = await seed_institution_memberships()
+    async with TestSession() as db:
+        reviewer = User(
+            institution_id=institution.id,
+            email="reviewer@campus-a.edu",
+            password_hash=hash_password("a secure reviewer passphrase"),
+            role=UserRole.TNP_REVIEWER.value,
+        )
+        db.add(reviewer)
+        await db.flush()
+        db.add(
+            InstitutionMembership(
+                institution_id=institution.id,
+                user_id=reviewer.id,
+                role=UserRole.TNP_REVIEWER.value,
+                status=MembershipStatus.ACTIVE.value,
+                verified_by_user_id=reviewer.id,
+            )
+        )
+        await db.commit()
+
+    sign_in(client, reviewer.email, "a secure reviewer passphrase")
+    headers = {
+        "Origin": "http://localhost:3000",
+        "X-CSRF-Token": client.cookies[get_settings().csrf_cookie_name],
+    }
+    override = client.post(
+        f"/api/v1/admin/recruitment/applications/{uuid4()}/override",
+        headers=headers,
+        json={
+            "status": "shortlisted",
+            "reason": "A reviewer must not be able to authorize policy exceptions.",
+            "policy_reference": "Placement Policy section 4.2",
+        },
+    )
+    assert override.status_code == 403
+    assert override.json()["error"]["code"] == "permission_denied"
+
+    bulk = client.post(
+        "/api/v1/admin/recruitment/applications/bulk/status",
+        headers=headers,
+        json={
+            "application_ids": [str(uuid4())],
+            "status": "shortlisted",
+            "reason": "A reviewer must not be able to apply a mass decision.",
+            "confirmation": "APPLY BULK STATUS",
+        },
+    )
+    assert bulk.status_code == 403
+    assert bulk.json()["error"]["code"] == "permission_denied"
+
+
 async def test_audit_export_does_not_silently_truncate_after_one_hundred_rows(
     client: TestClient,
 ) -> None:
@@ -479,7 +669,11 @@ async def test_sensitive_membership_changes_require_recent_mfa(client: TestClien
     response = client.post(
         f"/api/v1/institutions/{institution.id}/memberships",
         headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
-        json={"user_id": str(student.id), "role": UserRole.STUDENT.value},
+        json={
+            "user_id": str(student.id),
+            "role": UserRole.STUDENT.value,
+            "reason": "Verified against the institution enrollment record.",
+        },
     )
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "reauthentication_required"

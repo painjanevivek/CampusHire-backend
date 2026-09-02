@@ -29,7 +29,9 @@ def test_generated_pdf_has_selectable_identity_and_links() -> None:
     assert "Asha Patil" in document[0].get_text()
     assert document[0].get_links()
     assert document.metadata["producer"] == "CampusHire PDF Generator v1"
-    assert document.metadata["keywords"] == f"campushire-evidence-sha256:{evidence_digest(content())}"
+    assert document.metadata["keywords"] == (
+        f"campushire-evidence-sha256:{evidence_digest(content())}"
+    )
     assert "Evidence" in document[-1].get_text()
     document.close()
     assert generated == generate_pdf(content())

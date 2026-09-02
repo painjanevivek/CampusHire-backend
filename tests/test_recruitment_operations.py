@@ -744,6 +744,7 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             csrf_hash=hash_secret("admin-csrf-token"),
             expires_at=datetime.now(UTC) + timedelta(hours=1),
             last_activity_at=datetime.now(UTC),
+            mfa_verified_at=datetime.now(UTC),
         ),
         membership=None,
     )
@@ -885,6 +886,59 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             assert replayed.status_code == 200
             assert replayed.json()["id"] == applied.json()["id"]
             principal = admin_principal
+            under_review = await client.post(
+                f"/api/v1/admin/recruitment/applications/{applied.json()['id']}/status",
+                json={
+                    "status": "under_review",
+                    "reason": "The placement reviewer started the documented evidence review.",
+                },
+            )
+            assert under_review.status_code == 200, under_review.text
+            missing_policy = await client.post(
+                f"/api/v1/admin/recruitment/applications/{applied.json()['id']}/override",
+                json={
+                    "status": "shortlisted",
+                    "reason": "The published equivalence policy supports this reviewed exception.",
+                },
+            )
+            assert missing_policy.status_code == 422
+
+            principal = AuthenticatedPrincipal(
+                user=admin,
+                session=Session(
+                    user_id=admin.id,
+                    token_hash=hash_secret("stale-admin-session-token"),
+                    csrf_hash=hash_secret("stale-admin-csrf-token"),
+                    expires_at=now + timedelta(hours=1),
+                    last_activity_at=now,
+                    mfa_verified_at=now - timedelta(minutes=11),
+                ),
+                membership=None,
+            )
+            stale_override = await client.post(
+                f"/api/v1/admin/recruitment/applications/{applied.json()['id']}/override",
+                json={
+                    "status": "shortlisted",
+                    "reason": "The published equivalence policy supports this reviewed exception.",
+                    "policy_reference": "Placement Policy section 4.2",
+                },
+            )
+            assert stale_override.status_code == 403
+            assert stale_override.json()["error"]["code"] == "reauthentication_required"
+
+            principal = admin_principal
+            overridden = await client.post(
+                f"/api/v1/admin/recruitment/applications/{applied.json()['id']}/override",
+                json={
+                    "status": "shortlisted",
+                    "reason": "The published equivalence policy supports this reviewed exception.",
+                    "policy_reference": "Placement Policy section 4.2",
+                },
+            )
+            assert overridden.status_code == 200, overridden.text
+            assert overridden.json()["overrides"][0]["policy_reference"] == (
+                "Placement Policy section 4.2"
+            )
             immutable_delete = await client.delete(
                 f"/api/v1/admin/recruitment/drives/{drive.json()['id']}"
             )

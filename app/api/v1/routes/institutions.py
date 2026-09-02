@@ -2,15 +2,25 @@ import csv
 import io
 import secrets
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.models.auth import RosterImport, RosterImportRow
+from app.models.auth import RosterImport, RosterImportRow, UserRole
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
@@ -39,6 +49,7 @@ from app.modules.institutions.schemas import (
     InvitationRevocationRequest,
     InvitationSummary,
     MembershipCreate,
+    MembershipPage,
     MembershipResponse,
     MembershipStatusUpdate,
     RosterImportResponse,
@@ -46,8 +57,10 @@ from app.modules.institutions.schemas import (
     RosterRowResponse,
 )
 from app.modules.institutions.service import (
+    MembershipPermissionError,
     MembershipUserNotFoundError,
     list_memberships,
+    paginate_memberships,
     update_membership_status,
     verify_membership,
 )
@@ -64,15 +77,36 @@ def _csv_cell(value: object | None) -> str:
     return f"'{text}" if text.startswith(("=", "+", "-", "@", "\t", "\r")) else text
 
 
-@router.get("/memberships", response_model=list[MembershipResponse])
+@router.get("/memberships", response_model=MembershipPage)
 async def read_memberships(
-    institution_id: UUID, db: Database, principal: InstitutionAdmin
-) -> list[MembershipResponse]:
+    institution_id: UUID,
+    db: Database,
+    principal: InstitutionAdmin,
+    query: Annotated[str | None, Query(max_length=320)] = None,
+    membership_status: Annotated[
+        str | None, Query(pattern=r"^(active|invited|pending|suspended|revoked|graduated)$")
+    ] = None,
+    role: UserRole | None = None,
+    sort: Literal["email", "status", "created_at"] = "email",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> MembershipPage:
     require_institution(principal, institution_id)
-    return [
+    memberships, total = await paginate_memberships(
+        db,
+        institution_id,
+        query=query,
+        membership_status=membership_status,
+        role=role.value if role else None,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+    items = [
         MembershipResponse.model_validate(item).model_copy(update={"email": item.user.email})
-        for item in await list_memberships(db, institution_id)
+        for item in memberships
     ]
+    return MembershipPage(items=items, page=page, page_size=page_size, total=total)
 
 
 @router.get("/memberships/export.csv")
@@ -81,9 +115,12 @@ async def export_memberships(
     request: Request,
     db: Database,
     principal: InstitutionAdmin,
+    role: UserRole | None = None,
 ) -> Response:
     require_institution(principal, institution_id)
-    memberships = await list_memberships(db, institution_id)
+    memberships = await list_memberships(
+        db, institution_id, role=role.value if role else None
+    )
     output = io.StringIO(newline="")
     writer = csv.writer(output)
     writer.writerow(["email", "role", "status", "verified_at"])
@@ -181,12 +218,19 @@ async def create_membership(
             institution_id=institution_id,
             user_id=payload.user_id,
             role=payload.role.value,
+            reason=payload.reason,
             actor_user_id=principal.user.id,
+            actor_role=principal.role,
             correlation_id=request.state.correlation_id,
         )
     except MembershipUserNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership user was not found"
+        ) from error
+    except MembershipPermissionError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "membership_permission_denied", "message": str(error)},
         ) from error
     return MembershipResponse.model_validate(membership)
 
@@ -208,15 +252,22 @@ async def change_membership_status(
     principal: InstitutionAdmin,
 ) -> MembershipResponse:
     require_institution(principal, institution_id)
-    membership = await update_membership_status(
-        db,
-        institution_id=institution_id,
-        membership_id=membership_id,
-        status=payload.status,
-        reason=payload.reason,
-        actor_user_id=principal.user.id,
-        correlation_id=request.state.correlation_id,
-    )
+    try:
+        membership = await update_membership_status(
+            db,
+            institution_id=institution_id,
+            membership_id=membership_id,
+            status=payload.status,
+            reason=payload.reason,
+            actor_user_id=principal.user.id,
+            actor_role=principal.role,
+            correlation_id=request.state.correlation_id,
+        )
+    except MembershipPermissionError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "membership_permission_denied", "message": str(error)},
+        ) from error
     if membership is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership was not found"

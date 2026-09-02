@@ -63,7 +63,7 @@ async def provision_institution(
     invitation = MembershipInvitation(
         institution_id=institution.id,
         email=normalized_email,
-        role=UserRole.TNP_ADMIN.value,
+        role=UserRole.TNP_OWNER.value,
         token_hash=hash_secret(raw_token),
         expires_at=datetime.now(UTC) + timedelta(hours=get_settings().invitation_ttl_hours),
     )

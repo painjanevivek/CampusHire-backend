@@ -27,9 +27,12 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "tnp_owner": frozenset(
         {
             "institution.manage",
+            "institution.roles.manage",
             "recruitment.read",
             "recruitment.manage",
             "applications.review",
+            "applications.bulk",
+            "applications.override",
             "intelligence.review",
             "operations.read",
             "operations.manage",
@@ -43,6 +46,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "recruitment.read",
             "recruitment.manage",
             "applications.review",
+            "applications.bulk",
+            "applications.override",
             "intelligence.review",
             "operations.read",
             "operations.manage",

@@ -99,6 +99,14 @@ async def test_operator_provisioning_is_keyed_and_audited(
 
     assert response.status_code == 201, response.text
     assert response.json()["admin_invitation_token"]
+    async with TestSession() as db:
+        invitation = await db.scalar(
+            select(MembershipInvitation).where(
+                MembershipInvitation.id == UUID(response.json()["admin_invitation_id"])
+            )
+        )
+        assert invitation is not None
+        assert invitation.role == UserRole.TNP_OWNER.value
     get_settings.cache_clear()
 
 

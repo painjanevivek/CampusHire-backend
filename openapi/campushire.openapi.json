@@ -244,16 +244,10 @@
       "ApplicationOverrideCreate": {
         "properties": {
           "policy_reference": {
-            "anyOf": [
-              {
-                "maxLength": 300,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Policy Reference"
+            "maxLength": 300,
+            "minLength": 3,
+            "title": "Policy Reference",
+            "type": "string"
           },
           "reason": {
             "maxLength": 500,
@@ -272,7 +266,8 @@
         },
         "required": [
           "status",
-          "reason"
+          "reason",
+          "policy_reference"
         ],
         "title": "ApplicationOverrideCreate",
         "type": "object"
@@ -2595,6 +2590,12 @@
       },
       "MembershipCreate": {
         "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
           "role": {
             "$ref": "#/components/schemas/UserRole",
             "default": "student"
@@ -2606,9 +2607,41 @@
           }
         },
         "required": [
-          "user_id"
+          "user_id",
+          "reason"
         ],
         "title": "MembershipCreate",
+        "type": "object"
+      },
+      "MembershipPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "MembershipPage",
         "type": "object"
       },
       "MembershipResponse": {
@@ -2663,7 +2696,7 @@
         "properties": {
           "reason": {
             "maxLength": 500,
-            "minLength": 3,
+            "minLength": 10,
             "title": "Reason",
             "type": "string"
           },
@@ -10536,6 +10569,94 @@
             }
           },
           {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 320,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "membership_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(active|invited|pending|suspended|revoked|graduated)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Membership Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/UserRole"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "email",
+              "enum": [
+                "email",
+                "status",
+                "created_at"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "campushire_session",
             "required": false,
@@ -10557,11 +10678,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/MembershipResponse"
-                  },
-                  "title": "Response Read Memberships Api V1 Institutions  Institution Id  Memberships Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/MembershipPage"
                 }
               }
             },
@@ -10663,6 +10780,22 @@
               "format": "uuid",
               "title": "Institution Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/UserRole"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
             }
           },
           {

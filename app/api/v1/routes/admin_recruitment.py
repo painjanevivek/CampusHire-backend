@@ -325,6 +325,7 @@ async def edit_drive(
     dependencies=[
         Depends(verify_authenticated_csrf),
         Depends(require_permissions("recruitment.manage")),
+        Depends(require_recent_reauthentication),
     ],
 )
 async def remove_drive(
@@ -663,7 +664,7 @@ async def preview_bulk_application_change(
     response_model=BulkApplicationApplyResponse,
     dependencies=[
         Depends(verify_authenticated_csrf),
-        Depends(require_permissions("applications.review")),
+        Depends(require_permissions("applications.bulk")),
         Depends(require_recent_reauthentication),
     ],
 )
@@ -773,7 +774,8 @@ async def change_application_status(
     response_model=ApplicationResponse,
     dependencies=[
         Depends(verify_authenticated_csrf),
-        Depends(require_permissions("applications.review")),
+        Depends(require_permissions("applications.override")),
+        Depends(require_recent_reauthentication),
     ],
 )
 async def override_application_decision(

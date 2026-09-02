@@ -12,6 +12,7 @@ InvitationStatus = Literal["pending", "expired", "accepted", "revoked"]
 class MembershipCreate(BaseModel):
     user_id: UUID
     role: UserRole = UserRole.STUDENT
+    reason: str = Field(min_length=10, max_length=500)
 
 
 class MembershipResponse(BaseModel):
@@ -23,6 +24,13 @@ class MembershipResponse(BaseModel):
     role: str
     status: str
     email: EmailStr | None = None
+
+
+class MembershipPage(BaseModel):
+    items: list[MembershipResponse]
+    page: int
+    page_size: int
+    total: int
 
 
 class InstitutionProvisionRequest(BaseModel):
@@ -40,7 +48,7 @@ class InstitutionProvisionResponse(BaseModel):
 
 class MembershipStatusUpdate(BaseModel):
     status: str = Field(pattern=r"^(active|suspended|revoked|graduated)$")
-    reason: str = Field(min_length=3, max_length=500)
+    reason: str = Field(min_length=10, max_length=500)
 
 
 class RosterRowResponse(BaseModel):
