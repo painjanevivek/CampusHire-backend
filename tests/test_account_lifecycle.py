@@ -64,6 +64,21 @@ async def _sign_in_admin(client: TestClient) -> dict[str, object]:
     return response.json()
 
 
+async def _activate_admin_mfa(client: TestClient) -> str:
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+    setup = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    assert setup.status_code == 200, setup.text
+    secret = setup.json()["secret"]
+    confirmed = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(secret)},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    return secret
+
+
 async def test_operator_provisioning_is_keyed_and_audited(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -154,6 +169,202 @@ async def test_roster_preview_rejects_formula_injection_and_commit_is_idempotent
     async with TestSession() as db:
         stored = await db.scalar(select(RosterImport).where(RosterImport.id == UUID(body["id"])))
         assert stored is not None and stored.status == "committed"
+
+
+async def test_roster_commit_rejects_enrollment_reused_by_a_later_import(
+    client: TestClient,
+) -> None:
+    institution, _ = await _seed_admin()
+    await _sign_in_admin(client)
+    await _activate_admin_mfa(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+
+    first_preview = client.post(
+        f"/api/v1/institutions/{institution.id}/roster-imports/preview",
+        headers=headers,
+        files={
+            "file": (
+                "first.csv",
+                b"email,enrollment_id,full_name\nfirst@example.edu,ENR-001,First Student\n",
+                "text/csv",
+            )
+        },
+    )
+    assert first_preview.status_code == 201, first_preview.text
+    first_commit = client.post(
+        f"/api/v1/institutions/{institution.id}/roster-imports/"
+        f"{first_preview.json()['id']}/commit",
+        headers=headers,
+    )
+    assert first_commit.status_code == 200, first_commit.text
+    assert first_commit.json()["invited_rows"] == 1
+
+    second_preview = client.post(
+        f"/api/v1/institutions/{institution.id}/roster-imports/preview",
+        headers=headers,
+        files={
+            "file": (
+                "second.csv",
+                b"email,enrollment_id,full_name\nsecond@example.edu,ENR-001,Second Student\n",
+                "text/csv",
+            )
+        },
+    )
+    assert second_preview.status_code == 201, second_preview.text
+    second_commit = client.post(
+        f"/api/v1/institutions/{institution.id}/roster-imports/"
+        f"{second_preview.json()['id']}/commit",
+        headers=headers,
+    )
+    assert second_commit.status_code == 200, second_commit.text
+    assert second_commit.json()["invited_rows"] == 0
+    assert second_commit.json()["rows"][0]["status"] == "duplicate"
+    assert second_commit.json()["rows"][0]["errors"] == [
+        "account_or_invitation_exists"
+    ]
+
+
+async def test_invitation_management_is_tenant_scoped_and_never_returns_tokens(
+    client: TestClient,
+) -> None:
+    institution, admin = await _seed_admin()
+    token = "tenant-bound-pending-invitation"  # noqa: S105
+    async with TestSession() as db:
+        other = Institution(code="other-campus", name="Other Campus")
+        db.add(other)
+        await db.flush()
+        invitation = MembershipInvitation(
+            institution_id=institution.id,
+            email="pending@example.edu",
+            enrollment_id="ENR-PENDING",
+            full_name="Pending Student",
+            role=UserRole.STUDENT.value,
+            token_hash=hash_secret(token),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            created_by_user_id=admin.id,
+        )
+        hidden = MembershipInvitation(
+            institution_id=other.id,
+            email="hidden@example.edu",
+            enrollment_id="OTHER-001",
+            full_name="Other Student",
+            role=UserRole.STUDENT.value,
+            token_hash=hash_secret("other-tenant-invitation"),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        db.add_all([invitation, hidden])
+        await db.commit()
+        invitation_id = invitation.id
+
+    await _sign_in_admin(client)
+    await _activate_admin_mfa(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+
+    listed = client.get(f"/api/v1/institutions/{institution.id}/invitations")
+    assert listed.status_code == 200, listed.text
+    assert [item["email"] for item in listed.json()] == ["pending@example.edu"]
+    assert listed.json()[0]["status"] == "pending"
+    assert "token" not in str(listed.json()).lower()
+
+    resent = client.post(
+        f"/api/v1/institutions/{institution.id}/invitations/{invitation_id}/resend",
+        headers=headers,
+    )
+    assert resent.status_code == 200, resent.text
+    assert resent.json()["status"] == "pending"
+    assert "token" not in str(resent.json()).lower()
+
+    revoked = client.post(
+        f"/api/v1/institutions/{institution.id}/invitations/{invitation_id}/revoke",
+        headers=headers,
+        json={"reason": "Student record was added in error"},
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert revoked.json()["status"] == "revoked"
+    assert client.get(f"/api/v1/auth/invitations/{token}").status_code == 410
+
+
+async def test_mfa_reset_requires_password_and_factor_then_revokes_other_sessions(
+    client: TestClient,
+) -> None:
+    institution, _ = await _seed_admin()
+    await _sign_in_admin(client)
+    secret = await _activate_admin_mfa(client)
+
+    client.cookies.clear()
+    signed_in = await _sign_in_admin(client)
+    assert signed_in["next_step"] == "mfa_challenge"
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+    assert client.post(
+        "/api/v1/auth/mfa/challenge",
+        headers=headers,
+        json={"code": totp_code(secret)},
+    ).status_code == 204
+    assert len(client.get("/api/v1/auth/sessions").json()) == 2
+
+    rejected = client.post(
+        "/api/v1/auth/mfa/disable",
+        headers=headers,
+        json={"password": "wrong password", "code": totp_code(secret)},
+    )
+    assert rejected.status_code == 401
+    assert rejected.json()["error"]["code"] == "mfa_reset_verification_failed"
+    rejected_code = client.post(
+        "/api/v1/auth/mfa/disable",
+        headers=headers,
+        json={
+            "password": "a secure administrator passphrase",
+            "code": "000000",
+        },
+    )
+    assert rejected_code.status_code == 401
+    assert rejected_code.json()["error"]["code"] == rejected.json()["error"]["code"]
+
+    reset = client.post(
+        "/api/v1/auth/mfa/disable",
+        headers=headers,
+        json={
+            "password": "a secure administrator passphrase",
+            "code": totp_code(secret),
+        },
+    )
+    assert reset.status_code == 204, reset.text
+    assert client.get("/api/v1/auth/sessions").status_code == 403
+    async with TestSession() as db:
+        active_sessions = list(
+            (
+                await db.scalars(
+                    select(Session).where(Session.revoked_at.is_(None))
+                )
+            ).all()
+        )
+    assert len(active_sessions) == 1
+    assert client.get(f"/api/v1/institutions/{institution.id}/memberships").status_code == 403
+    assert client.post("/api/v1/auth/mfa/setup", headers=headers).status_code == 200
+
+
+async def test_activation_and_password_reset_reject_control_characters(
+    client: TestClient,
+) -> None:
+    activation = client.post(
+        "/api/v1/auth/invitations/not-a-real-token/accept",
+        headers=csrf_headers(client),
+        json={
+            "password": "unsafe password\nvalue",
+            "terms_version": "terms-2026-08",
+            "privacy_version": "privacy-2026-08",
+        },
+    )
+    assert activation.status_code == 422
+    reset = client.post(
+        "/api/v1/auth/password-reset/not-a-real-token/confirm",
+        headers=csrf_headers(client),
+        json={"password": "unsafe password\tvalue"},
+    )
+    assert reset.status_code == 422
 
 
 async def test_password_only_session_cannot_replace_an_enrolled_mfa_factor(

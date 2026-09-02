@@ -4,10 +4,11 @@ import io
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 from pydantic import EmailStr, TypeAdapter, ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -203,14 +204,19 @@ async def preview_roster(
 
 
 async def get_roster_import(
-    db: AsyncSession, institution_id: UUID, roster_import_id: UUID
+    db: AsyncSession,
+    institution_id: UUID,
+    roster_import_id: UUID,
+    *,
+    for_update: bool = False,
 ) -> tuple[RosterImport | None, list[RosterImportRow]]:
-    roster = await db.scalar(
-        select(RosterImport).where(
-            RosterImport.id == roster_import_id,
-            RosterImport.institution_id == institution_id,
-        )
+    roster_query = select(RosterImport).where(
+        RosterImport.id == roster_import_id,
+        RosterImport.institution_id == institution_id,
     )
+    if for_update:
+        roster_query = roster_query.with_for_update()
+    roster = await db.scalar(roster_query)
     if roster is None:
         return None, []
     records = await db.scalars(
@@ -229,14 +235,20 @@ async def commit_roster(
     actor_user_id: UUID,
     correlation_id: str | None,
 ) -> tuple[RosterImport | None, dict[UUID, str]]:
-    roster, rows = await get_roster_import(db, institution_id, roster_import_id)
+    institution = await db.scalar(
+        select(Institution).where(Institution.id == institution_id).with_for_update()
+    )
+    if institution is None:
+        return None, {}
+    roster, rows = await get_roster_import(
+        db, institution_id, roster_import_id, for_update=True
+    )
     if roster is None:
         return None, {}
     if roster.status == "committed":
         return roster, {}
     tokens: dict[UUID, str] = {}
-    institution = await db.get(Institution, institution_id)
-    institution_name = institution.name if institution else "Your institution"
+    institution_name = institution.name
     frontend = str(get_settings().frontend_origins[0]).rstrip("/")
     for row in rows:
         if row.status != "valid" or row.email is None:
@@ -245,9 +257,11 @@ async def commit_roster(
         existing_invitation = await db.scalar(
             select(MembershipInvitation.id).where(
                 MembershipInvitation.institution_id == institution_id,
-                MembershipInvitation.email == row.email,
-                MembershipInvitation.accepted_at.is_(None),
                 MembershipInvitation.revoked_at.is_(None),
+                or_(
+                    MembershipInvitation.email == row.email,
+                    MembershipInvitation.enrollment_id == row.enrollment_id,
+                ),
             )
         )
         if existing_user is not None or existing_invitation is not None:
@@ -306,6 +320,34 @@ async def commit_roster(
     return roster, tokens
 
 
+def invitation_status(
+    invitation: MembershipInvitation, *, now: datetime | None = None
+) -> Literal["pending", "expired", "accepted", "revoked"]:
+    if invitation.revoked_at is not None:
+        return "revoked"
+    if invitation.accepted_at is not None:
+        return "accepted"
+    current = now or datetime.now(UTC)
+    expires_at = (
+        invitation.expires_at
+        if invitation.expires_at.tzinfo
+        else invitation.expires_at.replace(tzinfo=UTC)
+    )
+    return "expired" if expires_at <= current else "pending"
+
+
+async def list_invitations(
+    db: AsyncSession, *, institution_id: UUID, limit: int = 100
+) -> list[MembershipInvitation]:
+    records = await db.scalars(
+        select(MembershipInvitation)
+        .where(MembershipInvitation.institution_id == institution_id)
+        .order_by(MembershipInvitation.created_at.desc(), MembershipInvitation.id)
+        .limit(limit)
+    )
+    return list(records.all())
+
+
 async def resend_invitation(
     db: AsyncSession,
     *,
@@ -315,12 +357,14 @@ async def resend_invitation(
     correlation_id: str | None,
 ) -> tuple[MembershipInvitation | None, str | None]:
     invitation = await db.scalar(
-        select(MembershipInvitation).where(
+        select(MembershipInvitation)
+        .where(
             MembershipInvitation.id == invitation_id,
             MembershipInvitation.institution_id == institution_id,
             MembershipInvitation.accepted_at.is_(None),
             MembershipInvitation.revoked_at.is_(None),
         )
+        .with_for_update()
     )
     if invitation is None:
         return None, None
@@ -356,3 +400,39 @@ async def resend_invitation(
     )
     await db.commit()
     return invitation, raw_token
+
+
+async def revoke_invitation(
+    db: AsyncSession,
+    *,
+    institution_id: UUID,
+    invitation_id: UUID,
+    actor_user_id: UUID,
+    reason: str,
+    correlation_id: str | None,
+) -> MembershipInvitation | None:
+    invitation = await db.scalar(
+        select(MembershipInvitation)
+        .where(
+            MembershipInvitation.id == invitation_id,
+            MembershipInvitation.institution_id == institution_id,
+            MembershipInvitation.accepted_at.is_(None),
+            MembershipInvitation.revoked_at.is_(None),
+        )
+        .with_for_update()
+    )
+    if invitation is None:
+        return None
+    invitation.revoked_at = datetime.now(UTC)
+    record_audit_event(
+        db,
+        actor_user_id=actor_user_id,
+        institution_id=institution_id,
+        event_type="invitation.revoked",
+        resource_type="membership_invitation",
+        resource_id=str(invitation.id),
+        correlation_id=correlation_id,
+        reason=reason,
+    )
+    await db.commit()
+    return invitation

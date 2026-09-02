@@ -5,6 +5,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
+def _reject_password_control_characters(value: str) -> str:
+    if any(ord(character) < 32 for character in value):
+        raise ValueError("Password cannot contain control characters")
+    return value
+
+
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
@@ -12,9 +18,7 @@ class SignupRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def reject_control_characters(cls, value: str) -> str:
-        if any(ord(character) < 32 for character in value):
-            raise ValueError("Password cannot contain control characters")
-        return value
+        return _reject_password_control_characters(value)
 
 
 class SignInRequest(BaseModel):
@@ -55,6 +59,11 @@ class InvitationAcceptRequest(BaseModel):
     terms_version: str = Field(min_length=1, max_length=64)
     privacy_version: str = Field(min_length=1, max_length=64)
 
+    @field_validator("password")
+    @classmethod
+    def reject_control_characters(cls, value: str) -> str:
+        return _reject_password_control_characters(value)
+
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
@@ -62,6 +71,11 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def reject_control_characters(cls, value: str) -> str:
+        return _reject_password_control_characters(value)
 
 
 class MfaCodeRequest(BaseModel):

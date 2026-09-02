@@ -1,9 +1,12 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.auth import UserRole
+
+InvitationStatus = Literal["pending", "expired", "accepted", "revoked"]
 
 
 class MembershipCreate(BaseModel):
@@ -70,3 +73,26 @@ class RosterImportSummary(BaseModel):
     invited_rows: int
     committed_at: datetime | None
     created_at: datetime
+
+
+class InvitationSummary(BaseModel):
+    id: UUID
+    email: EmailStr
+    enrollment_id: str | None
+    full_name: str | None
+    role: str
+    status: InvitationStatus
+    expires_at: datetime
+    resend_count: int
+    created_at: datetime
+
+
+class InvitationActionResponse(BaseModel):
+    id: UUID
+    status: InvitationStatus
+    expires_at: datetime
+    message: str
+
+
+class InvitationRevocationRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)

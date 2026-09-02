@@ -2342,6 +2342,42 @@
         "title": "InvitationAcceptRequest",
         "type": "object"
       },
+      "InvitationActionResponse": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "expired",
+              "accepted",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "expires_at",
+          "message"
+        ],
+        "title": "InvitationActionResponse",
+        "type": "object"
+      },
       "InvitationResponse": {
         "properties": {
           "email": {
@@ -2377,6 +2413,98 @@
           "expires_at"
         ],
         "title": "InvitationResponse",
+        "type": "object"
+      },
+      "InvitationRevocationRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "InvitationRevocationRequest",
+        "type": "object"
+      },
+      "InvitationSummary": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "enrollment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrollment Id"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "resend_count": {
+            "title": "Resend Count",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "expired",
+              "accepted",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "enrollment_id",
+          "full_name",
+          "role",
+          "status",
+          "expires_at",
+          "resend_count",
+          "created_at"
+        ],
+        "title": "InvitationSummary",
         "type": "object"
       },
       "LinksUpdate": {
@@ -2546,6 +2674,28 @@
           "recovery_codes"
         ],
         "title": "MfaConfirmResponse",
+        "type": "object"
+      },
+      "MfaDisableRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 32,
+            "minLength": 6,
+            "title": "Code",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "code"
+        ],
+        "title": "MfaDisableRequest",
         "type": "object"
       },
       "MfaSetupResponse": {
@@ -9333,6 +9483,58 @@
         ]
       }
     },
+    "/api/v1/auth/mfa/disable": {
+      "post": {
+        "operationId": "reset_mfa_factor_api_v1_auth_mfa_disable_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaDisableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Mfa Factor",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
     "/api/v1/auth/mfa/setup": {
       "post": {
         "operationId": "setup_mfa_api_v1_auth_mfa_setup_post",
@@ -9940,6 +10142,69 @@
         ]
       }
     },
+    "/api/v1/institutions/{institution_id}/invitations": {
+      "get": {
+        "operationId": "read_invitations_api_v1_institutions__institution_id__invitations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InvitationSummary"
+                  },
+                  "title": "Response Read Invitations Api V1 Institutions  Institution Id  Invitations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Invitations",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
     "/api/v1/institutions/{institution_id}/invitations/{invitation_id}/resend": {
       "post": {
         "operationId": "resend_membership_invitation_api_v1_institutions__institution_id__invitations__invitation_id__resend_post",
@@ -9986,11 +10251,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Resend Membership Invitation Api V1 Institutions  Institution Id  Invitations  Invitation Id  Resend Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/InvitationActionResponse"
                 }
               }
             },
@@ -10008,6 +10269,85 @@
           }
         },
         "summary": "Resend Membership Invitation",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/invitations/{invitation_id}/revoke": {
+      "post": {
+        "operationId": "revoke_membership_invitation_api_v1_institutions__institution_id__invitations__invitation_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationRevocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Membership Invitation",
         "tags": [
           "institution memberships"
         ]

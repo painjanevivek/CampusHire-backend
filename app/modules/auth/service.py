@@ -562,6 +562,59 @@ async def verify_mfa(db: AsyncSession, session: Session, code: str) -> bool:
     return recovery is not None
 
 
+async def disable_mfa(
+    db: AsyncSession,
+    *,
+    session: Session,
+    password: str,
+    code: str,
+    correlation_id: str | None,
+) -> None:
+    if not verify_password(session.user.password_hash, password):
+        raise InvalidCredentialsError
+    await verify_mfa(db, session, code)
+    enrollment = await db.scalar(
+        select(MfaEnrollment).where(
+            MfaEnrollment.user_id == session.user_id,
+            MfaEnrollment.enrolled_at.is_not(None),
+            MfaEnrollment.disabled_at.is_(None),
+        )
+    )
+    if enrollment is None:  # pragma: no cover - verify_mfa guarantees this state
+        raise InvalidMfaCodeError
+    now = datetime.now(UTC)
+    enrollment.disabled_at = now
+    enrollment.pending_encrypted_secret = None
+    enrollment.failed_attempts = 0
+    enrollment.locked_until = None
+    session.mfa_verified_at = None
+    await db.execute(delete(MfaRecoveryCode).where(MfaRecoveryCode.user_id == session.user_id))
+    await db.execute(
+        update(Session)
+        .where(
+            Session.user_id == session.user_id,
+            Session.id != session.id,
+            Session.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+    record_audit_event(
+        db,
+        actor_user_id=session.user_id,
+        institution_id=(
+            session.active_membership.institution_id
+            if session.active_membership is not None
+            else session.user.institution_id
+        ),
+        event_type="auth.mfa_disabled",
+        resource_type="user",
+        resource_id=str(session.user_id),
+        correlation_id=correlation_id,
+        reason="verified_factor_reset",
+    )
+    await db.commit()
+
+
 async def list_sessions(db: AsyncSession, user_id: UUID) -> list[Session]:
     records = await db.scalars(
         select(Session)

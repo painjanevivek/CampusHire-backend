@@ -20,6 +20,7 @@ from app.modules.auth.schemas import (
     InvitationResponse,
     MfaCodeRequest,
     MfaConfirmResponse,
+    MfaDisableRequest,
     MfaSetupResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
@@ -39,6 +40,7 @@ from app.modules.auth.service import (
     begin_mfa_setup,
     confirm_mfa_setup,
     confirm_password_reset,
+    disable_mfa,
     get_invitation,
     issue_password_reset,
     list_sessions,
@@ -384,6 +386,36 @@ async def challenge_mfa(payload: MfaCodeRequest, db: Database, session: CurrentS
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_mfa_code", "message": "The verification code is invalid."},
+        ) from None
+
+
+@router.post(
+    "/mfa/disable",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(verify_authenticated_csrf), Depends(enforce_auth_rate_limit)],
+)
+async def reset_mfa_factor(
+    payload: MfaDisableRequest,
+    request: Request,
+    db: Database,
+    session: CurrentSession,
+) -> None:
+    _require_admin_session(session)
+    try:
+        await disable_mfa(
+            db,
+            session=session,
+            password=payload.password,
+            code=payload.code,
+            correlation_id=request.state.correlation_id,
+        )
+    except (InvalidCredentialsError, InvalidMfaCodeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "mfa_reset_verification_failed",
+                "message": "The password or verification code is invalid.",
+            },
         ) from None
 
 

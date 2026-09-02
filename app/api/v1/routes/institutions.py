@@ -25,13 +25,19 @@ from app.modules.institutions.lifecycle import (
     ProvisionConflictError,
     commit_roster,
     get_roster_import,
+    invitation_status,
+    list_invitations,
     preview_roster,
     provision_institution,
     resend_invitation,
+    revoke_invitation,
 )
 from app.modules.institutions.schemas import (
     InstitutionProvisionRequest,
     InstitutionProvisionResponse,
+    InvitationActionResponse,
+    InvitationRevocationRequest,
+    InvitationSummary,
     MembershipCreate,
     MembershipResponse,
     MembershipStatusUpdate,
@@ -126,6 +132,30 @@ async def read_roster_imports(
         )
     ).all()
     return [RosterImportSummary.model_validate(item, from_attributes=True) for item in imports]
+
+
+@router.get("/invitations", response_model=list[InvitationSummary])
+async def read_invitations(
+    institution_id: UUID,
+    db: Database,
+    principal: InstitutionAdmin,
+) -> list[InvitationSummary]:
+    require_institution(principal, institution_id)
+    invitations = await list_invitations(db, institution_id=institution_id)
+    return [
+        InvitationSummary(
+            id=item.id,
+            email=item.email,
+            enrollment_id=item.enrollment_id,
+            full_name=item.full_name,
+            role=item.role,
+            status=invitation_status(item),
+            expires_at=item.expires_at,
+            resend_count=item.resend_count,
+            created_at=item.created_at,
+        )
+        for item in invitations
+    ]
 
 
 @router.post(
@@ -311,6 +341,7 @@ async def commit_roster_import(
 
 @router.post(
     "/invitations/{invitation_id}/resend",
+    response_model=InvitationActionResponse,
     dependencies=[Depends(verify_authenticated_csrf), Depends(require_recent_reauthentication)],
 )
 async def resend_membership_invitation(
@@ -319,7 +350,7 @@ async def resend_membership_invitation(
     request: Request,
     db: Database,
     principal: InstitutionAdmin,
-) -> dict[str, str]:
+) -> InvitationActionResponse:
     require_institution(principal, institution_id)
     invitation, token = await resend_invitation(
         db,
@@ -332,10 +363,46 @@ async def resend_membership_invitation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invitation was not found"
         )
-    return {
-        "message": "A replacement invitation was queued for delivery.",
-        "expires_at": invitation.expires_at.isoformat(),
-    }
+    return InvitationActionResponse(
+        id=invitation.id,
+        status=invitation_status(invitation),
+        expires_at=invitation.expires_at,
+        message="A replacement invitation was queued for delivery.",
+    )
+
+
+@router.post(
+    "/invitations/{invitation_id}/revoke",
+    response_model=InvitationActionResponse,
+    dependencies=[Depends(verify_authenticated_csrf), Depends(require_recent_reauthentication)],
+)
+async def revoke_membership_invitation(
+    institution_id: UUID,
+    invitation_id: UUID,
+    payload: InvitationRevocationRequest,
+    request: Request,
+    db: Database,
+    principal: InstitutionAdmin,
+) -> InvitationActionResponse:
+    require_institution(principal, institution_id)
+    invitation = await revoke_invitation(
+        db,
+        institution_id=institution_id,
+        invitation_id=invitation_id,
+        actor_user_id=principal.user.id,
+        reason=payload.reason,
+        correlation_id=request.state.correlation_id,
+    )
+    if invitation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invitation was not found"
+        )
+    return InvitationActionResponse(
+        id=invitation.id,
+        status="revoked",
+        expires_at=invitation.expires_at,
+        message="The invitation was revoked and can no longer be used.",
+    )
 
 
 @operator_router.post(
