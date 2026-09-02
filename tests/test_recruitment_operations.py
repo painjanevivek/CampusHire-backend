@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -11,6 +12,7 @@ from app.core.database import get_db
 from app.main import app
 from app.models import Base
 from app.models.auth import Institution, Session, User, UserRole
+from app.models.intelligence import PolicyDocument, ReviewStatus
 from app.models.profile import StudentProfile
 from app.models.recruitment import PlacementDrive
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
@@ -168,6 +170,7 @@ async def publish_sample_role(
     admin: User,
     *,
     include_missing_rule: bool,
+    policy_ids: list[UUID] | None = None,
 ):
     company = await create_company(
         db,
@@ -216,7 +219,11 @@ async def publish_sample_role(
             }
         )
     rule_set = await create_rule_set(
-        db, institution.id, role.id, admin.id, RuleSetCreate(rules=rules)
+        db,
+        institution.id,
+        role.id,
+        admin.id,
+        RuleSetCreate(rules=rules, policy_ids=policy_ids or []),
     )
     await publish_rule_set(db, institution.id, role.id, rule_set.id)
     await publish_role(db, institution.id, role.id)
@@ -361,8 +368,26 @@ async def test_missing_facts_require_review_and_same_snapshot_is_deterministic()
 async def test_application_is_idempotent_and_preserves_immutable_decision_inputs() -> None:
     async with TestSession() as db:
         institution, admin, student = await seed_people(db)
+        policy = PolicyDocument(
+            institution_id=institution.id,
+            title="Placement eligibility policy",
+            version=2,
+            source_reference="approved-policy-2026-v2.pdf",
+            sections=[{"section": "Eligibility", "page": 3, "text": "Reviewed criteria"}],
+            status=ReviewStatus.APPROVED.value,
+            created_by_user_id=admin.id,
+            reviewed_by_user_id=admin.id,
+            review_reason="Approved by the placement policy owner.",
+            approved_at=datetime.now(UTC),
+        )
+        db.add(policy)
+        await db.flush()
         role, rule_set = await publish_sample_role(
-            db, institution, admin, include_missing_rule=False
+            db,
+            institution,
+            admin,
+            include_missing_rule=False,
+            policy_ids=[policy.id],
         )
         resume = await db.scalar(select(ResumeVersion).where(ResumeVersion.user_id == student.id))
         assert resume is not None
@@ -378,7 +403,20 @@ async def test_application_is_idempotent_and_preserves_immutable_decision_inputs
         assert was_replayed
         assert replay.id == application.id
         assert application.rule_snapshot["version"] == rule_set.version
+        assert application.rule_snapshot["policy_references"] == [
+            {
+                "id": str(policy.id),
+                "title": policy.title,
+                "version": policy.version,
+                "source_reference": policy.source_reference,
+                "approved_at": policy.approved_at.isoformat(),
+            }
+        ]
         assert application.facts_snapshot["cgpa"] == 8.4
+
+        policy.status = ReviewStatus.RETIRED.value
+        await db.flush()
+        assert application.rule_snapshot["policy_references"][0]["version"] == 2
 
         profile = await db.scalar(
             select(StudentProfile).where(StudentProfile.user_id == student.id)
@@ -405,6 +443,49 @@ async def test_application_is_idempotent_and_preserves_immutable_decision_inputs
                 user_id=student.id,
                 version_id=resume.id,
                 store=StorageMustNotBeCalled(),  # type: ignore[arg-type]
+            )
+
+
+@pytest.mark.asyncio
+async def test_rule_policy_references_default_deny_other_institutions() -> None:
+    async with TestSession() as db:
+        institution, admin, _ = await seed_people(db, "policy-owner")
+        other_institution, other_admin, _ = await seed_people(db, "policy-other")
+        role, _ = await publish_sample_role(
+            db, institution, admin, include_missing_rule=False
+        )
+        foreign_policy = PolicyDocument(
+            institution_id=other_institution.id,
+            title="Other institution policy",
+            version=1,
+            source_reference="other-policy.pdf",
+            sections=[],
+            status=ReviewStatus.APPROVED.value,
+            created_by_user_id=other_admin.id,
+            reviewed_by_user_id=other_admin.id,
+            review_reason="Approved for another institution.",
+            approved_at=datetime.now(UTC),
+        )
+        db.add(foreign_policy)
+        await db.flush()
+
+        with pytest.raises(RecruitmentError, match="approved_policy_reference_not_found"):
+            await create_rule_set(
+                db,
+                institution.id,
+                role.id,
+                admin.id,
+                RuleSetCreate(
+                    rules=[
+                        {
+                            "field": "degree",
+                            "operator": "eq",
+                            "value": "B.Tech",
+                            "label": "Degree",
+                        }
+                    ],
+                    policy_ids=[foreign_policy.id],
+                ),
             )
 
 

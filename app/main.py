@@ -36,7 +36,13 @@ def create_app() -> FastAPI:
         allow_origins=[str(origin).rstrip("/") for origin in settings.frontend_origins],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID"],
+        allow_headers=[
+            "Accept",
+            "Content-Type",
+            "Idempotency-Key",
+            "X-CSRF-Token",
+            "X-Request-ID",
+        ],
     )
     application.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
     application.add_middleware(RequestBodyLimitMiddleware)

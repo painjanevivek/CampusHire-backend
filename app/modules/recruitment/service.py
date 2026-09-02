@@ -7,7 +7,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import Institution, User
-from app.models.intelligence import SemanticMatchEvidence
+from app.models.intelligence import PolicyDocument, ReviewStatus, SemanticMatchEvidence
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
@@ -494,11 +494,42 @@ def rule_set_response(rule_set: EligibilityRuleSet) -> RuleSetResponse:
         version=rule_set.version,
         status=rule_set.status,
         rules=list(rule_set.rules),
+        policy_references=list(rule_set.policy_references),
         created_by_user_id=rule_set.created_by_user_id,
         published_at=rule_set.published_at,
         created_at=rule_set.created_at,
         updated_at=rule_set.updated_at,
     )
+
+
+async def _approved_policy_references(
+    db: AsyncSession, institution_id: UUID, policy_ids: list[UUID]
+) -> list[dict[str, object]]:
+    if not policy_ids:
+        return []
+    policies = (
+        await db.scalars(
+            select(PolicyDocument).where(
+                PolicyDocument.institution_id == institution_id,
+                PolicyDocument.id.in_(policy_ids),
+                PolicyDocument.status == ReviewStatus.APPROVED.value,
+            )
+        )
+    ).all()
+    by_id = {item.id: item for item in policies}
+    if any(policy_id not in by_id for policy_id in policy_ids):
+        raise RecruitmentError("approved_policy_reference_not_found")
+    return [
+        {
+            "id": str(policy.id),
+            "title": policy.title,
+            "version": policy.version,
+            "source_reference": policy.source_reference,
+            "approved_at": policy.approved_at.isoformat() if policy.approved_at else None,
+        }
+        for policy_id in policy_ids
+        for policy in [by_id[policy_id]]
+    ]
 
 
 async def list_rule_sets(
@@ -522,7 +553,9 @@ async def create_rule_set(
     actor_user_id: UUID,
     payload: RuleSetCreate,
 ) -> EligibilityRuleSet:
-    await _owned_role(db, institution_id, role_id)
+    institution = _institution(institution_id)
+    await _owned_role(db, institution, role_id)
+    policy_references = await _approved_policy_references(db, institution, payload.policy_ids)
     version = (
         await db.scalar(
             select(func.max(EligibilityRuleSet.version)).where(
@@ -532,10 +565,11 @@ async def create_rule_set(
         or 0
     ) + 1
     item = EligibilityRuleSet(
-        institution_id=_institution(institution_id),
+        institution_id=institution,
         role_id=role_id,
         version=version,
         rules=[rule.model_dump(mode="json") for rule in payload.rules],
+        policy_references=policy_references,
         created_by_user_id=actor_user_id,
     )
     db.add(item)
@@ -562,6 +596,13 @@ async def publish_rule_set(
     if item.status != RuleSetStatus.DRAFT.value:
         raise RecruitmentError("rule_set_publish_transition_invalid")
     RuleSetCreate(rules=[Rule.model_validate(rule) for rule in item.rules])
+    policy_ids = [UUID(str(reference["id"])) for reference in item.policy_references]
+    if policy_ids:
+        current_references = await _approved_policy_references(
+            db, _institution(institution_id), policy_ids
+        )
+        if current_references != list(item.policy_references):
+            raise RecruitmentError("policy_reference_changed")
     previous = (
         await db.scalars(
             select(EligibilityRuleSet).where(
@@ -959,6 +1000,9 @@ async def create_application(
     payload: ApplicationCreate,
 ) -> tuple[Application, bool]:
     institution = _institution(institution_id)
+    await db.scalar(
+        select(User.id).where(User.id == student_user_id).with_for_update()
+    )
     existing_key = await db.scalar(
         select(Application).where(
             Application.institution_id == institution,
@@ -1054,6 +1098,7 @@ async def create_application(
             "id": str(rule_set.id),
             "version": rule_set.version,
             "rules": rule_set.rules,
+            "policy_references": rule_set.policy_references,
         },
         eligibility_snapshot=result,
         decision_snapshot={

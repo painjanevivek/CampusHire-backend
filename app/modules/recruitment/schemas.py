@@ -127,6 +127,22 @@ class RoleResponse(BaseModel):
 
 class RuleSetCreate(BaseModel):
     rules: list[Rule] = Field(min_length=1, max_length=40)
+    policy_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+    @field_validator("policy_ids")
+    @classmethod
+    def unique_policy_ids(cls, value: list[UUID]) -> list[UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("Policy references must be unique")
+        return value
+
+
+class RulePolicyReference(BaseModel):
+    id: UUID
+    title: str
+    version: int
+    source_reference: str
+    approved_at: datetime | None
 
 
 class RuleSetResponse(BaseModel):
@@ -135,6 +151,7 @@ class RuleSetResponse(BaseModel):
     version: int
     status: str
     rules: list[dict[str, object]]
+    policy_references: list[RulePolicyReference]
     created_by_user_id: UUID
     published_at: datetime | None
     created_at: datetime

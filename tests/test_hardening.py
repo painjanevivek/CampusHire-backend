@@ -18,6 +18,23 @@ def test_security_headers_are_present() -> None:
     assert response.headers["X-Frame-Options"] == "DENY"
 
 
+def test_application_idempotency_header_is_allowed_by_cors() -> None:
+    origin = str(get_settings().frontend_origins[0]).rstrip("/")
+    with TestClient(app) as client:
+        response = client.options(
+            "/api/v1/applications",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Idempotency-Key, X-CSRF-Token",
+            },
+        )
+    assert response.status_code == 200
+    allowed = response.headers["Access-Control-Allow-Headers"].casefold()
+    assert "idempotency-key" in allowed
+    assert "x-csrf-token" in allowed
+
+
 def test_ai_circuit_opens_without_blocking_core_domain() -> None:
     breaker = CircuitBreaker(failure_threshold=2)
     breaker.record_failure()

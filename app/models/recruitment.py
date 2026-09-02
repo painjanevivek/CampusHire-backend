@@ -101,6 +101,7 @@ class EligibilityRuleSet(Base, TimestampMixin):
     version: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(24), default=RuleSetStatus.DRAFT.value, index=True)
     rules: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    policy_references: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )

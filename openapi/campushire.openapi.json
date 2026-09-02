@@ -5239,8 +5239,59 @@
         "title": "Rule",
         "type": "object"
       },
+      "RulePolicyReference": {
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "source_reference": {
+            "title": "Source Reference",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "version",
+          "source_reference",
+          "approved_at"
+        ],
+        "title": "RulePolicyReference",
+        "type": "object"
+      },
       "RuleSetCreate": {
         "properties": {
+          "policy_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Policy Ids",
+            "type": "array"
+          },
           "rules": {
             "items": {
               "$ref": "#/components/schemas/Rule"
@@ -5273,6 +5324,13 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "policy_references": {
+            "items": {
+              "$ref": "#/components/schemas/RulePolicyReference"
+            },
+            "title": "Policy References",
+            "type": "array"
           },
           "published_at": {
             "anyOf": [
@@ -5319,6 +5377,7 @@
           "version",
           "status",
           "rules",
+          "policy_references",
           "created_by_user_id",
           "published_at",
           "created_at",
