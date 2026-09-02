@@ -2,8 +2,8 @@ import pymupdf
 
 from app.modules.resumes.builder import (
     ResumeContent,
+    evidence_digest,
     generate_pdf,
-    readiness_score,
     suggestion_is_supported,
 )
 
@@ -24,23 +24,28 @@ def content() -> ResumeContent:
 
 
 def test_generated_pdf_has_selectable_identity_and_links() -> None:
-    document = pymupdf.open(stream=generate_pdf(content()), filetype="pdf")
+    generated = generate_pdf(content())
+    document = pymupdf.open(stream=generated, filetype="pdf")
     assert "Asha Patil" in document[0].get_text()
     assert document[0].get_links()
+    assert document.metadata["producer"] == "CampusHire PDF Generator v1"
+    assert document.metadata["keywords"] == f"campushire-evidence-sha256:{evidence_digest(content())}"
+    assert "Evidence" in document[-1].get_text()
     document.close()
+    assert generated == generate_pdf(content())
 
 
-def test_readiness_rubric_is_componentized_and_versionable() -> None:
-    score, components = readiness_score(content())
-    assert score >= 85
-    assert set(components) == {
-        "identity",
-        "summary",
-        "skills",
-        "projects",
-        "education",
-        "evidence_links",
-    }
+def test_generated_pdf_paginates_without_clipping_reviewed_content() -> None:
+    long_content = content().model_copy(
+        update={
+            "projects": [f"Project {index}: " + "verified detail " * 45 for index in range(8)],
+            "education": ["Reviewed education evidence " * 20],
+        }
+    )
+    document = pymupdf.open(stream=generate_pdf(long_content), filetype="pdf")
+    assert 1 < document.page_count <= 3
+    assert "Project 7" in "".join(page.get_text() for page in document)
+    document.close()
 
 
 def test_suggestion_rejects_unsupported_achievement_claim() -> None:

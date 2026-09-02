@@ -20,6 +20,7 @@ from app.modules.engagement.schemas import (
     ActivationStage,
     DashboardEvidence,
     DashboardOpportunity,
+    DashboardReadinessSummary,
     DashboardResponse,
     NextAction,
     NotificationCreate,
@@ -487,14 +488,7 @@ async def dashboard(
         and isinstance(reviewed.extracted_data, dict)
         and reviewed.extracted_data.get("projects")
     )
-    components = [
-        identity_complete,
-        bool(profile and profile.skills),
-        bool(reviewed),
-        project_evidence,
-        roadmap is not None,
-    ]
-    readiness = round(sum(components) / len(components) * 100)
+    readiness_evidence = [identity_complete, bool(reviewed), project_evidence, roadmap is not None]
     if not identity_complete:
         action = NextAction(
             key="complete_profile",
@@ -683,7 +677,12 @@ async def dashboard(
             if user
             else "Student"
         ),
-        readiness=readiness,
+        readiness=DashboardReadinessSummary(
+            policy_version=READINESS_POLICY_VERSION,
+            completed_evidence=sum(readiness_evidence),
+            total_evidence=len(readiness_evidence),
+            required_complete=identity_complete and bool(reviewed),
+        ),
         state=state,
         next_action=action,
         activation=activation,

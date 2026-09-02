@@ -18,11 +18,18 @@ from app.models.resume import (
     ScanStatus,
     SuggestionStatus,
 )
-from app.modules.resumes.builder import ResumeContent, generate_pdf, suggestion_is_supported
+from app.modules.resumes.builder import (
+    ResumeBuildError,
+    ResumeContent,
+    evidence_digest,
+    generate_pdf,
+    suggestion_is_supported,
+)
 from app.modules.resumes.pipeline import RETRYABLE_ERRORS, record_job_event
 from app.modules.resumes.schemas import (
     ExtractionReviewRequest,
     ResumeJobResponse,
+    ResumePipelineStage,
     ResumeSuggestionResponse,
     ResumeUploadResponse,
     ResumeVersionResponse,
@@ -61,7 +68,29 @@ async def _next_version_number(
     return resume, resume.latest_version_number
 
 
-def _job_response(job: ResumeProcessingJob | None) -> ResumeJobResponse | None:
+def _pipeline_stage(
+    version: ResumeVersion, job: ResumeProcessingJob | None
+) -> ResumePipelineStage:
+    if version.status == ResumeStatus.CANCELLED.value:
+        return "cancelled"
+    if version.status == ResumeStatus.FAILED.value:
+        return "failed"
+    if version.status == ResumeStatus.REVIEW_REQUIRED.value:
+        return "review"
+    if version.status == ResumeStatus.COMPLETED.value:
+        return "generated" if version.source == ResumeSource.GENERATED.value else "ready"
+    if version.scan_status == ScanStatus.FAILED.value:
+        return "scan_retry"
+    if version.scan_status == ScanStatus.QUARANTINED.value:
+        return "scanning" if job and job.status == JobStatus.PROCESSING.value else "quarantined"
+    if job and job.status == JobStatus.QUEUED.value and job.safe_error_code:
+        return "parser_retry"
+    return "parsing"
+
+
+def _job_response(
+    job: ResumeProcessingJob | None, version: ResumeVersion
+) -> ResumeJobResponse | None:
     if job is None:
         return None
     return ResumeJobResponse(
@@ -81,6 +110,7 @@ def _job_response(job: ResumeProcessingJob | None) -> ResumeJobResponse | None:
         started_at=job.started_at,
         finished_at=job.finished_at,
         duration_ms=job.duration_ms,
+        stage=_pipeline_stage(version, job),
     )
 
 
@@ -95,9 +125,13 @@ def to_response(version: ResumeVersion) -> ResumeVersionResponse:
         page_count=version.page_count,
         created_at=version.created_at,
         review_completed_at=version.review_completed_at,
+        review_revision=version.review_revision,
+        evidence_digest=str(version.extracted_data.get("evidence_digest") or version.checksum),
+        generator_version=version.extracted_data.get("generator_version"),
+        processing_stage=_pipeline_stage(version, version.processing_job),
         safe_error_code=version.safe_error_code,
         extracted_data=version.extracted_data,
-        job=_job_response(version.processing_job),
+        job=_job_response(version.processing_job, version),
         suggestions=[
             ResumeSuggestionResponse(
                 id=item.id,
@@ -193,7 +227,10 @@ async def create_generated_version(
     store: ObjectStore,
     settings: Settings,
 ) -> ResumeVersion:
-    data = generate_pdf(content)
+    try:
+        data = generate_pdf(content)
+    except ResumeBuildError as error:
+        raise ResumeWorkflowError(str(error)) from error
     checksum = hashlib.sha256(data).hexdigest()
     existing = await get_owned_version_by_checksum(db, user_id, checksum)
     if existing is not None:
@@ -220,7 +257,11 @@ async def create_generated_version(
             scan_status=ScanStatus.CLEAN.value,
             scan_engine="campushire-generator-v1",
             scanned_at=datetime.now(UTC),
-            extracted_data={"accepted": content.model_dump(mode="json")},
+            extracted_data={
+                "accepted": content.model_dump(mode="json"),
+                "evidence_digest": evidence_digest(content),
+                "generator_version": "campushire-generator-v1",
+            },
             review_completed_at=datetime.now(UTC),
             created_at=datetime.now(UTC),
         )
@@ -249,8 +290,10 @@ async def get_owned_version_by_checksum(
     return version
 
 
-async def get_owned_version(db: AsyncSession, user_id: UUID, version_id: UUID) -> ResumeVersion:
-    version = await db.scalar(
+async def get_owned_version(
+    db: AsyncSession, user_id: UUID, version_id: UUID, *, lock: bool = False
+) -> ResumeVersion:
+    query = (
         select(ResumeVersion)
         .options(
             selectinload(ResumeVersion.processing_job), selectinload(ResumeVersion.suggestions)
@@ -258,6 +301,9 @@ async def get_owned_version(db: AsyncSession, user_id: UUID, version_id: UUID) -
         .execution_options(populate_existing=True)
         .where(ResumeVersion.id == version_id, ResumeVersion.user_id == user_id)
     )
+    if lock:
+        query = query.with_for_update()
+    version = await db.scalar(query)
     if version is None:
         raise ResumeWorkflowError("resume_not_found")
     return version
@@ -296,6 +342,11 @@ def _finish_review_if_complete(version: ResumeVersion) -> None:
         version.review_completed_at = datetime.now(UTC)
 
 
+def _require_review_revision(version: ResumeVersion, expected_revision: int) -> None:
+    if version.review_revision != expected_revision:
+        raise ResumeWorkflowError("resume_review_revision_conflict")
+
+
 async def review_extraction(
     db: AsyncSession,
     *,
@@ -303,9 +354,10 @@ async def review_extraction(
     version_id: UUID,
     payload: ExtractionReviewRequest,
 ) -> ResumeVersion:
-    version = await get_owned_version(db, user_id, version_id)
+    version = await get_owned_version(db, user_id, version_id, lock=True)
     if version.status != ResumeStatus.REVIEW_REQUIRED.value:
         raise ResumeWorkflowError("resume_not_ready_for_review")
+    _require_review_revision(version, payload.expected_revision)
     proposed = version.extracted_data.get("proposed", {})
     current = dict(version.extracted_data.get("decisions", {}))
     if not isinstance(proposed, dict):
@@ -318,6 +370,7 @@ async def review_extraction(
         value = decision.value if decision.action == "edit" else proposed[decision.field_path]
         current[decision.field_path] = {"action": decision.action, "value": value}
     version.extracted_data = {**version.extracted_data, "decisions": current}
+    version.review_revision += 1
     _finish_review_if_complete(version)
     await db.commit()
     return await get_owned_version(db, user_id, version_id)
@@ -331,7 +384,8 @@ async def decide_suggestion(
     suggestion_id: UUID,
     payload: SuggestionDecisionRequest,
 ) -> ResumeVersion:
-    version = await get_owned_version(db, user_id, version_id)
+    version = await get_owned_version(db, user_id, version_id, lock=True)
+    _require_review_revision(version, payload.expected_revision)
     suggestion = next((item for item in version.suggestions if item.id == suggestion_id), None)
     if suggestion is None:
         raise ResumeWorkflowError("resume_suggestion_not_found")
@@ -355,6 +409,7 @@ async def decide_suggestion(
         suggestion.status = SuggestionStatus.REJECTED.value
         suggestion.decided_text = None
     suggestion.decided_at = datetime.now(UTC)
+    version.review_revision += 1
     _finish_review_if_complete(version)
     await db.commit()
     return await get_owned_version(db, user_id, version_id)
@@ -367,9 +422,10 @@ async def review_suggestions_batch(
     version_id: UUID,
     payload: SuggestionReviewBatch,
 ) -> ResumeVersion:
-    version = await get_owned_version(db, user_id, version_id)
+    version = await get_owned_version(db, user_id, version_id, lock=True)
     if version.status != ResumeStatus.REVIEW_REQUIRED.value:
         raise ResumeWorkflowError("resume_not_ready_for_review")
+    _require_review_revision(version, payload.expected_revision)
     suggestions = {item.id: item for item in version.suggestions}
     for decision in payload.decisions:
         suggestion = suggestions.get(decision.suggestion_id)
@@ -400,6 +456,7 @@ async def review_suggestions_batch(
             suggestion.status = SuggestionStatus.REJECTED.value
             suggestion.decided_text = None
         suggestion.decided_at = now
+    version.review_revision += 1
     _finish_review_if_complete(version)
     await db.commit()
     return await get_owned_version(db, user_id, version_id)

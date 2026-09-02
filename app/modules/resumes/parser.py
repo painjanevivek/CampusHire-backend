@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Literal, Protocol
 from uuid import uuid4
@@ -107,11 +108,24 @@ class SubprocessPdfParser:
     def __init__(self, *, timeout_seconds: float) -> None:
         self.timeout_seconds = timeout_seconds
         self.runtime_script = Path(__file__).resolve().parents[3] / "parser_runtime" / "main.py"
+        dependency = find_spec("pymupdf")
+        if dependency is None or dependency.origin is None:
+            raise ParserUnavailableError("resume_parser_dependency_unavailable")
+        self.dependency_root = Path(dependency.origin).resolve().parents[1]
 
-    def parse(self, data: bytes, *, max_bytes: int, max_pages: int) -> ParsedResume:
-        command = [
+    def create_command(self, *, max_bytes: int, max_pages: int) -> list[str]:
+        bootstrap = (
+            "import runpy,sys;"
+            "dependency=sys.argv[1];runtime=sys.argv[2];"
+            "sys.path.insert(0,dependency);sys.argv=sys.argv[2:];"
+            "runpy.run_path(runtime,run_name='__main__')"
+        )
+        return [
             sys.executable,
             "-I",
+            "-c",
+            bootstrap,
+            str(self.dependency_root),
             str(self.runtime_script),
             "--max-bytes",
             str(max_bytes),
@@ -122,6 +136,9 @@ class SubprocessPdfParser:
             "--output",
             "-",
         ]
+
+    def parse(self, data: bytes, *, max_bytes: int, max_pages: int) -> ParsedResume:
+        command = self.create_command(max_bytes=max_bytes, max_pages=max_pages)
         try:
             result = subprocess.run(  # noqa: S603 - fixed interpreter and repository script
                 command,

@@ -4,6 +4,19 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+ResumePipelineStage = Literal[
+    "quarantined",
+    "scanning",
+    "scan_retry",
+    "parsing",
+    "parser_retry",
+    "review",
+    "generated",
+    "ready",
+    "failed",
+    "cancelled",
+]
+
 
 class ResumeJobResponse(BaseModel):
     id: UUID
@@ -16,6 +29,7 @@ class ResumeJobResponse(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     duration_ms: int | None
+    stage: ResumePipelineStage
 
 
 class ResumeSuggestionResponse(BaseModel):
@@ -38,6 +52,10 @@ class ResumeVersionResponse(BaseModel):
     page_count: int | None
     created_at: datetime
     review_completed_at: datetime | None
+    review_revision: int
+    evidence_digest: str
+    generator_version: str | None
+    processing_stage: ResumePipelineStage
     safe_error_code: str | None
     locked_by_application: bool = False
     extracted_data: dict[str, Any] = Field(default_factory=dict)
@@ -67,15 +85,16 @@ class ExtractionFieldDecision(BaseModel):
 
 
 class ExtractionReviewRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
     decisions: list[ExtractionFieldDecision] = Field(min_length=1, max_length=50)
 
 
-class SuggestionDecisionRequest(BaseModel):
+class SuggestionDecision(BaseModel):
     action: Literal["accept", "edit", "reject"]
     edited_text: str | None = Field(default=None, min_length=1, max_length=2_000)
 
     @model_validator(mode="after")
-    def edited_text_is_required(self) -> "SuggestionDecisionRequest":
+    def edited_text_is_required(self) -> "SuggestionDecision":
         if self.action == "edit" and not self.edited_text:
             raise ValueError("Edited suggestions require text")
         if self.action != "edit" and self.edited_text is not None:
@@ -83,11 +102,16 @@ class SuggestionDecisionRequest(BaseModel):
         return self
 
 
-class SuggestionBatchItem(SuggestionDecisionRequest):
+class SuggestionDecisionRequest(SuggestionDecision):
+    expected_revision: int = Field(ge=0)
+
+
+class SuggestionBatchItem(SuggestionDecision):
     suggestion_id: UUID
 
 
 class SuggestionReviewBatch(BaseModel):
+    expected_revision: int = Field(ge=0)
     decisions: list[SuggestionBatchItem] = Field(min_length=1, max_length=50)
 
     @model_validator(mode="after")

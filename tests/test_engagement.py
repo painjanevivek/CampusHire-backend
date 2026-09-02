@@ -179,6 +179,10 @@ async def test_dashboard_returns_exactly_one_explainable_next_action() -> None:
         assert response.next_action.source_facts == ["required_profile_facts_incomplete"]
         assert response.next_action.estimated_minutes == 8
         assert response.next_action.unlocks == "Role-specific eligibility checks"
+        assert response.readiness.policy_version == "readiness-v1"
+        assert response.readiness.completed_evidence == 0
+        assert response.readiness.total_evidence == 4
+        assert response.readiness.required_complete is False
         assert [stage.key for stage in response.activation] == [
             "account_activated",
             "profile_minimum",

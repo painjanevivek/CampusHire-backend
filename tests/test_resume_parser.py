@@ -134,6 +134,10 @@ def test_privileged_worker_path_has_no_native_parser_sink() -> None:
 
 def test_subprocess_parser_preserves_valid_and_invalid_document_behavior() -> None:
     parser = SubprocessPdfParser(timeout_seconds=10)
+    command = parser.create_command(max_bytes=5_000_000, max_pages=3)
+    assert command[1:3] == ["-I", "-c"]
+    assert "PYTHONPATH" not in _minimal_subprocess_environment()
+    assert str(parser.runtime_script) in command
     parsed = parser.parse(sample_pdf(), max_bytes=5_000_000, max_pages=3)
     assert parsed.page_count == 1
     assert "Sandboxed resume page 1" in parsed.text

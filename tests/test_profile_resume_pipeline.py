@@ -24,6 +24,7 @@ from app.modules.auth.security import hash_password, hash_secret
 from app.modules.profiles.schemas import IdentityUpdate
 from app.modules.profiles.service import ProfileConflictError, get_or_create, update_profile
 from app.modules.resumes.builder import ResumeContent
+from app.modules.resumes.parser import ParsedResume
 from app.modules.resumes.pipeline import claim_next_job, process_job, recover_stale_jobs
 from app.modules.resumes.scanner import MarkerScanner, ScannerUnavailableError, ScanResult
 from app.modules.resumes.schemas import (
@@ -129,6 +130,20 @@ class UnavailableScanner:
         raise ScannerUnavailableError("resume_scan_unavailable")
 
 
+class DeterministicParser:
+    def parse(self, data: bytes, *, max_bytes: int, max_pages: int) -> ParsedResume:
+        assert len(data) <= max_bytes
+        document = pymupdf.open(stream=data, filetype="pdf")
+        try:
+            assert document.page_count <= max_pages
+            return ParsedResume(
+                page_count=document.page_count,
+                text="\n".join(document[index].get_text() for index in range(document.page_count)),
+            )
+        finally:
+            document.close()
+
+
 @pytest.mark.asyncio
 async def test_profile_revisions_prevent_lost_updates() -> None:
     async with TestSession() as db:
@@ -161,6 +176,7 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
         app_env="test",
         database_url="sqlite+aiosqlite://",
         resume_storage_path=str(tmp_path / "resumes"),
+        resume_parser_backend="subprocess",
     )
     store = LocalObjectStore(settings.resume_storage_path)
     async with TestSession() as db:
@@ -187,7 +203,14 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
         await db.commit()
         assert await recover_stale_jobs(db, stale_after_seconds=1) == 1
         assert await claim_next_job(db) == job_id
-        await process_job(db, job_id, store=store, scanner=MarkerScanner(), settings=settings)
+        await process_job(
+            db,
+            job_id,
+            store=store,
+            scanner=MarkerScanner(),
+            parser=DeterministicParser(),
+            settings=settings,
+        )
 
         version = await get_owned_version(db, user.id, uploaded.id)
         assert version.status == ResumeStatus.REVIEW_REQUIRED.value
@@ -204,7 +227,7 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
             db,
             user_id=user.id,
             version_id=version.id,
-            payload=ExtractionReviewRequest(decisions=decisions),
+            payload=ExtractionReviewRequest(expected_revision=0, decisions=decisions),
         )
         suggestion = version.suggestions[0]
         with pytest.raises(ResumeWorkflowError, match="resume_suggestion_unsupported_claim"):
@@ -214,7 +237,9 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
                 version_id=version.id,
                 suggestion_id=suggestion.id,
                 payload=SuggestionDecisionRequest(
-                    action="edit", edited_text="Increased conversion by 40%"
+                    expected_revision=1,
+                    action="edit",
+                    edited_text="Increased conversion by 40%",
                 ),
             )
 
@@ -223,6 +248,7 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
             user_id=user.id,
             version_id=version.id,
             payload=SuggestionReviewBatch(
+                expected_revision=1,
                 decisions=[
                     SuggestionBatchItem(
                         suggestion_id=suggestion.id,
@@ -238,7 +264,60 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
                 db,
                 user_id=user.id,
                 version_id=version.id,
-                payload=ExtractionReviewRequest(decisions=decisions),
+                payload=ExtractionReviewRequest(expected_revision=2, decisions=decisions),
+            )
+
+
+@pytest.mark.asyncio
+async def test_resume_review_revision_rejects_stale_tab_updates(tmp_path: Path) -> None:
+    settings = Settings(
+        app_env="test",
+        database_url="sqlite+aiosqlite://",
+        resume_storage_path=str(tmp_path / "resumes"),
+        resume_parser_backend="subprocess",
+    )
+    store = LocalObjectStore(settings.resume_storage_path)
+    async with TestSession() as db:
+        user = await create_user(db, "review-conflict@example.edu")
+        uploaded = await create_uploaded_version(
+            db,
+            user_id=user.id,
+            institution_id=None,
+            data=sample_resume_pdf(),
+            filename="resume.pdf",
+            content_type="application/pdf",
+            store=store,
+            settings=settings,
+        )
+        assert uploaded.job_id is not None
+        await process_job(
+            db,
+            uploaded.job_id,
+            store=store,
+            scanner=MarkerScanner(),
+            parser=DeterministicParser(),
+            settings=settings,
+        )
+        version = await get_owned_version(db, user.id, uploaded.id)
+        fields = list(version.extracted_data["proposed"])
+        await review_extraction(
+            db,
+            user_id=user.id,
+            version_id=version.id,
+            payload=ExtractionReviewRequest(
+                expected_revision=0,
+                decisions=[ExtractionFieldDecision(field_path=fields[0], action="accept")],
+            ),
+        )
+        with pytest.raises(ResumeWorkflowError, match="resume_review_revision_conflict"):
+            await review_extraction(
+                db,
+                user_id=user.id,
+                version_id=version.id,
+                payload=ExtractionReviewRequest(
+                    expected_revision=0,
+                    decisions=[ExtractionFieldDecision(field_path=fields[-1], action="reject")],
+                ),
             )
 
 
@@ -248,6 +327,7 @@ async def test_generated_versions_are_immutable_and_ownership_scoped(tmp_path: P
         app_env="test",
         database_url="sqlite+aiosqlite://",
         resume_storage_path=str(tmp_path / "resumes"),
+        resume_parser_backend="subprocess",
     )
     store = LocalObjectStore(settings.resume_storage_path)
     async with TestSession() as db:
@@ -286,6 +366,7 @@ async def test_scanner_outage_retries_without_losing_the_authoritative_job(
         app_env="test",
         database_url="sqlite+aiosqlite://",
         resume_storage_path=str(tmp_path / "retry-resumes"),
+        resume_parser_backend="subprocess",
     )
     store = LocalObjectStore(settings.resume_storage_path)
     async with TestSession() as db:
@@ -314,7 +395,14 @@ async def test_scanner_outage_retries_without_losing_the_authoritative_job(
         assert retrying.processing_job is not None
         assert retrying.processing_job.safe_error_code == "resume_scan_unavailable"
 
-        await process_job(db, job_id, store=store, scanner=MarkerScanner(), settings=settings)
+        await process_job(
+            db,
+            job_id,
+            store=store,
+            scanner=MarkerScanner(),
+            parser=DeterministicParser(),
+            settings=settings,
+        )
         recovered = await get_owned_version(db, user.id, uploaded.id)
         assert recovered.status == ResumeStatus.REVIEW_REQUIRED.value
         assert recovered.scan_status == ScanStatus.CLEAN.value
@@ -352,6 +440,7 @@ async def test_resume_download_route_fails_closed_for_another_student(
                 job_id,
                 store=LocalObjectStore(settings.resume_storage_path),
                 scanner=MarkerScanner(),
+                parser=DeterministicParser(),
                 settings=settings,
             )
 

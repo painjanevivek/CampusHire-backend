@@ -1099,6 +1099,36 @@
         "title": "DashboardOpportunity",
         "type": "object"
       },
+      "DashboardReadinessSummary": {
+        "properties": {
+          "completed_evidence": {
+            "minimum": 0.0,
+            "title": "Completed Evidence",
+            "type": "integer"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "required_complete": {
+            "title": "Required Complete",
+            "type": "boolean"
+          },
+          "total_evidence": {
+            "minimum": 1.0,
+            "title": "Total Evidence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policy_version",
+          "completed_evidence",
+          "total_evidence",
+          "required_complete"
+        ],
+        "title": "DashboardReadinessSummary",
+        "type": "object"
+      },
       "DashboardResponse": {
         "properties": {
           "activation": {
@@ -1126,8 +1156,7 @@
             "type": "array"
           },
           "readiness": {
-            "title": "Readiness",
-            "type": "integer"
+            "$ref": "#/components/schemas/DashboardReadinessSummary"
           },
           "roadmap": {
             "anyOf": [
@@ -2078,9 +2107,15 @@
             "minItems": 1,
             "title": "Decisions",
             "type": "array"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
           }
         },
         "required": [
+          "expected_revision",
           "decisions"
         ],
         "title": "ExtractionReviewRequest",
@@ -3858,6 +3893,8 @@
         "properties": {
           "education": {
             "items": {
+              "maxLength": 800,
+              "minLength": 1,
               "type": "string"
             },
             "maxItems": 6,
@@ -3913,6 +3950,8 @@
           },
           "projects": {
             "items": {
+              "maxLength": 1200,
+              "minLength": 1,
               "type": "string"
             },
             "maxItems": 10,
@@ -3921,6 +3960,8 @@
           },
           "skills": {
             "items": {
+              "maxLength": 120,
+              "minLength": 1,
               "type": "string"
             },
             "maxItems": 40,
@@ -4239,6 +4280,22 @@
             ],
             "title": "Safe Error Code"
           },
+          "stage": {
+            "enum": [
+              "quarantined",
+              "scanning",
+              "scan_retry",
+              "parsing",
+              "parser_retry",
+              "review",
+              "generated",
+              "ready",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -4266,7 +4323,8 @@
           "cancellable",
           "started_at",
           "finished_at",
-          "duration_ms"
+          "duration_ms",
+          "stage"
         ],
         "title": "ResumeJobResponse",
         "type": "object"
@@ -4383,10 +4441,25 @@
             "title": "Created At",
             "type": "string"
           },
+          "evidence_digest": {
+            "title": "Evidence Digest",
+            "type": "string"
+          },
           "extracted_data": {
             "additionalProperties": true,
             "title": "Extracted Data",
             "type": "object"
+          },
+          "generator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Version"
           },
           "id": {
             "format": "uuid",
@@ -4423,6 +4496,22 @@
             ],
             "title": "Page Count"
           },
+          "processing_stage": {
+            "enum": [
+              "quarantined",
+              "scanning",
+              "scan_retry",
+              "parsing",
+              "parser_retry",
+              "review",
+              "generated",
+              "ready",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Processing Stage",
+            "type": "string"
+          },
           "review_completed_at": {
             "anyOf": [
               {
@@ -4434,6 +4523,10 @@
               }
             ],
             "title": "Review Completed At"
+          },
+          "review_revision": {
+            "title": "Review Revision",
+            "type": "integer"
           },
           "safe_error_code": {
             "anyOf": [
@@ -4487,6 +4580,10 @@
           "page_count",
           "created_at",
           "review_completed_at",
+          "review_revision",
+          "evidence_digest",
+          "generator_version",
+          "processing_stage",
           "safe_error_code"
         ],
         "title": "ResumeVersionResponse",
@@ -5835,10 +5932,16 @@
               }
             ],
             "title": "Edited Text"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
           }
         },
         "required": [
-          "action"
+          "action",
+          "expected_revision"
         ],
         "title": "SuggestionDecisionRequest",
         "type": "object"
@@ -5853,9 +5956,15 @@
             "minItems": 1,
             "title": "Decisions",
             "type": "array"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
           }
         },
         "required": [
+          "expected_revision",
           "decisions"
         ],
         "title": "SuggestionReviewBatch",

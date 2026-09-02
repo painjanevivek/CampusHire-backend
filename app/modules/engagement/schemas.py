@@ -97,6 +97,13 @@ class DashboardEvidence(BaseModel):
     status: Literal["verified", "pending", "review"]
 
 
+class DashboardReadinessSummary(BaseModel):
+    policy_version: str
+    completed_evidence: int = Field(ge=0)
+    total_evidence: int = Field(ge=1)
+    required_complete: bool
+
+
 class DashboardOpportunity(BaseModel):
     id: UUID
     company: str
@@ -109,7 +116,7 @@ class DashboardOpportunity(BaseModel):
 
 class DashboardResponse(BaseModel):
     student_name: str
-    readiness: int
+    readiness: DashboardReadinessSummary
     state: Literal["ready", "incomplete", "processing", "manual-review", "ai-unavailable"]
     next_action: NextAction
     activation: list[ActivationStage]

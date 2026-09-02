@@ -94,6 +94,7 @@ class ResumeVersion(Base):
     page_count: Mapped[int | None] = mapped_column(nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    review_revision: Mapped[int] = mapped_column(Integer, default=0)
     review_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
