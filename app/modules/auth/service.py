@@ -92,7 +92,13 @@ async def authenticate(
     ttl_hours: int,
     device_summary: str | None,
     required_role: str | None = None,
+    demo_mfa_bypass: bool = False,
 ) -> AuthenticatedSession:
+    settings = get_settings()
+    if demo_mfa_bypass and (
+        not settings.is_development or not settings.demo_login_enabled
+    ):
+        raise ValueError("Demo MFA bypass is unavailable outside an enabled local demo")
     normalized = normalize_email(email)
     user = await db.scalar(select(User).where(User.email == normalized, User.is_active.is_(True)))
     now = datetime.now(UTC)
@@ -116,7 +122,6 @@ async def authenticate(
         await db.commit()
         raise InvalidCredentialsError
     if not verify_password(user.password_hash, password):
-        settings = get_settings()
         user.failed_login_count += 1
         if user.failed_login_count >= settings.auth_lockout_attempts:
             user.locked_until = now + timedelta(minutes=settings.auth_lockout_minutes)
@@ -151,6 +156,7 @@ async def authenticate(
     if required_role is not None and effective_role != required_role:
         raise InvalidCredentialsError
     requires_mfa = effective_role in ADMIN_ROLE_VALUES
+    bypasses_mfa = requires_mfa and demo_mfa_bypass
     enrollment = await db.scalar(
         select(MfaEnrollment).where(
             MfaEnrollment.user_id == user.id,
@@ -159,7 +165,7 @@ async def authenticate(
         )
     )
     next_step = "complete"
-    if requires_mfa:
+    if requires_mfa and not bypasses_mfa:
         next_step = "mfa_challenge" if enrollment is not None else "mfa_setup"
     session = Session(
         user_id=user.id,
@@ -169,7 +175,7 @@ async def authenticate(
         expires_at=now + timedelta(hours=ttl_hours),
         last_activity_at=now,
         device_summary=(device_summary or "")[:200] or None,
-        mfa_verified_at=None if requires_mfa else now,
+        mfa_verified_at=None if requires_mfa and not bypasses_mfa else now,
     )
     user.failed_login_count = 0
     user.locked_until = None
@@ -184,6 +190,18 @@ async def authenticate(
         resource_type="session",
         resource_id=str(session.id),
     )
+    if bypasses_mfa:
+        record_audit_event(
+            db,
+            actor_user_id=user.id,
+            institution_id=(
+                membership.institution_id if membership is not None else user.institution_id
+            ),
+            event_type="auth.demo_mfa_bypass",
+            resource_type="session",
+            resource_id=str(session.id),
+            reason="development_demo_only",
+        )
     await db.commit()
     return AuthenticatedSession(
         user=user,

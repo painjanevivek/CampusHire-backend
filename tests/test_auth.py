@@ -149,12 +149,13 @@ async def test_demo_login_is_hidden_when_disabled(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "demo_login_unavailable"
 
 
-async def test_demo_login_uses_server_credentials_and_preserves_admin_mfa(
+async def test_demo_login_uses_server_credentials_and_can_bypass_admin_mfa_locally(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    await seed_institution_memberships()
+    _, _, demo_admin, _ = await seed_institution_memberships()
     with monkeypatch.context() as patch:
         patch.setenv("DEMO_LOGIN_ENABLED", "true")
+        patch.setenv("DEMO_ADMIN_MFA_BYPASS", "true")
         patch.setenv("DEMO_STUDENT_EMAIL", "student@campus-a.edu")
         patch.setenv("DEMO_STUDENT_PASSWORD", "a secure student passphrase")
         patch.setenv("DEMO_ADMIN_EMAIL", "admin@campus-a.edu")
@@ -178,7 +179,35 @@ async def test_demo_login_uses_server_credentials_and_preserves_admin_mfa(
         )
         assert admin.status_code == 200, admin.text
         assert admin.json()["user"]["role"] == "tnp_admin"
-        assert admin.json()["next_step"] == "mfa_setup"
+        assert admin.json()["next_step"] == "complete"
+        assert client.get("/api/v1/auth/me").status_code == 200
+        async with TestSession() as db:
+            session = await db.scalar(
+                select(Session).where(Session.user_id == demo_admin.id)
+            )
+            assert session is not None
+            assert session.mfa_verified_at is not None
+            events = list(
+                (
+                    await db.scalars(
+                        select(AuditEvent).where(
+                            AuditEvent.event_type == "auth.demo_mfa_bypass"
+                        )
+                    )
+                ).all()
+            )
+            assert len(events) == 1
+
+        patch.setenv("DEMO_ADMIN_MFA_BYPASS", "false")
+        get_settings.cache_clear()
+        client.cookies.clear()
+        protected_admin = client.post(
+            "/api/v1/auth/demo-sign-in",
+            headers=csrf_headers(client),
+            json={"role": "tnp_admin"},
+        )
+        assert protected_admin.status_code == 200, protected_admin.text
+        assert protected_admin.json()["next_step"] == "mfa_setup"
     get_settings.cache_clear()
 
 
@@ -192,6 +221,11 @@ async def test_demo_login_configuration_is_rejected_outside_development() -> Non
             demo_admin_email="admin+demo@example.com",
             demo_admin_password="a synthetic administrator passphrase",  # noqa: S106
         )
+
+
+async def test_demo_admin_mfa_bypass_requires_demo_login() -> None:
+    with pytest.raises(ValueError, match="requires DEMO_LOGIN_ENABLED"):
+        Settings(app_env="development", demo_admin_mfa_bypass=True)
 
 
 async def test_state_change_requires_csrf_and_origin(client: TestClient) -> None:

@@ -19,7 +19,7 @@ When port 8000 is occupied, set `APP_PORT=8001` and include the exact frontend o
 
 ### Synthetic demo sign-in
 
-For local development or automated test environments only, set `DEMO_LOGIN_ENABLED=true`, provide the four `DEMO_STUDENT_*` and `DEMO_ADMIN_*` values shown in `.env.example`, then run `python scripts/seed_demo_accounts.py`. The `/api/v1/auth/demo-sign-in` endpoint chooses those credentials on the server; passwords are never sent to the browser. Student demo sign-in creates a normal session, while the T&P demo account must still complete MFA setup or challenge. Configuration validation prevents demo sign-in from being enabled in staging or production.
+For local development or automated test environments only, set `DEMO_LOGIN_ENABLED=true`, provide the four `DEMO_STUDENT_*` and `DEMO_ADMIN_*` values shown in `.env.example`, then run `python scripts/seed_demo_accounts.py`. The `/api/v1/auth/demo-sign-in` endpoint chooses those credentials on the server; passwords are never sent to the browser. Student demo sign-in creates a normal session. Set `DEMO_ADMIN_MFA_BYPASS=true` only when the synthetic T&P demo must skip MFA during local testing; the bypass is recorded in the audit log and is rejected outside development/test. Normal administrator sign-in still requires MFA. Configuration validation prevents demo sign-in from being enabled in staging or production.
 
 ## Checks
 

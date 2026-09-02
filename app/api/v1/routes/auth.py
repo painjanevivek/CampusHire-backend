@@ -191,6 +191,9 @@ async def demo_sign_in(
             settings.session_ttl_hours,
             request.headers.get("User-Agent"),
             required_role=payload.role,
+            demo_mfa_bypass=(
+                payload.role == "tnp_admin" and settings.demo_admin_mfa_bypass
+            ),
         )
     except InvalidCredentialsError:
         raise HTTPException(

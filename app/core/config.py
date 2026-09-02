@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     operator_bootstrap_key: str | None = None
     mfa_encryption_key: str = "development-only-change-me"
     demo_login_enabled: bool = False
+    demo_admin_mfa_bypass: bool = False
     demo_student_email: EmailStr | None = None
     demo_student_password: SecretStr | None = None
     demo_admin_email: EmailStr | None = None
@@ -98,6 +99,12 @@ class Settings(BaseSettings):
                 for password in passwords
             ):
                 raise ValueError("Demo account passwords must contain at least 12 characters")
+        if self.demo_admin_mfa_bypass and not self.demo_login_enabled:
+            raise ValueError("Demo administrator MFA bypass requires DEMO_LOGIN_ENABLED=true")
+        if self.demo_admin_mfa_bypass and self.app_env not in {"development", "test"}:
+            raise ValueError(
+                "Demo administrator MFA bypass is restricted to development and test environments"
+            )
         if self.app_env in {"staging", "production"} and self.malware_scanner != "clamav":
             raise ValueError("Staging and production require MALWARE_SCANNER=clamav")
         if self.app_env in {"staging", "production"} and self.resume_parser_backend != "docker":
