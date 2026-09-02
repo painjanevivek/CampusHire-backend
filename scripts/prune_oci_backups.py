@@ -13,13 +13,13 @@ def _oci_executable() -> str:
     return executable
 
 
-OCI_EXECUTABLE = _oci_executable()
-
-
-def object_names(namespace: str, bucket: str, prefix: str) -> list[str]:
+def object_names(
+    namespace: str, bucket: str, prefix: str, *, executable: str | None = None
+) -> list[str]:
+    oci_executable = executable or _oci_executable()
     result = subprocess.run(  # noqa: S603 - fixed executable and explicit arguments
         [
-            OCI_EXECUTABLE, "os", "object", "list", "--namespace-name", namespace,
+            oci_executable, "os", "object", "list", "--namespace-name", namespace,
             "--bucket-name", bucket, "--prefix", prefix, "--all", "--output", "json",
         ],
         check=True,
@@ -30,13 +30,25 @@ def object_names(namespace: str, bucket: str, prefix: str) -> list[str]:
     return sorted(item["name"] for item in payload["data"] if item["name"].endswith(".age"))
 
 
-def prune(namespace: str, bucket: str, prefix: str, keep: int) -> list[str]:
+def prune(
+    namespace: str,
+    bucket: str,
+    prefix: str,
+    keep: int,
+    *,
+    executable: str | None = None,
+) -> list[str]:
+    if keep < 1:
+        raise ValueError("backup retention must keep at least one recovery point")
+    oci_executable = executable or _oci_executable()
     removed: list[str] = []
-    for name in object_names(namespace, bucket, prefix)[:-keep]:
+    for name in object_names(
+        namespace, bucket, prefix, executable=oci_executable
+    )[:-keep]:
         for target in (name, f"{name}.sha256"):
             subprocess.run(  # noqa: S603 - fixed executable and provider object name
                 [
-                    OCI_EXECUTABLE, "os", "object", "delete", "--namespace-name", namespace,
+                    oci_executable, "os", "object", "delete", "--namespace-name", namespace,
                     "--bucket-name", bucket, "--object-name", target, "--force",
                 ],
                 check=True,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
@@ -14,6 +15,8 @@ REQUIRED = (
     *IMAGE_VARIABLES,
     "OCI_OBJECT_NAMESPACE",
     "OCI_OBJECT_BUCKET",
+    "OCI_OBJECT_QUOTA_BYTES",
+    "OCI_OBJECT_UPLOADS_ENABLED",
     "PRODUCTION_SECRET_DIR",
     "PARSER_DOCKER_HOST",
     "PARSER_CLIENT_CERT_DIR",
@@ -72,14 +75,24 @@ def validate_production_environment(values: dict[str, str]) -> list[str]:
     redis_url = values.get("REDIS_URL", "")
     if redis_url and not redis_url.startswith("redis://:"):
         errors.append("REDIS_URL must include an authenticated Redis connection")
-    for variable in ("EMAIL_DELIVERY_WEBHOOK_KEY", "OPERATOR_BOOTSTRAP_KEY"):
+    for variable in (
+        "EMAIL_SMTP_PASSWORD",
+        "EMAIL_DELIVERY_WEBHOOK_KEY",
+        "OPERATOR_BOOTSTRAP_KEY",
+        "MFA_ENCRYPTION_KEY",
+    ):
         value = values.get(variable, "")
-        if value and len(value) < 24:
-            errors.append(f"{variable} must contain at least 24 characters")
-    quota = values.get("OCI_OBJECT_QUOTA_BYTES", "14000000000")
-    if not quota.isdigit() or int(quota) < 1_000_000_000:
-        errors.append("OCI_OBJECT_QUOTA_BYTES must be a conservative positive byte limit")
-    if values.get("OCI_OBJECT_UPLOADS_ENABLED", "true").casefold() not in {"true", "false"}:
+        if value and len(value) < 32:
+            errors.append(f"{variable} must contain at least 32 characters")
+    smtp_host = values.get("EMAIL_SMTP_HOST", "")
+    if smtp_host and not re.fullmatch(
+        r"smtp\.email\.[a-z0-9-]+\.oci\.oraclecloud\.com", smtp_host
+    ):
+        errors.append("EMAIL_SMTP_HOST must be a regional OCI Email Delivery endpoint")
+    quota = values.get("OCI_OBJECT_QUOTA_BYTES", "")
+    if not quota.isdigit() or not 1_000_000_000 <= int(quota) <= 14_000_000_000:
+        errors.append("OCI_OBJECT_QUOTA_BYTES must be between 1 GB and the 14 GB guard")
+    if values.get("OCI_OBJECT_UPLOADS_ENABLED", "").casefold() not in {"true", "false"}:
         errors.append("OCI_OBJECT_UPLOADS_ENABLED must be true or false")
     return errors
 

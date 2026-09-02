@@ -38,3 +38,23 @@ The local baseline shows ClamAV is the dominant memory consumer. Allocate and mo
 The bounded OCI production topology, off-host encrypted backup controls, quota stop conditions,
 credential rotation, availability objective, and paid-upgrade triggers are maintained in
 `docs/FREE_FIRST_PRODUCTION_OPERATIONS.md`.
+
+## Production signal ownership
+
+| Signal | Authoritative source | Collection / alert boundary |
+| --- | --- | --- |
+| API status, route template, duration, correlation ID | Redacted backend JSON logs | External log/metric collector computes error rate and p50/p95/p99 without query strings or bodies |
+| API readiness | `/api/v1/health/ready` plus PostgreSQL probe | Five-minute `campushire-operations-check` and external availability probe |
+| Container/process state | Docker state and declared health checks | Five-minute operations check; failed systemd unit must page the Platform/SRE owner |
+| Queue age and worker leases | PostgreSQL background-job records | Approved monitoring query/export; Redis is never the authoritative queue source |
+| Database pool | SQLAlchemy/driver pool telemetry | Approved monitoring export; page at 90% and investigate concurrency before resizing |
+| CPU and memory | OCI/host metrics by service where available | Alert only after three consecutive five-minute threshold windows |
+| Local disk | Dedicated host filesystem | Operations check closes at 70%; do not delete evidence to regain space |
+| Private object allocation | OCI Object Storage inventory and configured 14 GB upload guard | Deployment/upload guard plus signed monitoring export |
+| Backup age | Newest encrypted `.age` recovery bundle in the private OCI bucket | Operations check blocks at 30 hours |
+| Certificate life | Owned production endpoint certificate | Operations check blocks inside 14 days |
+| Email allowance, bounce, complaint | OCI Email Delivery metrics/suppression list and outbox evidence | Stop optional messages before quota; security/account messages retain priority |
+
+The signed activation snapshot binds the exact candidate and controlled monitoring reference. The
+repository does not contain an OCI alarm destination or named on-call person; those remain external
+production gates and blank owner fields must not be interpreted as configured monitoring.

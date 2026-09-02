@@ -22,12 +22,13 @@ def valid_environment() -> dict[str, str]:
         "BACKUP_AGE_RECIPIENT": "age1productionrecipient",
         "EMAIL_SMTP_HOST": "smtp.email.ap-mumbai-1.oci.oraclecloud.com",
         "EMAIL_SMTP_USERNAME": "ocid1.user.oc1..smtp",
-        "EMAIL_SMTP_PASSWORD": "generated-secret",
+        "EMAIL_SMTP_PASSWORD": "s" * 32,
         "EMAIL_FROM_ADDRESS": "no-reply@campushire.example.in",
         "EMAIL_DELIVERY_WEBHOOK_KEY": "w" * 32,
         "OPERATOR_BOOTSTRAP_KEY": "o" * 32,
         "MFA_ENCRYPTION_KEY": "m" * 32,
         "OCI_OBJECT_QUOTA_BYTES": "14000000000",
+        "OCI_OBJECT_UPLOADS_ENABLED": "true",
     }
 
 
@@ -59,3 +60,16 @@ def test_production_environment_requires_private_compose_dependencies() -> None:
     assert any("absolute path outside the repository" in error for error in errors)
     assert any("postgresql+asyncpg" in error for error in errors)
     assert any("authenticated Redis connection" in error for error in errors)
+
+
+def test_production_environment_enforces_bounded_oci_services() -> None:
+    values = valid_environment()
+    values["OCI_OBJECT_QUOTA_BYTES"] = "20000000000"
+    values["EMAIL_SMTP_HOST"] = "smtp.example.in"
+    values["EMAIL_SMTP_PASSWORD"] = "x" * 5
+
+    errors = validate_production_environment(values)
+
+    assert any("14 GB guard" in error for error in errors)
+    assert any("OCI Email Delivery" in error for error in errors)
+    assert any("EMAIL_SMTP_PASSWORD" in error for error in errors)

@@ -1,0 +1,13 @@
+{
+  "backup_age_hours": 0,
+  "certificate_days_remaining": 0,
+  "consecutive_threshold_windows": 0,
+  "cpu_percent": 0,
+  "database_pool_percent": 0,
+  "disk_percent": 0,
+  "error_rate_percent": 0,
+  "latency_budget_utilization_percent": 0,
+  "memory_percent": 0,
+  "object_allocation_percent": 0,
+  "worker_missed_lease_periods": 0
+}

@@ -16,15 +16,17 @@ Resume and generated PDF objects use one private OCI bucket through instance-pri
 
 ## Backup and restore
 
-`deploy/production/backup.sh` performs a custom-format PostgreSQL backup, verifies its catalog, encrypts it with an age public recipient, writes a SHA-256 companion, and uploads it off-host. It retains seven daily and four weekly encrypted recovery points. Run it nightly from a protected systemd timer. The private age identity is held outside the VM and is supplied only to the isolated rehearsal operator.
+`deploy/production/backup.sh` performs a custom-format PostgreSQL backup, verifies its catalog, captures an OCI manifest for the opaque `quarantine/` and `clean/` private-object keys, bundles both records, encrypts the bundle with an age public recipient, writes a SHA-256 companion, uploads both off-host, and verifies both uploaded objects are addressable. It retains seven daily and four weekly encrypted recovery points. Run it nightly from the protected systemd timer. The private age identity is held outside the VM and is supplied only to the isolated rehearsal operator.
 
-Run `deploy/production/restore_rehearsal.sh` monthly on a clean host. It downloads the newest daily pair, verifies the ciphertext checksum, decrypts locally, restores into a digest-pinned ephemeral PostgreSQL container, and checks the migration record. Never point a rehearsal at the live database. Record elapsed time and validate the four-hour RTO.
+Run `deploy/production/restore_rehearsal.sh` monthly on a clean host. It selects an encrypted bundle rather than its checksum companion, verifies the ciphertext checksum, decrypts locally, validates the object-manifest schema/count/byte total/key prefixes, restores the database into a digest-pinned ephemeral PostgreSQL container, and checks the migration record. Never point a rehearsal at the live database. Record elapsed time and validate the four-hour RTO. This proves recoverability of the database and object inventory; a sampled private-object download/decryptability check remains part of the managed rehearsal because the application does not hold a second copy of every resume object.
 
 Object lifecycle rules are defense in depth, not the sole retention mechanism. Oracle notes that lifecycle execution is best-effort and destructive deletions cannot be recovered; test lifecycle policies on synthetic objects first. See [Object Lifecycle Management](https://docs.oracle.com/en-us/iaas/Content/Object/Tasks/usinglifecyclepolicies.htm).
 
 ## Quota and capacity gates
 
 Run `deploy/production/check_object_quota.sh` before every deployment and upload window. When it exits 2, set `OCI_OBJECT_UPLOADS_ENABLED=false`, publish a maintenance notice, preserve downloads/deletions, and pause new-institution onboarding. Never bypass malware scanning or delete accountable records to recover space.
+
+`deploy/production/operations_check.sh` runs every five minutes and fails closed on API readiness, required container/health state, the object-upload guard, 70% local disk use, backup age at 30 hours, or certificate life at 14 days. Its retained JSON contains operational measurements only. The external monitoring export remains authoritative for three-window CPU, memory, route error/latency, database-pool, and worker-lease metrics; build and verify that export with the signed snapshot flow in `docs/PILOT_ACTIVATION_CONTROL.md`.
 
 Alert after three consecutive five-minute windows at CPU 70%, memory 75%, local disk or private object allocation 70%, API error rate 1%, or p95 latency at 80% of its route budget. Page immediately for a failed ready check, worker heartbeat beyond two lease periods, backup older than 30 hours, certificate expiry inside 14 days, database-pool use at 90%, terminal cleanup failure, or cross-tenant test failure. Retain the existing 750 ms ordinary-read, 1,000 ms dashboard/opportunity, and 1,500 ms write p95 budgets with a zero-error concurrency-10 minimum.
 

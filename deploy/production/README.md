@@ -43,12 +43,22 @@ Deploy only immutable image digests:
 deploy/production/deploy.sh
 ```
 
-Schedule `backup.sh` nightly, `check_object_quota.sh` before upload windows, and `restore_rehearsal.sh` monthly on an isolated clean host. Follow `docs/FREE_FIRST_PRODUCTION_OPERATIONS.md` for alerts, rotations, incident paths, and paid-upgrade triggers.
+Schedule `backup.sh` nightly, run `operations_check.sh` every five minutes, and run `restore_rehearsal.sh` monthly on an isolated clean host. The operations check retains a metrics-only record for API readiness, required container health, object-upload guard state, disk use, backup freshness, and certificate life. CPU, memory, route latency/error rate, database-pool use, and worker lease age still come from the approved monitoring export used by the signed activation snapshot. Follow `docs/FREE_FIRST_PRODUCTION_OPERATIONS.md` for alerts, rotations, incident paths, and paid-upgrade triggers.
 
 ## systemd scheduling
 
-Install `deploy/production/systemd/campushire-backup.service` and
-`deploy/production/systemd/campushire-backup.timer` on the dedicated host. The timer runs the
-existing encrypted, off-host backup under the non-login `campushire` service account. Restore
-rehearsals remain deliberately operator-started on a separate clean host; never schedule them
-against the production database host.
+Install and enable both timer pairs under `deploy/production/systemd/`:
+
+- `campushire-backup.service` / `.timer` for the nightly encrypted database plus private-object-manifest recovery bundle;
+- `campushire-operations-check.service` / `.timer` for five-minute readiness and recovery-boundary evidence.
+
+Both run under the non-login `campushire` service account with a read-only system view and private temporary storage. Configure the host monitoring/notification system to page on either unit entering `failed`; a timer without a consumed failure alert is not a monitoring system. Restore rehearsals remain deliberately operator-started on a separate clean host and must never run against the production database host.
+
+After the dedicated host and non-login account are provisioned, install the units once with:
+
+```text
+sudo /opt/campushire/current/deploy/production/install_host_units.sh
+```
+
+Re-run the installer after a reviewed unit-file change. Application deployments do not silently
+replace privileged host configuration.
