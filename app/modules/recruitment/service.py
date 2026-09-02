@@ -208,10 +208,22 @@ async def update_drive(
     drive_id: UUID,
     payload: DriveUpdate,
 ) -> PlacementDrive:
-    drive = await _owned_drive(db, institution_id, drive_id, lock=True)
+    institution = _institution(institution_id)
+    drive = await _owned_drive(db, institution, drive_id, lock=True)
     if drive.status != PublicationStatus.DRAFT.value:
         raise RecruitmentError("published_drive_is_immutable")
     values = payload.model_dump(exclude_unset=True)
+    company_id = values.get("company_id")
+    if company_id is not None:
+        company = await db.scalar(
+            select(Company).where(
+                Company.id == company_id,
+                Company.institution_id == institution,
+                Company.status != PublicationStatus.ARCHIVED.value,
+            )
+        )
+        if company is None:
+            raise RecruitmentError("company_not_found")
     opens_at = values.get("opens_at", drive.opens_at)
     deadline_at = values.get("deadline_at", drive.deadline_at)
     if _utc(opens_at) >= _utc(deadline_at):
@@ -220,6 +232,19 @@ async def update_drive(
         setattr(drive, key, value)
     await db.flush()
     await db.refresh(drive)
+    return drive
+
+
+async def delete_drive(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    drive_id: UUID,
+) -> PlacementDrive:
+    drive = await _owned_drive(db, institution_id, drive_id, lock=True)
+    if drive.status != PublicationStatus.DRAFT.value:
+        raise RecruitmentError("published_drive_is_immutable")
+    await db.delete(drive)
+    await db.flush()
     return drive
 
 

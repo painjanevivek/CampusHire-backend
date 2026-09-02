@@ -52,6 +52,7 @@ from app.modules.recruitment.service import (
     create_drive,
     create_role,
     create_rule_set,
+    delete_drive,
     drive_response,
     duplicate_drive,
     list_admin_applications,
@@ -84,7 +85,11 @@ def _http_error(error: RecruitmentError) -> HTTPException:
     code = str(error)
     if code.endswith("_not_found"):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=code)
-    if code in {"company_name_exists", "application_appeal_already_resolved"}:
+    if code in {
+        "company_name_exists",
+        "application_appeal_already_resolved",
+        "published_drive_is_immutable",
+    }:
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=code)
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=code)
 
@@ -312,6 +317,36 @@ async def edit_drive(
     )
     await db.commit()
     return response
+
+
+@router.delete(
+    "/drives/{drive_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
+)
+async def remove_drive(
+    request: Request,
+    drive_id: UUID,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> None:
+    try:
+        drive = await delete_drive(db, principal.institution_id, drive_id)
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request,
+        db,
+        principal,
+        event_type="drive.deleted",
+        resource_type="placement_drive",
+        resource_id=drive.id,
+        details={"title": drive.title, "company_id": str(drive.company_id)},
+    )
+    await db.commit()
 
 
 @router.post(

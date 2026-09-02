@@ -1391,6 +1391,18 @@
       },
       "DriveUpdate": {
         "properties": {
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
           "deadline_at": {
             "anyOf": [
               {
@@ -7855,6 +7867,56 @@
       }
     },
     "/api/v1/admin/recruitment/drives/{drive_id}": {
+      "delete": {
+        "operationId": "remove_drive_api_v1_admin_recruitment_drives__drive_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "drive_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Drive Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Drive",
+        "tags": [
+          "placement administration"
+        ]
+      },
       "patch": {
         "operationId": "edit_drive_api_v1_admin_recruitment_drives__drive_id__patch",
         "parameters": [

@@ -12,6 +12,7 @@ from app.main import app
 from app.models import Base
 from app.models.auth import Institution, Session, User, UserRole
 from app.models.profile import StudentProfile
+from app.models.recruitment import PlacementDrive
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
@@ -30,6 +31,7 @@ from app.modules.recruitment.schemas import (
     BulkApplicationStatusRequest,
     CompanyCreate,
     DriveCreate,
+    DriveUpdate,
     RoleCreate,
     RuleSetCreate,
 )
@@ -43,6 +45,7 @@ from app.modules.recruitment.service import (
     create_drive,
     create_role,
     create_rule_set,
+    delete_drive,
     duplicate_drive,
     get_student_application,
     list_admin_applications,
@@ -57,6 +60,7 @@ from app.modules.recruitment.service import (
     response_for_application,
     transition_drive,
     update_application_status,
+    update_drive,
     withdraw_application,
 )
 from app.modules.resumes.builder import ResumeContent, generate_pdf
@@ -251,6 +255,71 @@ async def test_drive_duplication_is_draft_and_rule_preview_is_deterministic() ->
         cloned_roles = await list_roles(db, institution.id, duplicate.id)
         assert len(cloned_roles) == 1
         assert cloned_roles[0].status == "draft"
+
+
+@pytest.mark.asyncio
+async def test_draft_drive_can_be_edited_and_deleted_only_inside_its_tenant() -> None:
+    async with TestSession() as db:
+        institution, _, _ = await seed_people(db, "draft-owner")
+        other_institution, _, _ = await seed_people(db, "draft-other")
+        company = await create_company(
+            db,
+            institution.id,
+            CompanyCreate(name="Draft Company", website_url="https://example.com"),
+        )
+        other_company = await create_company(
+            db,
+            other_institution.id,
+            CompanyCreate(name="Other Tenant Company", website_url="https://example.org"),
+        )
+        drive = await create_drive(
+            db,
+            institution.id,
+            DriveCreate(
+                company_id=company.id,
+                title="Original draft title",
+                description="A private draft that has not been published to students.",
+                location="Pune, India",
+                work_mode="hybrid",
+                opens_at=datetime.now(UTC),
+                deadline_at=datetime.now(UTC) + timedelta(days=7),
+            ),
+        )
+
+        with pytest.raises(RecruitmentError, match="drive_not_found"):
+            await delete_drive(db, other_institution.id, drive.id)
+        with pytest.raises(RecruitmentError, match="company_not_found"):
+            await update_drive(
+                db,
+                institution.id,
+                drive.id,
+                DriveUpdate(company_id=other_company.id),
+            )
+
+        updated = await update_drive(
+            db,
+            institution.id,
+            drive.id,
+            DriveUpdate(title="Updated draft title", work_mode="remote"),
+        )
+        assert updated.title == "Updated draft title"
+        assert updated.work_mode == "remote"
+
+        deleted = await delete_drive(db, institution.id, drive.id)
+        assert deleted.id == drive.id
+        assert await db.get(PlacementDrive, drive.id) is None
+
+
+@pytest.mark.asyncio
+async def test_published_drive_cannot_be_deleted() -> None:
+    async with TestSession() as db:
+        institution, admin, _ = await seed_people(db, "published-delete")
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
+
+        with pytest.raises(RecruitmentError, match="published_drive_is_immutable"):
+            await delete_drive(db, institution.id, role.drive_id)
+
+        assert await db.get(PlacementDrive, role.drive_id) is not None
 
 
 @pytest.mark.asyncio
@@ -550,7 +619,6 @@ async def test_tenant_context_is_derived_from_the_authenticated_principal() -> N
         ),
         membership=None,
     )
-
     tenant = await get_tenant_context(principal)
 
     assert tenant.institution_id == institution.id
@@ -598,6 +666,7 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
         ),
         membership=None,
     )
+    admin_principal = principal
 
     async def override_db() -> AsyncIterator[AsyncSession]:
         async with TestSession() as session:
@@ -621,6 +690,33 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             )
             assert company.status_code == 201, company.text
             now = datetime.now(UTC)
+            throwaway = await client.post(
+                "/api/v1/admin/recruitment/drives",
+                json={
+                    "company_id": company.json()["id"],
+                    "title": "Discardable API Draft",
+                    "description": "A draft used to verify the edit and delete contract.",
+                    "location": "Pune, India",
+                    "work_mode": "hybrid",
+                    "opens_at": now.isoformat(),
+                    "deadline_at": (now + timedelta(days=2)).isoformat(),
+                },
+            )
+            assert throwaway.status_code == 201, throwaway.text
+            throwaway_id = throwaway.json()["id"]
+            edited = await client.patch(
+                f"/api/v1/admin/recruitment/drives/{throwaway_id}",
+                json={"title": "Updated discardable API draft"},
+            )
+            assert edited.status_code == 200, edited.text
+            assert edited.json()["title"] == "Updated discardable API draft"
+            removed = await client.delete(
+                f"/api/v1/admin/recruitment/drives/{throwaway_id}"
+            )
+            assert removed.status_code == 204, removed.text
+            remaining_drives = await client.get("/api/v1/admin/recruitment/drives")
+            assert throwaway_id not in {item["id"] for item in remaining_drives.json()}
+
             drive = await client.post(
                 "/api/v1/admin/recruitment/drives",
                 json={
@@ -707,5 +803,10 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             )
             assert replayed.status_code == 200
             assert replayed.json()["id"] == applied.json()["id"]
+            principal = admin_principal
+            immutable_delete = await client.delete(
+                f"/api/v1/admin/recruitment/drives/{drive.json()['id']}"
+            )
+            assert immutable_delete.status_code == 409
     finally:
         app.dependency_overrides.clear()

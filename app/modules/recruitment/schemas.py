@@ -51,6 +51,7 @@ class DriveCreate(BaseModel):
 
 
 class DriveUpdate(BaseModel):
+    company_id: UUID | None = None
     title: str | None = Field(default=None, min_length=3, max_length=200)
     description: str | None = Field(default=None, min_length=10, max_length=8000)
     location: str | None = Field(default=None, min_length=2, max_length=160)
