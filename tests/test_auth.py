@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core import rate_limit
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.database import get_db
 from app.main import app
 from app.models import Base
@@ -137,6 +137,61 @@ async def test_invalid_credentials_use_generic_error(client: TestClient) -> None
     )
     assert response.status_code == 401
     assert response.json()["error"]["message"] == "Invalid email or password"
+
+
+async def test_demo_login_is_hidden_when_disabled(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/demo-sign-in",
+        headers=csrf_headers(client),
+        json={"role": "student"},
+    )
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "demo_login_unavailable"
+
+
+async def test_demo_login_uses_server_credentials_and_preserves_admin_mfa(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await seed_institution_memberships()
+    with monkeypatch.context() as patch:
+        patch.setenv("DEMO_LOGIN_ENABLED", "true")
+        patch.setenv("DEMO_STUDENT_EMAIL", "student@campus-a.edu")
+        patch.setenv("DEMO_STUDENT_PASSWORD", "a secure student passphrase")
+        patch.setenv("DEMO_ADMIN_EMAIL", "admin@campus-a.edu")
+        patch.setenv("DEMO_ADMIN_PASSWORD", "a secure administrator passphrase")
+        get_settings.cache_clear()
+
+        student = client.post(
+            "/api/v1/auth/demo-sign-in",
+            headers=csrf_headers(client),
+            json={"role": "student"},
+        )
+        assert student.status_code == 200, student.text
+        assert student.json()["user"]["role"] == "student"
+        assert student.json()["next_step"] == "complete"
+
+        client.cookies.clear()
+        admin = client.post(
+            "/api/v1/auth/demo-sign-in",
+            headers=csrf_headers(client),
+            json={"role": "tnp_admin"},
+        )
+        assert admin.status_code == 200, admin.text
+        assert admin.json()["user"]["role"] == "tnp_admin"
+        assert admin.json()["next_step"] == "mfa_setup"
+    get_settings.cache_clear()
+
+
+async def test_demo_login_configuration_is_rejected_outside_development() -> None:
+    with pytest.raises(ValueError, match="Demo login is restricted"):
+        Settings(
+            app_env="staging",
+            demo_login_enabled=True,
+            demo_student_email="student+demo@example.com",
+            demo_student_password="a synthetic student passphrase",  # noqa: S106
+            demo_admin_email="admin+demo@example.com",
+            demo_admin_password="a synthetic administrator passphrase",  # noqa: S106
+        )
 
 
 async def test_state_change_requires_csrf_and_origin(client: TestClient) -> None:

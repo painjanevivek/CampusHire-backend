@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, model_validator
+from pydantic import AnyHttpUrl, EmailStr, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     roster_max_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
     operator_bootstrap_key: str | None = None
     mfa_encryption_key: str = "development-only-change-me"
+    demo_login_enabled: bool = False
+    demo_student_email: EmailStr | None = None
+    demo_student_password: SecretStr | None = None
+    demo_admin_email: EmailStr | None = None
+    demo_admin_password: SecretStr | None = None
     resume_storage_path: str = ".data/resumes"
     resume_storage_backend: Literal["local", "oci"] = "local"
     oci_object_namespace: str | None = None
@@ -74,6 +79,25 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_requires_real_malware_scanning(self) -> "Settings":
+        if self.demo_login_enabled:
+            if self.app_env not in {"development", "test"}:
+                raise ValueError("Demo login is restricted to development and test environments")
+            credentials = (
+                self.demo_student_email,
+                self.demo_student_password,
+                self.demo_admin_email,
+                self.demo_admin_password,
+            )
+            if any(value is None for value in credentials):
+                raise ValueError(
+                    "Demo login requires configured student and administrator credentials"
+                )
+            passwords = (self.demo_student_password, self.demo_admin_password)
+            if any(
+                password is not None and len(password.get_secret_value()) < 12
+                for password in passwords
+            ):
+                raise ValueError("Demo account passwords must contain at least 12 characters")
         if self.app_env in {"staging", "production"} and self.malware_scanner != "clamav":
             raise ValueError("Staging and production require MALWARE_SCANNER=clamav")
         if self.app_env in {"staging", "production"} and self.resume_parser_backend != "docker":

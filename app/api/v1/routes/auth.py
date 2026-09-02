@@ -15,6 +15,7 @@ from app.modules.auth.dependencies import (
     verify_public_csrf,
 )
 from app.modules.auth.schemas import (
+    DemoSignInRequest,
     InvitationAcceptRequest,
     InvitationResponse,
     MfaCodeRequest,
@@ -141,6 +142,63 @@ async def sign_in(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_credentials", "message": "Invalid email or password"},
+        ) from None
+    _set_session_cookies(response, auth_session.token, auth_session.csrf_token)
+    return SignInResponse(
+        user=_user_response(auth_session.user, auth_session.membership),
+        next_step=auth_session.next_step,
+    )
+
+
+@router.post("/demo-sign-in", response_model=SignInResponse)
+async def demo_sign_in(
+    payload: DemoSignInRequest,
+    request: Request,
+    response: Response,
+    db: Database,
+    _: Annotated[None, Depends(verify_public_csrf)],
+    __: Annotated[None, Depends(enforce_auth_rate_limit)],
+) -> SignInResponse:
+    settings = get_settings()
+    if not settings.demo_login_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "demo_login_unavailable",
+                "message": "Demo login is not available in this environment.",
+            },
+        )
+    if payload.role == "student":
+        email = settings.demo_student_email
+        password = settings.demo_student_password
+    else:
+        email = settings.demo_admin_email
+        password = settings.demo_admin_password
+    if email is None or password is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "demo_login_unavailable",
+                "message": "The synthetic demo account is not configured.",
+            },
+        )
+    await enforce_auth_identity_rate_limit(request, str(email))
+    try:
+        auth_session = await authenticate(
+            db,
+            str(email),
+            password.get_secret_value(),
+            settings.session_ttl_hours,
+            request.headers.get("User-Agent"),
+            required_role=payload.role,
+        )
+    except InvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "demo_login_unavailable",
+                "message": "The synthetic demo account is not ready.",
+            },
         ) from None
     _set_session_cookies(response, auth_session.token, auth_session.csrf_token)
     return SignInResponse(

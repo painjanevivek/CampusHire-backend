@@ -1223,6 +1223,23 @@
         "title": "DataDeletionResponse",
         "type": "object"
       },
+      "DemoSignInRequest": {
+        "properties": {
+          "role": {
+            "enum": [
+              "student",
+              "tnp_admin"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "DemoSignInRequest",
+        "type": "object"
+      },
       "DriveCreate": {
         "properties": {
           "company_id": {
@@ -8954,6 +8971,47 @@
           }
         },
         "summary": "Csrf",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/demo-sign-in": {
+      "post": {
+        "operationId": "demo_sign_in_api_v1_auth_demo_sign_in_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DemoSignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Demo Sign In",
         "tags": [
           "authentication"
         ]

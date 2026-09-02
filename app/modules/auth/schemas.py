@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -19,6 +20,10 @@ class SignupRequest(BaseModel):
 class SignInRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+
+
+class DemoSignInRequest(BaseModel):
+    role: Literal["student", "tnp_admin"]
 
 
 class UserResponse(BaseModel):

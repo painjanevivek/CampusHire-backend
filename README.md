@@ -17,6 +17,10 @@ The API is available at `http://localhost:8000`, with versioned routes under `/a
 
 When port 8000 is occupied, set `APP_PORT=8001` and include the exact frontend origin, for example `FRONTEND_ORIGINS='["http://127.0.0.1:3002"]'`, before running `uvicorn app.main:app --reload --port 8001`. Keep origin and cookie configuration environment-specific.
 
+### Synthetic demo sign-in
+
+For local development or automated test environments only, set `DEMO_LOGIN_ENABLED=true`, provide the four `DEMO_STUDENT_*` and `DEMO_ADMIN_*` values shown in `.env.example`, then run `python scripts/seed_demo_accounts.py`. The `/api/v1/auth/demo-sign-in` endpoint chooses those credentials on the server; passwords are never sent to the browser. Student demo sign-in creates a normal session, while the T&P demo account must still complete MFA setup or challenge. Configuration validation prevents demo sign-in from being enabled in staging or production.
+
 ## Checks
 
 ```text

@@ -91,6 +91,7 @@ async def authenticate(
     password: str,
     ttl_hours: int,
     device_summary: str | None,
+    required_role: str | None = None,
 ) -> AuthenticatedSession:
     normalized = normalize_email(email)
     user = await db.scalar(select(User).where(User.email == normalized, User.is_active.is_(True)))
@@ -147,6 +148,8 @@ async def authenticate(
     if has_membership is not None and membership is None:
         raise InvalidCredentialsError
     effective_role = membership.role if membership is not None else user.role
+    if required_role is not None and effective_role != required_role:
+        raise InvalidCredentialsError
     requires_mfa = effective_role in ADMIN_ROLE_VALUES
     enrollment = await db.scalar(
         select(MfaEnrollment).where(
