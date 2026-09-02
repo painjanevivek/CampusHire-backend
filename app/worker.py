@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.logging import configure_logging
+from app.modules.communications.reminders import enqueue_upcoming_deadline_reminders
 from app.modules.communications.service import OciSmtpEmailProvider, process_next_email
 from app.modules.privacy.service import process_next_deletion_cleanup
 from app.modules.resumes.parser import build_pdf_parser
@@ -26,8 +27,35 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
         "resume_worker_started",
         extra={"event": "resume_worker_started", "worker_id": worker_identity},
     )
+    next_reminder_sweep_at = 0.0
     while True:
         if settings.email_smtp_host:
+            loop_time = asyncio.get_running_loop().time()
+            if loop_time >= next_reminder_sweep_at:
+                try:
+                    async with SessionFactory() as db:
+                        reminder_count = await enqueue_upcoming_deadline_reminders(
+                            db, settings=settings
+                        )
+                        await db.commit()
+                    if reminder_count:
+                        logger.info(
+                            "deadline_reminders_queued",
+                            extra={
+                                "event": "deadline_reminders_queued",
+                                "job_count": reminder_count,
+                                "worker_id": worker_identity,
+                            },
+                        )
+                except Exception:
+                    logger.exception(
+                        "deadline_reminder_sweep_failed",
+                        extra={
+                            "event": "deadline_reminder_sweep_failed",
+                            "worker_id": worker_identity,
+                        },
+                    )
+                next_reminder_sweep_at = loop_time + settings.email_reminder_sweep_seconds
             async with SessionFactory() as db:
                 email_id = await process_next_email(db, OciSmtpEmailProvider(settings))
             if email_id is not None:

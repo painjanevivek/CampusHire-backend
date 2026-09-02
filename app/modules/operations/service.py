@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.resume import JobStatus, ResumeProcessingJob, ResumeStatus, ResumeVersion
+from app.modules.communications.service import record_product_event
 from app.modules.operations.schemas import (
     OperationsSummaryResponse,
     ResumeJobEventResponse,
@@ -151,6 +152,13 @@ async def retry_resume_job(
     job.resume_version.status = ResumeStatus.QUEUED.value
     job.resume_version.safe_error_code = None
     record_job_event(db, job, "operator_retry_queued", correlation_id=correlation_id)
+    await record_product_event(
+        db,
+        event_name="operation_retried",
+        route_group="admin_operations",
+        institution_id=institution_id,
+        dedupe_key=f"operator-resume-job-retry:{job.id}:{job.attempts}",
+    )
     await db.commit()
     return _response(await get_resume_job(db, institution_id, job_id))
 

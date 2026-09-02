@@ -168,13 +168,6 @@ async def withdraw_student_application(
     except RecruitmentError as error:
         raise _http_error(error) from error
     if not replayed:
-        await record_product_event(
-            db,
-            event_name="first_application_submitted",
-            route_group="applications",
-            institution_id=tenant.institution_id,
-            dedupe_key=f"first-application:{tenant.user_id}",
-        )
         record_audit_event(
             db,
             event_type="application.withdrawn",
@@ -279,6 +272,13 @@ async def submit_application(
     except RecruitmentError as error:
         raise _http_error(error) from error
     if not replayed:
+        await record_product_event(
+            db,
+            event_name="first_application_submitted",
+            route_group="applications",
+            institution_id=tenant.institution_id,
+            dedupe_key=f"first-application:{tenant.user_id}",
+        )
         record_audit_event(
             db,
             event_type="application.submitted",

@@ -388,6 +388,20 @@ async def confirm_password_reset(
         resource_id=str(user.id),
         correlation_id=correlation_id,
     )
+    await enqueue_email(
+        db,
+        institution_id=user.institution_id,
+        recipient_email=user.email,
+        category="security",
+        template_key="security_notice",
+        variables={
+            "message": (
+                "Your CampusHire password was changed and all active sign-ins were ended. "
+                "If this was not you, contact your placement office immediately."
+            )
+        },
+        dedupe_key=f"security-password-reset:{record.id}",
+    )
     await db.commit()
 
 
@@ -492,6 +506,20 @@ async def confirm_mfa_setup(db: AsyncSession, session: Session, code: str) -> li
         event_type="auth.mfa_enabled",
         resource_type="user",
         resource_id=str(session.user_id),
+    )
+    await enqueue_email(
+        db,
+        institution_id=session.user.institution_id,
+        recipient_email=session.user.email,
+        category="security",
+        template_key="security_notice",
+        variables={
+            "message": (
+                "Authenticator protection was enabled or replaced on your CampusHire account. "
+                "If this was not you, contact your placement office immediately."
+            )
+        },
+        dedupe_key=f"security-mfa-enabled:{enrollment.id}:{now.isoformat()}",
     )
     await db.commit()
     return codes
@@ -611,6 +639,24 @@ async def disable_mfa(
         resource_id=str(session.user_id),
         correlation_id=correlation_id,
         reason="verified_factor_reset",
+    )
+    await enqueue_email(
+        db,
+        institution_id=(
+            session.active_membership.institution_id
+            if session.active_membership is not None
+            else session.user.institution_id
+        ),
+        recipient_email=session.user.email,
+        category="security",
+        template_key="security_notice",
+        variables={
+            "message": (
+                "Authenticator protection was disabled and your other active sign-ins were ended. "
+                "If this was not you, contact your placement office immediately."
+            )
+        },
+        dedupe_key=f"security-mfa-disabled:{enrollment.id}:{now.isoformat()}",
     )
     await db.commit()
 

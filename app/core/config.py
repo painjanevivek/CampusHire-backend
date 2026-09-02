@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     email_monthly_quota: int = Field(default=3_000, ge=1)
     email_optional_suppression_ratio: float = Field(default=0.8, ge=0.1, le=1)
     email_delivery_max_attempts: int = Field(default=5, ge=1, le=20)
+    email_deadline_reminder_hours: int = Field(default=24, ge=1, le=168)
+    email_reminder_sweep_seconds: int = Field(default=900, ge=60, le=86_400)
+    email_reminder_batch_size: int = Field(default=500, ge=1, le=5_000)
     email_delivery_webhook_key: str | None = None
     maintenance_message: str | None = None
 

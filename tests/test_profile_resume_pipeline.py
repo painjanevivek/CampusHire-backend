@@ -5,6 +5,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -13,6 +14,7 @@ from app.core.database import get_db
 from app.main import app
 from app.models import Base
 from app.models.auth import Session, User, UserRole
+from app.models.communications import ProductEvent
 from app.models.resume import (
     ResumeProcessingJob,
     ResumeStatus,
@@ -259,6 +261,10 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
         )
         assert completed.status == ResumeStatus.COMPLETED.value
         assert completed.review_completed_at is not None
+        completion_event = await db.scalar(
+            select(ProductEvent).where(ProductEvent.event_name == "resume_completed")
+        )
+        assert completion_event is not None
         with pytest.raises(ResumeWorkflowError, match="resume_not_ready_for_review"):
             await review_extraction(
                 db,

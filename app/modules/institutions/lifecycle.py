@@ -69,6 +69,19 @@ async def provision_institution(
     )
     db.add(invitation)
     await db.flush()
+    frontend = str(get_settings().frontend_origins[0]).rstrip("/")
+    await enqueue_email(
+        db,
+        institution_id=institution.id,
+        recipient_email=normalized_email,
+        category="account",
+        template_key="invitation",
+        variables={
+            "institution_name": institution.name,
+            "activation_url": f"{frontend}/activate/{raw_token}",
+        },
+        dedupe_key=f"invitation:{invitation.id}",
+    )
     record_audit_event(
         db,
         institution_id=institution.id,

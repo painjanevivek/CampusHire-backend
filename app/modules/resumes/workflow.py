@@ -18,6 +18,7 @@ from app.models.resume import (
     ScanStatus,
     SuggestionStatus,
 )
+from app.modules.communications.service import record_product_event
 from app.modules.resumes.builder import (
     ResumeBuildError,
     ResumeContent,
@@ -342,6 +343,22 @@ def _finish_review_if_complete(version: ResumeVersion) -> None:
         version.review_completed_at = datetime.now(UTC)
 
 
+async def _record_completion_if_changed(
+    db: AsyncSession, version: ResumeVersion, previous_status: str
+) -> None:
+    if previous_status == ResumeStatus.COMPLETED.value:
+        return
+    if version.status != ResumeStatus.COMPLETED.value:
+        return
+    await record_product_event(
+        db,
+        event_name="resume_completed",
+        route_group="resume",
+        institution_id=version.institution_id,
+        dedupe_key=f"resume-completed:{version.user_id}",
+    )
+
+
 def _require_review_revision(version: ResumeVersion, expected_revision: int) -> None:
     if version.review_revision != expected_revision:
         raise ResumeWorkflowError("resume_review_revision_conflict")
@@ -355,6 +372,7 @@ async def review_extraction(
     payload: ExtractionReviewRequest,
 ) -> ResumeVersion:
     version = await get_owned_version(db, user_id, version_id, lock=True)
+    previous_status = version.status
     if version.status != ResumeStatus.REVIEW_REQUIRED.value:
         raise ResumeWorkflowError("resume_not_ready_for_review")
     _require_review_revision(version, payload.expected_revision)
@@ -372,6 +390,7 @@ async def review_extraction(
     version.extracted_data = {**version.extracted_data, "decisions": current}
     version.review_revision += 1
     _finish_review_if_complete(version)
+    await _record_completion_if_changed(db, version, previous_status)
     await db.commit()
     return await get_owned_version(db, user_id, version_id)
 
@@ -385,6 +404,7 @@ async def decide_suggestion(
     payload: SuggestionDecisionRequest,
 ) -> ResumeVersion:
     version = await get_owned_version(db, user_id, version_id, lock=True)
+    previous_status = version.status
     _require_review_revision(version, payload.expected_revision)
     suggestion = next((item for item in version.suggestions if item.id == suggestion_id), None)
     if suggestion is None:
@@ -411,6 +431,7 @@ async def decide_suggestion(
     suggestion.decided_at = datetime.now(UTC)
     version.review_revision += 1
     _finish_review_if_complete(version)
+    await _record_completion_if_changed(db, version, previous_status)
     await db.commit()
     return await get_owned_version(db, user_id, version_id)
 
@@ -423,6 +444,7 @@ async def review_suggestions_batch(
     payload: SuggestionReviewBatch,
 ) -> ResumeVersion:
     version = await get_owned_version(db, user_id, version_id, lock=True)
+    previous_status = version.status
     if version.status != ResumeStatus.REVIEW_REQUIRED.value:
         raise ResumeWorkflowError("resume_not_ready_for_review")
     _require_review_revision(version, payload.expected_revision)
@@ -458,6 +480,7 @@ async def review_suggestions_batch(
         suggestion.decided_at = now
     version.review_revision += 1
     _finish_review_if_complete(version)
+    await _record_completion_if_changed(db, version, previous_status)
     await db.commit()
     return await get_owned_version(db, user_id, version_id)
 
@@ -508,5 +531,12 @@ async def retry_job(db: AsyncSession, *, user_id: UUID, version_id: UUID) -> Res
     version.status = ResumeStatus.QUEUED.value
     version.safe_error_code = None
     record_job_event(db, job, "student_retry_queued")
+    await record_product_event(
+        db,
+        event_name="operation_retried",
+        route_group="resume",
+        institution_id=version.institution_id,
+        dedupe_key=f"student-resume-job-retry:{job.id}:{job.attempts}",
+    )
     await db.commit()
     return await get_owned_version(db, user_id, version_id)

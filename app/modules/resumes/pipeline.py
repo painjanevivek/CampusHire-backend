@@ -17,6 +17,7 @@ from app.models.resume import (
     ResumeVersion,
     ScanStatus,
 )
+from app.modules.communications.service import record_product_event
 from app.modules.resumes.parser import (
     InvalidResumeError,
     ParserUnavailableError,
@@ -348,6 +349,13 @@ async def process_job(
             job.lease_expires_at = None
             version.status = ResumeStatus.QUEUED.value
             record_job_event(db, job, "retry_scheduled", correlation_id=correlation_id)
+            await record_product_event(
+                db,
+                event_name="operation_retried",
+                route_group="resume_processing",
+                institution_id=version.institution_id,
+                dedupe_key=f"resume-job-retry:{job.id}:{job.attempts}",
+            )
         else:
             finished_at = datetime.now(UTC)
             job.status = JobStatus.FAILED.value
@@ -357,6 +365,13 @@ async def process_job(
             job.lease_expires_at = None
             version.status = ResumeStatus.FAILED.value
             record_job_event(db, job, "failed", correlation_id=correlation_id)
+            await record_product_event(
+                db,
+                event_name="operation_error",
+                route_group="resume_processing",
+                institution_id=version.institution_id,
+                dedupe_key=f"resume-job-error:{job.id}:{job.attempts}",
+            )
         await db.commit()
     except Exception as error:
         finished_at = datetime.now(UTC)
@@ -369,6 +384,13 @@ async def process_job(
         version.status = ResumeStatus.FAILED.value
         version.safe_error_code = "resume_processing_unexpected"
         record_job_event(db, job, "failed_unexpected", correlation_id=correlation_id)
+        await record_product_event(
+            db,
+            event_name="operation_error",
+            route_group="resume_processing",
+            institution_id=version.institution_id,
+            dedupe_key=f"resume-job-error:{job.id}:{job.attempts}",
+        )
         await db.commit()
         logger.error(
             "resume_job_unexpected_failure",

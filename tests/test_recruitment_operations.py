@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.main import app
 from app.models import Base
 from app.models.auth import Institution, Session, User, UserRole
+from app.models.communications import ProductEvent
 from app.models.intelligence import PolicyDocument, ReviewStatus
 from app.models.profile import StudentProfile
 from app.models.recruitment import PlacementDrive
@@ -885,6 +886,17 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             )
             assert replayed.status_code == 200
             assert replayed.json()["id"] == applied.json()["id"]
+            async with TestSession() as event_db:
+                events = list(
+                    (
+                        await event_db.scalars(
+                            select(ProductEvent).where(
+                                ProductEvent.event_name == "first_application_submitted"
+                            )
+                        )
+                    ).all()
+                )
+            assert len(events) == 1
             principal = admin_principal
             under_review = await client.post(
                 f"/api/v1/admin/recruitment/applications/{applied.json()['id']}/status",

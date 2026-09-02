@@ -118,7 +118,7 @@ async def update_profile(
         event_name="onboarding_step_completed",
         route_group="profile",
         institution_id=institution_id,
-        dedupe_key=f"onboarding-step:{user.id}:{profile.revision}",
+        dedupe_key=f"onboarding-step:{user.id}:{profile.onboarding_step}",
     )
     if profile.is_complete and not was_complete:
         await record_product_event(

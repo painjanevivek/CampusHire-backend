@@ -1,4 +1,6 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -6,9 +8,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import Settings
 from app.models import Base
-from app.models.auth import Institution
-from app.models.communications import EmailDelivery, ProductEvent
+from app.models.auth import (
+    Institution,
+    InstitutionMembership,
+    MembershipStatus,
+    PasswordResetToken,
+    User,
+    UserRole,
+)
+from app.models.communications import CommunicationPreference, EmailDelivery, ProductEvent
+from app.models.recruitment import (
+    Application,
+    Company,
+    PlacementDrive,
+    PlacementRole,
+    PublicationStatus,
+    SavedOpportunity,
+)
+from app.modules.auth.security import hash_secret
+from app.modules.auth.service import confirm_password_reset
+from app.modules.communications.reminders import enqueue_upcoming_deadline_reminders
 from app.modules.communications.schemas import SupportRequestCreate
 from app.modules.communications.service import (
     enqueue_email,
@@ -16,6 +37,7 @@ from app.modules.communications.service import (
     record_product_event,
     render_email,
 )
+from app.modules.institutions.lifecycle import provision_institution
 
 engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -217,3 +239,169 @@ def test_templates_escape_content_and_support_rejects_personal_identifiers() -> 
             route_context="/profile",
             message="Please contact student@example.edu about this issue.",
         )
+
+
+async def test_provisioning_and_password_change_queue_account_security_email() -> None:
+    async with Session() as db:
+        provisioned = await provision_institution(
+            db,
+            code="COMM-C",
+            name="Account Communications Institute",
+            admin_email="owner@example.edu",
+            correlation_id="test-correlation",
+        )
+        invitation = await db.scalar(
+            select(EmailDelivery).where(EmailDelivery.template_key == "invitation")
+        )
+        assert invitation is not None
+        assert provisioned.raw_token not in str(invitation.template_variables)
+
+        user = User(
+            institution_id=provisioned.institution.id,
+            email="student@example.edu",
+            password_hash="previous-password-hash",  # noqa: S106
+            role=UserRole.STUDENT.value,
+        )
+        db.add(user)
+        await db.flush()
+        raw_token = "single-use-password-reset-token"  # noqa: S105
+        reset = PasswordResetToken(
+            user_id=user.id,
+            token_hash=hash_secret(raw_token),
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        )
+        db.add(reset)
+        await db.commit()
+
+        await confirm_password_reset(
+            db,
+            raw_token,
+            "a replacement campus passphrase",
+            "test-correlation",
+        )
+        security = await db.scalar(
+            select(EmailDelivery).where(
+                EmailDelivery.template_key == "security_notice",
+                EmailDelivery.recipient_email == user.email,
+            )
+        )
+        assert security is not None
+        assert security.category == "security"
+        assert security.status == "queued"
+
+
+async def test_deadline_sweep_respects_preferences_and_existing_applications() -> None:
+    now = datetime.now(UTC)
+    async with Session() as db:
+        institution = Institution(code="COMM-D", name="Reminder Institute")
+        db.add(institution)
+        await db.flush()
+        company = Company(
+            institution_id=institution.id,
+            name="Reminder Company",
+            description="Placement roles",
+        )
+        db.add(company)
+        await db.flush()
+        drive = PlacementDrive(
+            institution_id=institution.id,
+            company_id=company.id,
+            title="Reminder Drive",
+            description="An active placement drive",
+            location="Campus",
+            work_mode="onsite",
+            opens_at=now - timedelta(days=1),
+            deadline_at=now + timedelta(hours=6),
+            status=PublicationStatus.PUBLISHED.value,
+        )
+        db.add(drive)
+        await db.flush()
+        role = PlacementRole(
+            institution_id=institution.id,
+            drive_id=drive.id,
+            title="Graduate Engineer",
+            description="Graduate role",
+            employment_type="full_time",
+            location="Campus",
+            work_mode="onsite",
+            skills=[],
+            requirements=[],
+            status=PublicationStatus.PUBLISHED.value,
+        )
+        db.add(role)
+        await db.flush()
+
+        users = [
+            User(
+                institution_id=institution.id,
+                email=f"reminder-{label}@example.edu",
+                password_hash="test-password-hash",  # noqa: S106
+                role=UserRole.STUDENT.value,
+            )
+            for label in ("enabled", "disabled", "applied")
+        ]
+        db.add_all(users)
+        await db.flush()
+        for user in users:
+            db.add(
+                InstitutionMembership(
+                    institution_id=institution.id,
+                    user_id=user.id,
+                    role=UserRole.STUDENT.value,
+                    status=MembershipStatus.ACTIVE.value,
+                )
+            )
+            db.add(
+                SavedOpportunity(
+                    institution_id=institution.id,
+                    student_user_id=user.id,
+                    role_id=role.id,
+                    created_at=now,
+                )
+            )
+        db.add(
+            CommunicationPreference(
+                user_id=users[1].id,
+                institution_id=institution.id,
+                deadline_reminders=False,
+            )
+        )
+        db.add(
+            Application(
+                institution_id=institution.id,
+                role_id=role.id,
+                student_user_id=users[2].id,
+                resume_version_id=uuid4(),
+                eligibility_evaluation_id=uuid4(),
+                idempotency_key="existing-application",
+                role_snapshot={},
+                resume_snapshot={},
+                facts_snapshot={},
+                rule_snapshot={},
+                eligibility_snapshot={},
+            )
+        )
+        await db.commit()
+
+        queued = await enqueue_upcoming_deadline_reminders(
+            db,
+            settings=Settings(
+                email_deadline_reminder_hours=24,
+                email_reminder_batch_size=100,
+            ),
+            now=now,
+        )
+        await db.commit()
+        deliveries = list(
+            (
+                await db.scalars(
+                    select(EmailDelivery).where(
+                        EmailDelivery.template_key == "deadline_reminder"
+                    )
+                )
+            ).all()
+        )
+        assert queued == 1
+        assert {item.status for item in deliveries} == {"queued", "suppressed"}
+        assert users[2].email not in {item.recipient_email for item in deliveries}
+        assert all(str(user.id) not in item.dedupe_key for item in deliveries for user in users)
