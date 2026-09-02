@@ -47,6 +47,14 @@ def install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:
         correlation_id = request.state.correlation_id
+        safe_errors = [
+            {
+                "location": [str(part) for part in item.get("loc", ())],
+                "type": str(item.get("type", "validation_error")),
+                "message": str(item.get("msg", "Invalid value")),
+            }
+            for item in error.errors()
+        ]
         return JSONResponse(
             status_code=422,
             headers={"X-Request-ID": correlation_id},
@@ -55,7 +63,7 @@ def install_exception_handlers(app: FastAPI) -> None:
                     "code": "validation_error",
                     "message": "Review the highlighted fields and try again.",
                     "correlation_id": correlation_id,
-                    "details": {"errors": error.errors()},
+                    "details": {"errors": safe_errors},
                 }
             },
         )

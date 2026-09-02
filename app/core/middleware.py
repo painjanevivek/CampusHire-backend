@@ -1,5 +1,6 @@
 import logging
 import re
+from json import dumps
 from time import perf_counter
 from uuid import uuid4
 
@@ -37,7 +38,7 @@ class RequestBodyLimitMiddleware:
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
         if content_length is not None and int(content_length) > limit:
-            await self._reject(send)
+            await self._reject(send, self._correlation_id(scope))
             return
         received = 0
 
@@ -55,10 +56,19 @@ class RequestBodyLimitMiddleware:
         except ValueError as error:
             if str(error) != "request_body_too_large":
                 raise
-            await self._reject(send)
+            await self._reject(send, self._correlation_id(scope))
 
     @staticmethod
-    async def _reject(send: Send) -> None:
+    def _correlation_id(scope: Scope) -> str:
+        state = scope.setdefault("state", {})
+        correlation_id = state.get("correlation_id")
+        if not correlation_id:
+            correlation_id = str(uuid4())
+            state["correlation_id"] = correlation_id
+        return str(correlation_id)
+
+    @staticmethod
+    async def _reject(send: Send, correlation_id: str) -> None:
         await send(
             {
                 "type": "http.response.start",
@@ -66,16 +76,23 @@ class RequestBodyLimitMiddleware:
                 "headers": [
                     (b"content-type", b"application/json"),
                     (b"cache-control", b"no-store"),
+                    (b"x-request-id", correlation_id.encode("ascii")),
                 ],
             }
         )
         await send(
             {
                 "type": "http.response.body",
-                "body": (
-                    b'{"error":{"code":"request_body_too_large",'
-                    b'"message":"Upload is too large."}}'
-                ),
+                "body": dumps(
+                    {
+                        "error": {
+                            "code": "request_body_too_large",
+                            "message": "Upload is too large.",
+                            "correlation_id": correlation_id,
+                        }
+                    },
+                    separators=(",", ":"),
+                ).encode("utf-8"),
             }
         )
 

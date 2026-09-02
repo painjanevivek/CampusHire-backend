@@ -138,5 +138,24 @@ def test_oversized_resume_body_is_rejected_before_route_processing(
                 files={"file": ("large.pdf", b"%PDF" + b"x" * 4096, "application/pdf")},
             )
         assert response.status_code == 413
+        body = response.json()["error"]
+        assert body["code"] == "request_body_too_large"
+        assert body["correlation_id"] == response.headers["X-Request-ID"]
     finally:
         get_settings.cache_clear()
+
+
+def test_validation_errors_do_not_echo_submitted_secret_values() -> None:
+    secret = "do-not-echo-this-secret"  # noqa: S105
+    with TestClient(app) as client:
+        csrf_response = client.get("/api/v1/auth/csrf")
+        csrf_token = csrf_response.cookies["campushire_csrf"]
+        response = client.post(
+            "/api/v1/auth/sign-in",
+            json={"email": "not-an-email", "password": [secret]},
+            headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf_token},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert secret not in response.text

@@ -39,9 +39,9 @@ def create_app() -> FastAPI:
         allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID"],
     )
     application.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
-    application.add_middleware(RequestContextMiddleware)
-    application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(RequestBodyLimitMiddleware)
+    application.add_middleware(SecurityHeadersMiddleware)
+    application.add_middleware(RequestContextMiddleware)
     install_exception_handlers(application)
     application.include_router(api_router, prefix="/api/v1")
     return application

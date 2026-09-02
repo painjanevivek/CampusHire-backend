@@ -72,7 +72,11 @@ def verify_origin(request: Request) -> None:
     allowed = {str(item).rstrip("/") for item in get_settings().frontend_origins}
     if origin not in allowed:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Request origin is not allowed"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "origin_not_allowed",
+                "message": "Request origin is not allowed",
+            },
         )
 
 
@@ -82,7 +86,10 @@ def verify_public_csrf(request: Request) -> None:
     cookie = request.cookies.get(settings.csrf_cookie_name, "")
     header = request.headers.get("X-CSRF-Token", "")
     if not cookie or not header or not secrets.compare_digest(cookie, header):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "csrf_validation_failed", "message": "CSRF validation failed"},
+        )
 
 
 async def get_current_session(
@@ -188,9 +195,15 @@ def verify_authenticated_csrf(request: Request, session: CurrentSession) -> None
     cookie = request.cookies.get(settings.csrf_cookie_name, "")
     header = request.headers.get("X-CSRF-Token", "")
     if not cookie or not header or not secrets.compare_digest(cookie, header):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "csrf_validation_failed", "message": "CSRF validation failed"},
+        )
     if not secrets.compare_digest(hash_secret(header), session.csrf_hash):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "csrf_validation_failed", "message": "CSRF validation failed"},
+        )
 
 
 async def get_current_user(session: CurrentSession) -> User:
