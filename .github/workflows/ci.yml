@@ -30,6 +30,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://campushire:campushire@127.0.0.1:5432/campushire_ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
@@ -66,8 +68,19 @@ jobs:
       - name: Rehearse the latest PostgreSQL migration
         run: |
           alembic upgrade head
-          alembic downgrade 20260828_0014
+          alembic downgrade 20260902_0017
           alembic upgrade head
-          test "$(alembic current | awk '{print $1}')" = "20260828_0015"
+          test "$(alembic current | awk '{print $1}')" = "20260902_0018"
       - name: Reject committed private keys
         run: '! git grep -n -E "BEGIN (RSA|OPENSSH) PRIVATE KEY" -- .'
+      - name: Check out the bound Frontend phase-08 source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: painjanevivek/CampusHire
+          ref: fa02ff057e075d03f7447bcfdc6d8c148d7c5748
+          path: .compat/frontend
+          persist-credentials: false
+      - name: Validate the cross-repository pilot compatibility manifest
+        run: |
+          python .github/tests/test_validate_compatibility_manifest.py
+          python .github/scripts/validate_compatibility_manifest.py --frontend .compat/frontend --backend .

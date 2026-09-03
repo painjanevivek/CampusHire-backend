@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "candidate_id": "campushire-frontend-phase-08_backend-phase-09_20260903",
+  "classification": "verified_local_pilot_candidate",
+  "decision": "NO_GO_REAL_DATA",
+  "repositories": {
+    "frontend": {
+      "repository": "https://github.com/painjanevivek/CampusHire",
+      "phase": "phase-08",
+      "commit_sha": "fa02ff057e075d03f7447bcfdc6d8c148d7c5748",
+      "committed_at": "2026-09-02T20:54:46+05:30",
+      "post_candidate_control_paths": [
+        ".github/release/pilot-compatibility-manifest.json",
+        ".github/release/pilot-compatibility-manifest.sha256",
+        ".github/scripts/validate_compatibility_manifest.py",
+        ".github/tests/test_validate_compatibility_manifest.py",
+        ".github/workflows/ci.yml"
+      ]
+    },
+    "backend": {
+      "repository": "https://github.com/painjanevivek/CampusHire-backend",
+      "phase": "phase-09",
+      "commit_sha": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "committed_at": "2026-09-02T21:08:18+05:30",
+      "post_candidate_control_paths": [
+        ".github/release/pilot-compatibility-manifest.json",
+        ".github/release/pilot-compatibility-manifest.sha256",
+        ".github/scripts/validate_compatibility_manifest.py",
+        ".github/tests/test_validate_compatibility_manifest.py",
+        ".github/workflows/ci.yml",
+        "docs/CURRENT_RELEASE_STATUS.md"
+      ]
+    }
+  },
+  "contract": {
+    "path": "openapi/campushire.openapi.json",
+    "sha256": "dc90f81eb4802740ab932d82c0dc31a55d6d569e28a73a01700c218f78e83603",
+    "frontend_observed_at": "2026-09-03T13:22:05Z",
+    "backend_observed_at": "2026-09-03T13:22:05Z"
+  },
+  "database": {
+    "migration_head": "20260902_0018",
+    "observed_at": "2026-09-03T13:22:05Z"
+  },
+  "images": {
+    "frontend": {
+      "local_reference": "campushire-pilot-frontend:fa02ff057e075d03f7447bcfdc6d8c148d7c5748",
+      "digest": "sha256:588b2bfd04f990f9fd7dd60137d90cf1c78b7c367c727828ac0dac3cd4f3aeb8",
+      "digest_kind": "local_docker_image_id",
+      "platform": "linux/amd64",
+      "source_repository": "frontend",
+      "source_commit_sha": "fa02ff057e075d03f7447bcfdc6d8c148d7c5748",
+      "built_at": "2026-09-03T13:22:05Z",
+      "registry_status": "not_published",
+      "build_parameters": {
+        "dockerfile": "Dockerfile",
+        "target": "runner",
+        "NEXT_PUBLIC_API_URL": "https://campushire.80-65-208-136.sslip.io/api/v1",
+        "oci_revision_label": "fa02ff057e075d03f7447bcfdc6d8c148d7c5748"
+      }
+    },
+    "api": {
+      "local_reference": "campushire-pilot-api:cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "digest": "sha256:d63ee698c3fbfefee4980d3fbc1edaaba6f27757ddb6a1042369ff68eec9f900",
+      "digest_kind": "local_docker_image_id",
+      "platform": "linux/amd64",
+      "source_repository": "backend",
+      "source_commit_sha": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "built_at": "2026-09-03T13:22:05Z",
+      "registry_status": "not_published",
+      "build_parameters": {
+        "dockerfile": "Dockerfile",
+        "target": "api",
+        "oci_revision_label": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00"
+      }
+    },
+    "worker": {
+      "local_reference": "campushire-pilot-worker:cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "digest": "sha256:269890c16d1aeac9097a42af97a556c7ef8dba8db90be43080b28d6bed52acac",
+      "digest_kind": "local_docker_image_id",
+      "platform": "linux/amd64",
+      "source_repository": "backend",
+      "source_commit_sha": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "built_at": "2026-09-03T13:22:05Z",
+      "registry_status": "not_published",
+      "build_parameters": {
+        "dockerfile": "Dockerfile",
+        "target": "worker",
+        "oci_revision_label": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00"
+      }
+    },
+    "parser": {
+      "local_reference": "campushire-pilot-parser:cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "digest": "sha256:0d3e29678b8d46fe39176bd7cd7237466f7ffc508c3fb61aebc3331a54b1cb23",
+      "digest_kind": "local_docker_image_id",
+      "platform": "linux/amd64",
+      "source_repository": "backend",
+      "source_commit_sha": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "built_at": "2026-09-03T13:22:05Z",
+      "registry_status": "not_published",
+      "build_parameters": {
+        "dockerfile": "Dockerfile.parser",
+        "target": "parser-runtime",
+        "oci_revision_label": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00"
+      }
+    },
+    "clamav": {
+      "local_reference": "campushire-pilot-clamav:cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "digest": "sha256:45635d46ff58913cb875db692a2f0523348714409d782392fe48d44980e670c3",
+      "digest_kind": "local_docker_image_id",
+      "platform": "linux/amd64",
+      "source_repository": "backend",
+      "source_commit_sha": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00",
+      "built_at": "2026-09-03T13:22:05Z",
+      "registry_status": "not_published",
+      "build_parameters": {
+        "dockerfile": "Dockerfile.clamav",
+        "target": "clamav-runtime",
+        "oci_revision_label": "cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00"
+      }
+    }
+  },
+  "evidence": {
+    "recorded_at": "2026-09-03T13:28:44Z",
+    "verified_by": "local_automated_verification",
+    "verification_scope": [
+      "full Git commit identity and phase subject",
+      "byte-identical Frontend and Backend OpenAPI snapshots",
+      "single Alembic migration head",
+      "locally built linux/amd64 image IDs with embedded OCI source revision labels",
+      "cross-repository validator and focused negative tests",
+      "Frontend four-route production-image release smoke",
+      "Backend API liveness and worker import smoke",
+      "parser isolation policy, valid-PDF, and timeout-cleanup verification",
+      "ClamAV runtime version smoke"
+    ]
+  },
+  "external_gates": {
+    "representative_uat": {
+      "status": "pending",
+      "evidence": null
+    },
+    "governance_signoff": {
+      "status": "pending",
+      "evidence": null
+    },
+    "registry_promotion": {
+      "status": "pending",
+      "evidence": null
+    },
+    "signature_and_provenance": {
+      "status": "pending",
+      "evidence": null
+    },
+    "authorized_go_no_go": {
+      "status": "pending",
+      "evidence": null
+    }
+  }
+}
