@@ -2,7 +2,7 @@
 
 Recorded: 2026-09-03 (Asia/Calcutta)
 
-Decision: **Verified local pilot candidate; GO for continued synthetic qualification only; NO-GO
+Decision: **Verified source-compatibility candidate; GO for continued synthetic qualification only; NO-GO
 for real student data.**
 
 This is the authoritative status record for the current two-repository CampusHire candidate.
@@ -15,19 +15,19 @@ qualify this candidate.
 
 | Item | Bound value | Verification boundary |
 | --- | --- | --- |
-| Candidate | `campushire-frontend-phase-08_backend-phase-09_20260903` | Local automated evidence only |
-| Canonical manifest SHA-256 | `bb66d6884ddb734147db29577678394912ed8474ad03ecfc33c1cd9f6ea69217` | Checked by both CI validators against the adjacent immutable lock |
+| Candidate | `campushire-frontend-phase-08_backend-phase-09_20260903` | Source compatibility verified; image records are non-authoritative |
+| Canonical manifest SHA-256 | `14b9ffa4afa36277143058ca0b4ddb961328dd6eac4490a593a953e68f5a2a29` | Checked by both CI validators against the adjacent immutable lock |
 | Frontend phase-08 source | `fa02ff057e075d03f7447bcfdc6d8c148d7c5748` | Full commit and phase subject verified |
 | Backend phase-09 source | `cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00` | Full commit and phase subject verified |
 | OpenAPI Git-blob SHA-256 | `dc90f81eb4802740ab932d82c0dc31a55d6d569e28a73a01700c218f78e83603` | Frontend, Backend, and both bound commits are byte-identical after checkout normalization |
 | Alembic head | `20260902_0018` | Single head discovered from the bound Backend tree |
-| Evidence recorded | `2026-09-03T13:28:44Z` | Immutable manifest timestamp after local image smoke verification |
+| Evidence recorded | `2026-09-03T13:28:44Z` | Manifest timestamp for source checks and non-reproducible local image records |
 
 The Frontend image was built with
 `NEXT_PUBLIC_API_URL=https://campushire.80-65-208-136.sslip.io/api/v1`. That build-time endpoint
 selection is compatibility evidence, not proof that this exact candidate is deployed there.
 
-## Locally built image identity
+## Non-authoritative local image record
 
 | Component | Linux/AMD64 local Docker image ID |
 | --- | --- |
@@ -37,10 +37,12 @@ selection is compatibility evidence, not proof that this exact candidate is depl
 | Credential-free parser | `sha256:0d3e29678b8d46fe39176bd7cd7237466f7ffc508c3fb61aebc3331a54b1cb23` |
 | ClamAV runtime | `sha256:45635d46ff58913cb875db692a2f0523348714409d782392fe48d44980e670c3` |
 
-Each local image contains the exact source commit in the
-`org.opencontainers.image.revision` label. These IDs are immutable local build evidence. They are
-not registry-qualified multi-architecture digests, signatures, attestations, or proof of managed
-deployment. Promotion must preserve and separately record the registry digest for every component.
+These identifiers record the images exercised during the historical local smoke run, but they are
+not reproducible or independently attributable to a clean source checkout. They are not a CI trust
+boundary, registry-qualified multi-architecture digests, signatures, attestations, or proof of
+managed deployment, and they are intentionally excluded from the machine-verified compatibility
+manifest. Promotion must build from a clean bound source checkout and separately verify
+the registry digest, source revision, SBOM, provenance attestation, and signature for every image.
 
 ## CI compatibility gate
 
@@ -50,9 +52,10 @@ Frontend phase-08 commit. Both run the same validator and focused negative tests
 - abbreviated or inconsistent source SHAs and phase labels;
 - OpenAPI bytes that differ between either working tree or either bound commit;
 - a migration head other than `20260902_0018`;
-- missing or malformed image IDs, source bindings, or UTC evidence timestamps;
-- post-candidate product changes outside the explicitly listed manifest, validator, tests, CI, and
-  this authoritative status file; and
+- malformed source bindings or UTC evidence timestamps;
+- post-candidate product changes outside the validator-owned control-path policy, including dirty
+  or untracked working-tree content;
+- divergence between the mirrored manifest, lock, validator, and focused tests; and
 - any claim that external UAT, governance, registry promotion, signing, provenance, or final
   authorization has passed without evidence.
 

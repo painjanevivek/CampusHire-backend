@@ -15,16 +15,38 @@ from typing import Any
 MANIFEST_PATH = Path(".github/release/pilot-compatibility-manifest.json")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
-EXPECTED_IMAGES = {
-    "frontend": "frontend",
-    "api": "backend",
-    "worker": "backend",
-    "parser": "backend",
-    "clamav": "backend",
-}
 EXPECTED_REPOSITORIES = {
     "frontend": "https://github.com/painjanevivek/CampusHire",
     "backend": "https://github.com/painjanevivek/CampusHire-backend",
+}
+MIRRORED_CONTROL_PATHS = (
+    ".github/release/pilot-compatibility-manifest.json",
+    ".github/release/pilot-compatibility-manifest.sha256",
+    ".github/scripts/validate_compatibility_manifest.py",
+    ".github/tests/test_validate_compatibility_manifest.py",
+)
+EXPECTED_VERIFICATION_SCOPE = [
+    "full Git origin, commit identity, phase subject, and clean product working tree",
+    "byte-identical mirrored compatibility controls",
+    "byte-identical Frontend and Backend OpenAPI snapshots",
+    "single Alembic migration head",
+]
+EXPECTED_POST_CANDIDATE_CONTROL_PATHS = {
+    "frontend": {
+        ".github/release/pilot-compatibility-manifest.json",
+        ".github/release/pilot-compatibility-manifest.sha256",
+        ".github/scripts/validate_compatibility_manifest.py",
+        ".github/tests/test_validate_compatibility_manifest.py",
+        ".github/workflows/ci.yml",
+    },
+    "backend": {
+        ".github/release/pilot-compatibility-manifest.json",
+        ".github/release/pilot-compatibility-manifest.sha256",
+        ".github/scripts/validate_compatibility_manifest.py",
+        ".github/tests/test_validate_compatibility_manifest.py",
+        ".github/workflows/ci.yml",
+        "docs/CURRENT_RELEASE_STATUS.md",
+    },
 }
 EXPECTED_EXTERNAL_GATES = {
     "authorized_go_no_go",
@@ -121,7 +143,6 @@ def validate_structure(manifest: Mapping[str, Any]) -> None:
             "repositories",
             "contract",
             "database",
-            "images",
             "evidence",
             "external_gates",
         },
@@ -129,7 +150,7 @@ def validate_structure(manifest: Mapping[str, Any]) -> None:
     )
     if manifest["schema_version"] != 1:
         raise ManifestError("schema_version must be 1")
-    if manifest["classification"] != "verified_local_pilot_candidate":
+    if manifest["classification"] != "verified_source_compatibility_candidate":
         raise ManifestError("classification must preserve the local-evidence boundary")
     if manifest["decision"] != "NO_GO_REAL_DATA":
         raise ManifestError("the candidate must not imply real-data release authorization")
@@ -146,7 +167,6 @@ def validate_structure(manifest: Mapping[str, Any]) -> None:
                 "phase",
                 "commit_sha",
                 "committed_at",
-                "post_candidate_control_paths",
             },
             f"repositories.{name}",
         )
@@ -162,9 +182,6 @@ def validate_structure(manifest: Mapping[str, Any]) -> None:
             ) from error
         if repository["phase"] != ("phase-08" if name == "frontend" else "phase-09"):
             raise ManifestError(f"repositories.{name}.phase is not the requested phase")
-        if not isinstance(repository["post_candidate_control_paths"], list):
-            raise ManifestError(f"repositories.{name}.post_candidate_control_paths must be a list")
-
     contract = manifest["contract"]
     require_keys(
         contract,
@@ -184,51 +201,13 @@ def validate_structure(manifest: Mapping[str, Any]) -> None:
         raise ManifestError("database.migration_head must be non-empty")
     parse_timestamp(database["observed_at"], "database.observed_at")
 
-    images = manifest["images"]
-    require_keys(images, set(EXPECTED_IMAGES), "images")
-    for name, source_repository in EXPECTED_IMAGES.items():
-        image = images[name]
-        require_keys(
-            image,
-            {
-                "local_reference",
-                "digest",
-                "digest_kind",
-                "platform",
-                "source_repository",
-                "source_commit_sha",
-                "built_at",
-                "registry_status",
-                "build_parameters",
-            },
-            f"images.{name}",
-        )
-        if not SHA256.fullmatch(image["digest"]):
-            raise ManifestError(f"images.{name}.digest must be a SHA-256 digest")
-        if image["digest_kind"] != "local_docker_image_id":
-            raise ManifestError(f"images.{name}.digest_kind must remain explicit")
-        if image["platform"] != "linux/amd64":
-            raise ManifestError(f"images.{name}.platform must be linux/amd64")
-        if image["source_repository"] != source_repository:
-            raise ManifestError(f"images.{name}.source_repository is inconsistent")
-        expected_sha = repositories[source_repository]["commit_sha"]
-        if image["source_commit_sha"] != expected_sha:
-            raise ManifestError(f"images.{name}.source_commit_sha is inconsistent")
-        if image["registry_status"] != "not_published":
-            raise ManifestError(f"images.{name} must not claim registry promotion")
-        if not isinstance(image["build_parameters"], Mapping):
-            raise ManifestError(f"images.{name}.build_parameters must be an object")
-        if image["build_parameters"].get("oci_revision_label") != expected_sha:
-            raise ManifestError(f"images.{name} does not bind its OCI revision label")
-        parse_timestamp(image["built_at"], f"images.{name}.built_at")
-
     evidence = manifest["evidence"]
     require_keys(evidence, {"recorded_at", "verified_by", "verification_scope"}, "evidence")
     parse_timestamp(evidence["recorded_at"], "evidence.recorded_at")
-    if evidence["verified_by"] != "local_automated_verification":
+    if evidence["verified_by"] != "local_source_compatibility_verification":
         raise ManifestError("evidence.verified_by must not imply an external approver")
-    if not isinstance(evidence["verification_scope"], list) or not evidence["verification_scope"]:
-        raise ManifestError("evidence.verification_scope must be a non-empty list")
+    if evidence["verification_scope"] != EXPECTED_VERIFICATION_SCOPE:
+        raise ManifestError("evidence.verification_scope differs from validator policy")
 
     gates = manifest["external_gates"]
     require_keys(gates, EXPECTED_EXTERNAL_GATES, "external_gates")
@@ -240,6 +219,15 @@ def validate_structure(manifest: Mapping[str, Any]) -> None:
 
 def validate_repository(name: str, root: Path, repository: Mapping[str, Any]) -> None:
     commit = repository["commit_sha"]
+    remote = run_git(root, ["remote", "get-url", "origin"])
+    expected_remote = EXPECTED_REPOSITORIES[name]
+    accepted_remotes = {
+        expected_remote,
+        expected_remote + ".git",
+        expected_remote.replace("https://github.com/", "git@github.com:") + ".git",
+    }
+    if remote not in accepted_remotes:
+        raise ManifestError(f"{name} origin is not the expected repository")
     run_git(root, ["cat-file", "-e", f"{commit}^{{commit}}"])
     run_git(root, ["merge-base", "--is-ancestor", commit, "HEAD"])
     subject = run_git(root, ["show", "-s", "--format=%s", commit])
@@ -249,18 +237,29 @@ def validate_repository(name: str, root: Path, repository: Mapping[str, Any]) ->
     if committed_at != repository["committed_at"]:
         raise ManifestError(f"{name} candidate commit timestamp differs from the manifest")
     changed = set(run_git(root, ["diff", "--name-only", f"{commit}..HEAD"]).splitlines())
-    allowed = set(repository["post_candidate_control_paths"])
+    allowed = EXPECTED_POST_CANDIDATE_CONTROL_PATHS[name]
     if not changed <= allowed:
         unexpected = sorted(changed - allowed)
         raise ManifestError(f"{name} has post-candidate product changes: {unexpected}")
+    dirty = run_git(
+        root,
+        [
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            ".",
+            ":(exclude).compat",
+        ],
+    )
+    if dirty:
+        raise ManifestError(f"{name} working tree must be clean for compatibility validation")
 
 
 def validate_manifest(
     manifest_path: Path,
     frontend_root: Path,
     backend_root: Path,
-    *,
-    verify_local_images: bool = False,
 ) -> Mapping[str, Any]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(manifest, Mapping):
@@ -273,6 +272,12 @@ def validate_manifest(
     roots = {"frontend": frontend_root.resolve(), "backend": backend_root.resolve()}
     for name, root in roots.items():
         validate_repository(name, root, manifest["repositories"][name])
+
+    for relative_path in MIRRORED_CONTROL_PATHS:
+        frontend_control = (roots["frontend"] / relative_path).read_bytes()
+        backend_control = (roots["backend"] / relative_path).read_bytes()
+        if frontend_control != backend_control:
+            raise ManifestError(f"mirrored compatibility control differs: {relative_path}")
 
     contract_path = manifest["contract"]["path"]
     expected_contract = manifest["contract"]["sha256"]
@@ -297,27 +302,6 @@ def validate_manifest(
     if heads != {manifest["database"]["migration_head"]}:
         raise ManifestError(f"migration heads differ from manifest: {sorted(heads)}")
 
-    if verify_local_images:
-        docker = shutil.which("docker")
-        if docker is None:
-            raise ManifestError("docker is required for local image verification")
-        for name, image in manifest["images"].items():
-            result = subprocess.run(  # noqa: S603 - executable and reference are validated.
-                [
-                    docker,
-                    "image",
-                    "inspect",
-                    image["local_reference"],
-                    "--format",
-                    '{{.Id}}|{{index .Config.Labels "org.opencontainers.image.revision"}}',
-                ],
-                capture_output=True,
-                check=False,
-                text=True,
-            )
-            expected = f"{image['digest']}|{image['source_commit_sha']}"
-            if result.returncode != 0 or result.stdout.strip() != expected:
-                raise ManifestError(f"local image digest mismatch for {name}")
     return manifest
 
 
@@ -328,7 +312,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     parser.add_argument("--frontend", type=Path, required=True)
     parser.add_argument("--backend", type=Path, required=True)
-    parser.add_argument("--verify-local-images", action="store_true")
     return parser.parse_args()
 
 
@@ -338,10 +321,12 @@ def main() -> None:
         args.manifest,
         args.frontend,
         args.backend,
-        verify_local_images=args.verify_local_images,
     )
     canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
-    print(f"verified {manifest['candidate_id']} manifest_sha256={sha256_bytes(canonical)}")
+    print(
+        f"verified source compatibility for {manifest['candidate_id']} "
+        f"manifest_sha256={sha256_bytes(canonical)}"
+    )
 
 
 if __name__ == "__main__":
