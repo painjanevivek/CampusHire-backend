@@ -121,8 +121,26 @@ jobs:
       BACKEND_API_IMAGE: ${{ inputs.backend_api_image }}
       BACKEND_WORKER_IMAGE: ${{ inputs.backend_worker_image }}
       FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+      FRONTEND_SOURCE_SHA: ${{ inputs.frontend_source_sha }}
       RESUME_PARSER_IMAGE: ${{ inputs.parser_image }}
       CLAMAV_IMAGE: ${{ inputs.clamav_image }}
+      CANDIDATE_ARCHIVE_SHA256: ${{ inputs.candidate_archive_sha256 }}
+      ROLLBACK_ARCHIVE_SHA256: ${{ inputs.rollback_archive_sha256 }}
+      SBOM_BUNDLE_SHA256: ${{ inputs.sbom_bundle_sha256 }}
+      PROVENANCE_REFERENCE: ${{ inputs.provenance_reference }}
+      SIGNATURE_REFERENCE: ${{ inputs.signature_reference }}
+      MIGRATION_HEAD: ${{ inputs.migration_head }}
+      CONFIG_MANIFEST_HASH: ${{ inputs.config_manifest_hash }}
+      ROLLBACK_FRONTEND_SHA: ${{ inputs.rollback_frontend_sha }}
+      ROLLBACK_BACKEND_SHA: ${{ inputs.rollback_backend_sha }}
+      FRONTEND_DEEP_SCAN: ${{ inputs.frontend_deep_scan }}
+      BACKEND_DEEP_SCAN: ${{ inputs.backend_deep_scan }}
+      MANAGED_STAGING: ${{ inputs.managed_staging }}
+      MANAGED_RECOVERY: ${{ inputs.managed_recovery }}
+      MANAGED_CAPACITY_AND_COST: ${{ inputs.managed_capacity_and_cost }}
+      REPRESENTATIVE_UAT: ${{ inputs.representative_uat }}
+      GOVERNANCE_SIGNOFF: ${{ inputs.governance_signoff }}
+      AUTHORIZED_GO_NO_GO: ${{ inputs.authorized_go_no_go }}
       REMOTE_RELEASE: /opt/campushire/releases/${{ github.sha }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
@@ -167,30 +185,30 @@ jobs:
           python scripts/build_release_candidate_manifest.py \
             --frontend Frontend --backend . --output release-candidate.json --strict \
             --frontend-image-digest "${FRONTEND_IMAGE##*@}" \
-            --frontend-image-reference "${{ inputs.frontend_image }}" \
+            --frontend-image-reference "${FRONTEND_IMAGE}" \
             --backend-image-digest "${BACKEND_API_IMAGE##*@}" \
             --backend-image-reference "${BACKEND_API_IMAGE}" \
             --backend-worker-image-digest "${BACKEND_WORKER_IMAGE##*@}" \
             --backend-worker-image-reference "${BACKEND_WORKER_IMAGE}" \
             --parser-image-digest "${RESUME_PARSER_IMAGE##*@}" \
             --parser-image-reference "${RESUME_PARSER_IMAGE}" \
-            --candidate-archive-sha256 "${{ inputs.candidate_archive_sha256 }}" \
-            --rollback-archive-sha256 "${{ inputs.rollback_archive_sha256 }}" \
-            --sbom-bundle-sha256 "${{ inputs.sbom_bundle_sha256 }}" \
-            --provenance-reference "${{ inputs.provenance_reference }}" \
-            --signature-reference "${{ inputs.signature_reference }}" \
-            --migration-head "${{ inputs.migration_head }}" \
-            --config-manifest-hash "${{ inputs.config_manifest_hash }}" \
-            --rollback-frontend-sha "${{ inputs.rollback_frontend_sha }}" \
-            --rollback-backend-sha "${{ inputs.rollback_backend_sha }}" \
-            --approved-gate "frontend_deep_scan=${{ inputs.frontend_deep_scan }}" \
-            --approved-gate "backend_deep_scan=${{ inputs.backend_deep_scan }}" \
-            --approved-gate "managed_staging=${{ inputs.managed_staging }}" \
-            --approved-gate "managed_recovery=${{ inputs.managed_recovery }}" \
-            --approved-gate "managed_capacity_and_cost=${{ inputs.managed_capacity_and_cost }}" \
-            --approved-gate "representative_uat=${{ inputs.representative_uat }}" \
-            --approved-gate "governance_signoff=${{ inputs.governance_signoff }}" \
-            --approved-gate "authorized_go_no_go=${{ inputs.authorized_go_no_go }}"
+            --candidate-archive-sha256 "${CANDIDATE_ARCHIVE_SHA256}" \
+            --rollback-archive-sha256 "${ROLLBACK_ARCHIVE_SHA256}" \
+            --sbom-bundle-sha256 "${SBOM_BUNDLE_SHA256}" \
+            --provenance-reference "${PROVENANCE_REFERENCE}" \
+            --signature-reference "${SIGNATURE_REFERENCE}" \
+            --migration-head "${MIGRATION_HEAD}" \
+            --config-manifest-hash "${CONFIG_MANIFEST_HASH}" \
+            --rollback-frontend-sha "${ROLLBACK_FRONTEND_SHA}" \
+            --rollback-backend-sha "${ROLLBACK_BACKEND_SHA}" \
+            --approved-gate "frontend_deep_scan=${FRONTEND_DEEP_SCAN}" \
+            --approved-gate "backend_deep_scan=${BACKEND_DEEP_SCAN}" \
+            --approved-gate "managed_staging=${MANAGED_STAGING}" \
+            --approved-gate "managed_recovery=${MANAGED_RECOVERY}" \
+            --approved-gate "managed_capacity_and_cost=${MANAGED_CAPACITY_AND_COST}" \
+            --approved-gate "representative_uat=${REPRESENTATIVE_UAT}" \
+            --approved-gate "governance_signoff=${GOVERNANCE_SIGNOFF}" \
+            --approved-gate "authorized_go_no_go=${AUTHORIZED_GO_NO_GO}"
 
       - name: Build the protected production deployment bundle
         env:
@@ -292,7 +310,7 @@ jobs:
             echo
             echo "- Host: \`https://${PRODUCTION_HOST}\`"
             echo "- Backend commit: \`${GITHUB_SHA}\`"
-            echo "- Frontend source: \`${{ inputs.frontend_source_sha }}\`"
+            echo "- Frontend source: \`${FRONTEND_SOURCE_SHA}\`"
             echo "- API: \`${BACKEND_API_IMAGE}\`"
             echo "- Worker: \`${BACKEND_WORKER_IMAGE}\`"
             echo "- Frontend: \`${FRONTEND_IMAGE}\`"

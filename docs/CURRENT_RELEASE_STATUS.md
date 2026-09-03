@@ -11,6 +11,49 @@ The identical machine-readable compatibility manifest is checked into both repos
 and completion documents remain historical evidence for their exact source pairs and do not
 qualify this candidate.
 
+## Phase 10 security qualification update — 2026-09-03
+
+The Windows worker-profile launch blocker is resolved. The Codex Security launcher prefers the
+independently installed stable CLI on Windows; that executable was still `codex-cli 0.152.0` even
+though newer desktop executables were present. Updating only that selected stable CLI to `0.152.1`
+allowed the managed `codex_security_deep_scan_worker` read-only permission profile to start. No
+filesystem denial or sandbox rule was weakened.
+
+Two separate Deep Security Scans completed and sealed against the immutable source pair below:
+
+| Target | Scan | Result | Coverage |
+| --- | --- | --- | --- |
+| Frontend `fa02ff057e075d03f7447bcfdc6d8c148d7c5748` | `b7508ff4-2926-4964-be3f-fb2b76da3167` | One validated low finding: plaintext non-loopback API origins could receive credentialed traffic | Partial; 8 deferred surfaces |
+| Backend `cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00` | `9feddc81-0803-492b-9a28-f7fa6662bdba` | Four medium and seven low occurrences; two low occurrences duplicate the same single-use-capability race | Partial; 36 deferred surfaces |
+
+The frontend transport path is remediated in the current working tree by central API-origin
+validation, non-loopback HTTPS enforcement, redirect refusal for credentialed fetches, and a
+release-smoke assertion. Focused tests passed `37/37`; the full frontend suite passed `160/160`,
+with lint, typecheck, and production build also passing.
+
+The backend workflow-dispatch shell-injection path is remediated in the current working tree by
+passing dispatch inputs through environment variables rather than interpolating them into Bash
+program text. Its focused release-security tests passed `6/6`.
+
+The following validated backend risks remain open and therefore keep real-data promotion blocked:
+
+- TOTP replay and concurrent password-reset/recovery-code consumption require atomic database
+  consumption, a migration, and PostgreSQL concurrency regressions.
+- Unauthenticated durable account lockout and authentication timing require an approved abuse and
+  recovery policy before changing sign-in semantics.
+- Production image/evidence binding requires registry allowlisting plus cryptographic
+  signature/provenance/SBOM/source verification; opaque references are not approval evidence.
+- Python release dependencies still require complete platform locks and artifact hashes.
+- Resume ingestion still requires approved per-user, tenant, and global capacity budgets.
+- Deletion-record expiry/anonymization requires an approved retention and legal-hold period.
+
+TAC advisory status was `not_granted` with no grant levels, so protected output display was not
+assumed available. Scan token measurement was unavailable and is not reported as zero. Both scan
+reports are source-review evidence only: they do not prove deployed configuration, external
+approval, or the deferred coverage surfaces. The repositories advanced beyond the scanned pair
+during qualification, and the remediations are not part of the immutable compatibility identity
+below; a new candidate must be frozen and requalified before any promotion decision.
+
 [Active real-data pilot dossier](REAL_DATA_PILOT_RELEASE_DOSSIER.md)
 
 ## Working-tree application packet qualification
