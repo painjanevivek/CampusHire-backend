@@ -73,11 +73,11 @@ jobs:
           test "$(alembic current | awk '{print $1}')" = "20260902_0018"
       - name: Reject committed private keys
         run: '! git grep -n -E "BEGIN (RSA|OPENSSH) PRIVATE KEY" -- .'
-      - name: Check out the bound Frontend phase-08 source
+      - name: Check out the mirrored Frontend phase-10 controls
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: painjanevivek/CampusHire
-          ref: fa02ff057e075d03f7447bcfdc6d8c148d7c5748
+          ref: 06516baf845c979360863516c44582b8bd126de1
           path: .compat/frontend
           persist-credentials: false
       - name: Validate the cross-repository pilot compatibility manifest
