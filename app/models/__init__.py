@@ -31,6 +31,9 @@ from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
     ApplicationAppeal,
+    ApplicationDisclosure,
+    ApplicationDisclosureDraft,
+    ApplicationDraft,
     ApplicationOverride,
     ApplicationStatusEvent,
     Company,
@@ -38,6 +41,7 @@ from app.models.recruitment import (
     EligibilityRuleSet,
     PlacementDrive,
     PlacementRole,
+    RoleApplicationForm,
     SavedOpportunity,
 )
 from app.models.resume import (
@@ -52,6 +56,9 @@ __all__ = [
     "AuditEvent",
     "Application",
     "ApplicationAppeal",
+    "ApplicationDisclosure",
+    "ApplicationDisclosureDraft",
+    "ApplicationDraft",
     "ApplicationOverride",
     "ApplicationStatusEvent",
     "Base",
@@ -76,6 +83,7 @@ __all__ = [
     "PasswordResetToken",
     "PlacementDrive",
     "PlacementRole",
+    "RoleApplicationForm",
     "Resume",
     "ResumeJobEvent",
     "ResumeProcessingJob",

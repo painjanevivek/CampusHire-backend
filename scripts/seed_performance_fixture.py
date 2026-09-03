@@ -18,9 +18,11 @@ from app.models.auth import (
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Company,
+    EligibilityEvaluation,
     EligibilityRuleSet,
     PlacementDrive,
     PlacementRole,
+    RoleApplicationForm,
 )
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.auth.security import hash_password
@@ -64,8 +66,103 @@ async def seed() -> dict[str, str]:
                 raise RuntimeError(
                     "The existing performance fixture is incomplete; use a clean database."
                 )
+            profile = await db.scalar(
+                select(StudentProfile).where(StudentProfile.user_id == student.id)
+            )
+            if profile is None:
+                raise RuntimeError(
+                    "The existing performance fixture is missing its student profile."
+                )
+            profile.city = "Pune"
+            profile.country_code = "IN"
+            profile.education = [
+                {
+                    "degree": "B.Tech",
+                    "program": "B.Tech CSE",
+                    "branch": "Computer Science",
+                    "institution": existing.name,
+                    "score": 8.4,
+                    "score_scale": "cgpa_10",
+                    "graduation_year": 2026,
+                    "active_backlogs": 0,
+                }
+            ]
             student.password_hash = hash_password(required("PERFORMANCE_STUDENT_PASSWORD"))
             admin.password_hash = hash_password(required("PERFORMANCE_ADMIN_PASSWORD"))
+            form = await db.scalar(
+                select(RoleApplicationForm).where(RoleApplicationForm.role_id == role.id)
+            )
+            if form is None:
+                db.add(
+                    RoleApplicationForm(
+                        institution_id=existing.id,
+                        role_id=role.id,
+                        version=1,
+                        status="published",
+                        purpose=(
+                            "Support equal-opportunity reporting and arrange optional "
+                            "application accommodations."
+                        ),
+                        compliance_owner="CampusHire Compliance Office",
+                        retention_days=180,
+                        questions=[
+                            {
+                                "id": "work_authorization",
+                                "prompt": "Are you currently authorized to work in India?",
+                                "type": "boolean",
+                            },
+                            {
+                                "id": "accommodation_contact",
+                                "prompt": (
+                                    "Would you like the compliance team to contact you about "
+                                    "application accommodations?"
+                                ),
+                                "type": "boolean",
+                            },
+                        ],
+                        created_by_user_id=admin.id,
+                        published_at=now,
+                    )
+                )
+            rule_set = await db.scalar(
+                select(EligibilityRuleSet).where(
+                    EligibilityRuleSet.role_id == role.id,
+                    EligibilityRuleSet.status == "published",
+                )
+            )
+            if rule_set is None:
+                raise RuntimeError(
+                    "The existing performance fixture is missing its eligibility rule set."
+                )
+            evaluation = await db.scalar(
+                select(EligibilityEvaluation).where(
+                    EligibilityEvaluation.role_id == role.id,
+                    EligibilityEvaluation.student_user_id == student.id,
+                )
+            )
+            if evaluation is None:
+                db.add(
+                    EligibilityEvaluation(
+                        institution_id=existing.id,
+                        role_id=role.id,
+                        student_user_id=student.id,
+                        rule_set_id=rule_set.id,
+                        facts_snapshot={"program": "B.Tech CSE", "cgpa": 8.4, "active_backlogs": 0},
+                        result_snapshot={
+                            "status": "eligible",
+                            "requirements": [
+                                {
+                                    "label": "Minimum CGPA of 7.0",
+                                    "passed": True,
+                                    "actual": 8.4,
+                                    "required": 7.0,
+                                }
+                            ],
+                        },
+                        fingerprint="d" * 64,
+                        created_at=now,
+                    )
+                )
             await db.commit()
             return {
                 "data_class": "synthetic-only",
@@ -114,11 +211,17 @@ async def seed() -> dict[str, str]:
                     institution_name=institution.name,
                     department="Computer Science",
                     academic_year="2026",
+                    phone="+91 98765 43210",
+                    city="Pune",
+                    country_code="IN",
                     education=[
                         {
+                            "degree": "B.Tech",
                             "program": "B.Tech CSE",
+                            "branch": "Computer Science",
                             "institution": institution.name,
                             "score": 8.4,
+                            "score_scale": "cgpa_10",
                             "graduation_year": 2026,
                             "active_backlogs": 0,
                         }
@@ -180,19 +283,72 @@ async def seed() -> dict[str, str]:
         )
         db.add(role)
         await db.flush()
+        rule_set = EligibilityRuleSet(
+            institution_id=institution.id,
+            role_id=role.id,
+            version=1,
+            status="published",
+            rules=[
+                {
+                    "field": "cgpa",
+                    "operator": "gte",
+                    "value": 7.0,
+                    "label": "Minimum CGPA of 7.0",
+                }
+            ],
+            created_by_user_id=admin.id,
+            published_at=now,
+        )
+        db.add(rule_set)
+        await db.flush()
         db.add(
-            EligibilityRuleSet(
+            EligibilityEvaluation(
+                institution_id=institution.id,
+                role_id=role.id,
+                student_user_id=student.id,
+                rule_set_id=rule_set.id,
+                facts_snapshot={"program": "B.Tech CSE", "cgpa": 8.4, "active_backlogs": 0},
+                result_snapshot={
+                    "status": "eligible",
+                    "requirements": [
+                        {
+                            "label": "Minimum CGPA of 7.0",
+                            "passed": True,
+                            "actual": 8.4,
+                            "required": 7.0,
+                        }
+                    ],
+                },
+                fingerprint="d" * 64,
+                created_at=now,
+            )
+        )
+        db.add(
+            RoleApplicationForm(
                 institution_id=institution.id,
                 role_id=role.id,
                 version=1,
                 status="published",
-                rules=[
+                purpose=(
+                    "Support equal-opportunity reporting and arrange optional application "
+                    "accommodations."
+                ),
+                compliance_owner="CampusHire Compliance Office",
+                retention_days=180,
+                questions=[
                     {
-                        "field": "cgpa",
-                        "operator": "gte",
-                        "value": 7.0,
-                        "label": "Minimum CGPA of 7.0",
-                    }
+                        "id": "work_authorization",
+                        "prompt": "Are you currently authorized to work in India?",
+                        "type": "boolean",
+                    },
+                    {
+                        "id": "accommodation_contact",
+                        "prompt": (
+                            "Would you like the compliance team to contact you about "
+                            "application accommodations?"
+                        ),
+                        "type": "boolean",
+                    },
                 ],
                 created_by_user_id=admin.id,
                 published_at=now,

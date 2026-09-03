@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -15,8 +16,21 @@ from app.models.auth import Institution, Session, User, UserRole
 from app.models.communications import ProductEvent
 from app.models.intelligence import PolicyDocument, ReviewStatus
 from app.models.profile import StudentProfile
-from app.models.recruitment import PlacementDrive
+from app.models.recruitment import ApplicationDisclosureDraft, PlacementDrive
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
+from app.modules.application_packets.schemas import ApplicationFormUpdate
+from app.modules.application_packets.service import (
+    ApplicationPacketError,
+    confirm_draft_profile,
+    create_or_resume_draft,
+    get_draft,
+    publish_application_form,
+    review_draft,
+    save_draft_disclosures,
+    select_draft_resume,
+    submit_draft,
+    upsert_application_form,
+)
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
     get_current_principal,
@@ -452,9 +466,7 @@ async def test_rule_policy_references_default_deny_other_institutions() -> None:
     async with TestSession() as db:
         institution, admin, _ = await seed_people(db, "policy-owner")
         other_institution, other_admin, _ = await seed_people(db, "policy-other")
-        role, _ = await publish_sample_role(
-            db, institution, admin, include_missing_rule=False
-        )
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
         foreign_policy = PolicyDocument(
             institution_id=other_institution.id,
             title="Other institution policy",
@@ -793,9 +805,7 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             )
             assert edited.status_code == 200, edited.text
             assert edited.json()["title"] == "Updated discardable API draft"
-            removed = await client.delete(
-                f"/api/v1/admin/recruitment/drives/{throwaway_id}"
-            )
+            removed = await client.delete(f"/api/v1/admin/recruitment/drives/{throwaway_id}")
             assert removed.status_code == 204, removed.text
             remaining_drives = await client.get("/api/v1/admin/recruitment/drives")
             assert throwaway_id not in {item["id"] for item in remaining_drives.json()}
@@ -957,3 +967,153 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             assert immutable_delete.status_code == 409
     finally:
         app.dependency_overrides.clear()
+
+
+def test_application_form_schema_rejects_free_text_and_required_sensitive_questions() -> None:
+    with pytest.raises(ValidationError):
+        ApplicationFormUpdate.model_validate(
+            {
+                "purpose": "Equal opportunity monitoring for aggregate compliance reporting.",
+                "compliance_owner": "Placement compliance office",
+                "retention_days": 180,
+                "questions": [
+                    {
+                        "id": "background",
+                        "prompt": "Describe your personal background",
+                        "type": "free_text",
+                        "required": True,
+                    }
+                ],
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_application_packet_is_pinned_encrypted_idempotent_and_tenant_scoped() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "packet")
+        other_institution, _, outsider = await seed_people(db, "packet-other")
+        profile = await db.scalar(
+            select(StudentProfile).where(StudentProfile.user_id == student.id)
+        )
+        resume = await db.scalar(select(ResumeVersion).where(ResumeVersion.user_id == student.id))
+        assert profile is not None
+        assert resume is not None
+        profile.phone = "+91 90000 00000"
+        profile.academic_year = "Final year"
+        profile.city = "Pune"
+        profile.country_code = "IN"
+        profile.revision = 2
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
+        first_form = await upsert_application_form(
+            db,
+            institution.id,
+            role.id,
+            admin.id,
+            ApplicationFormUpdate(
+                purpose="Equal opportunity monitoring for aggregate compliance reporting.",
+                compliance_owner="Placement compliance office",
+                retention_days=180,
+                questions=[
+                    {
+                        "id": "work_authorization",
+                        "prompt": "Are you currently authorized to work in India?",
+                        "type": "boolean",
+                    }
+                ],
+            ),
+        )
+        await publish_application_form(db, institution.id, role.id)
+        draft = await create_or_resume_draft(db, institution.id, student.id, role.id)
+        assert draft.form_version_id == first_form.id
+
+        with pytest.raises(ApplicationPacketError, match="application_draft_not_found"):
+            await get_draft(db, other_institution.id, outsider.id, draft.id)
+
+        draft = await select_draft_resume(
+            db, institution.id, student.id, draft.id, resume.id, draft.revision
+        )
+        with pytest.raises(ApplicationPacketError, match="application_draft_revision_conflict"):
+            await select_draft_resume(
+                db, institution.id, student.id, draft.id, resume.id, draft.revision - 1
+            )
+        draft = await confirm_draft_profile(
+            db,
+            institution.id,
+            student.id,
+            draft.id,
+            profile.revision,
+            draft.revision,
+        )
+        draft = await save_draft_disclosures(
+            db,
+            institution.id,
+            student.id,
+            draft.id,
+            {"work_authorization": "prefer_not_to_answer"},
+            draft.revision,
+        )
+        disclosure_draft = await db.scalar(
+            select(ApplicationDisclosureDraft).where(
+                ApplicationDisclosureDraft.application_draft_id == draft.id
+            )
+        )
+        assert disclosure_draft is not None
+        assert "prefer_not_to_answer" not in disclosure_draft.encrypted_payload
+
+        preview = await review_draft(db, institution.id, student.id, draft.id)
+        assert preview.profile_snapshot["city"] == "Pune"
+        assert "street" not in preview.profile_snapshot
+        application, replayed = await submit_draft(
+            db,
+            institution.id,
+            student.id,
+            draft.id,
+            draft.revision,
+            "packet-submit-001",
+        )
+        await db.commit()
+        assert not replayed
+        assert (
+            await db.scalar(
+                select(ApplicationDisclosureDraft).where(
+                    ApplicationDisclosureDraft.application_draft_id == draft.id
+                )
+            )
+            is None
+        )
+        assert application.application_form_snapshot["version"] == 1
+        assert application.profile_snapshot["city"] == "Pune"
+        assert application.disclosure_status == "collected"
+
+        profile.city = "Mumbai"
+        profile.revision += 1
+        second_form = await upsert_application_form(
+            db,
+            institution.id,
+            role.id,
+            admin.id,
+            ApplicationFormUpdate(
+                purpose="Updated monitoring purpose for future application drafts only.",
+                compliance_owner="Placement compliance office",
+                retention_days=90,
+                questions=[],
+            ),
+        )
+        assert second_form.version == 2
+        await db.commit()
+        replay, was_replayed = await submit_draft(
+            db,
+            institution.id,
+            student.id,
+            draft.id,
+            expected_revision=1,
+            idempotency_key="packet-submit-001",
+        )
+        await db.refresh(replay)
+        response = await response_for_application(db, replay)
+        assert was_replayed
+        assert replay.id == application.id
+        assert response.profile_snapshot["city"] == "Pune"
+        assert response.application_form_snapshot["version"] == 1
+        assert "prefer_not_to_answer" not in response.model_dump_json()

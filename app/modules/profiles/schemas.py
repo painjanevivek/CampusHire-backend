@@ -29,6 +29,10 @@ class ProfileUpdate(BaseModel):
     department: str | None = Field(default=None, min_length=2, max_length=120)
     academic_year: str | None = Field(default=None, max_length=32)
     phone: str | None = Field(default=None, pattern=r"^\+?[0-9 ()-]{7,24}$")
+    city: str | None = Field(default=None, min_length=2, max_length=120)
+    country_code: str | None = Field(
+        default=None, min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$"
+    )
     education: list[EducationItem] | None = Field(default=None, max_length=6)
     skills: list[SkillItem] | None = Field(default=None, max_length=40)
     target_roles: list[str] | None = Field(default=None, min_length=1, max_length=5)
@@ -80,6 +84,9 @@ class ProfileResponse(BaseModel):
     department: str | None
     academic_year: str | None
     phone: str | None
+    account_email: str | None = None
+    city: str | None
+    country_code: str | None
     education: list[dict[str, object]]
     skills: list[dict[str, object]]
     target_roles: list[str]
@@ -100,6 +107,10 @@ class IdentityUpdate(BaseModel):
     department: str | None = Field(default=None, min_length=2, max_length=120)
     academic_year: str | None = Field(default=None, max_length=32)
     phone: str | None = Field(default=None, pattern=r"^\+?[0-9 ()-]{7,24}$")
+    city: str | None = Field(default=None, min_length=2, max_length=120)
+    country_code: str | None = Field(
+        default=None, min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$"
+    )
     onboarding_step: int | None = Field(default=None, ge=1, le=8)
 
 

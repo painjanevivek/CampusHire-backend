@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.logging import configure_logging
+from app.modules.application_packets.service import purge_expired_application_packet_data
 from app.modules.communications.reminders import enqueue_upcoming_deadline_reminders
 from app.modules.communications.service import OciSmtpEmailProvider, process_next_email
 from app.modules.privacy.service import process_next_deletion_cleanup
@@ -28,9 +29,36 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
         extra={"event": "resume_worker_started", "worker_id": worker_identity},
     )
     next_reminder_sweep_at = 0.0
+    next_application_packet_cleanup_at = 0.0
     while True:
+        loop_time = asyncio.get_running_loop().time()
+        if loop_time >= next_application_packet_cleanup_at:
+            try:
+                async with SessionFactory() as db:
+                    disclosure_count, draft_count = await purge_expired_application_packet_data(db)
+                    await db.commit()
+                if disclosure_count or draft_count:
+                    logger.info(
+                        "application_packet_retention_enforced",
+                        extra={
+                            "event": "application_packet_retention_enforced",
+                            "disclosure_count": disclosure_count,
+                            "draft_count": draft_count,
+                            "worker_id": worker_identity,
+                        },
+                    )
+            except Exception:
+                logger.exception(
+                    "application_packet_cleanup_failed",
+                    extra={
+                        "event": "application_packet_cleanup_failed",
+                        "worker_id": worker_identity,
+                    },
+                )
+            next_application_packet_cleanup_at = (
+                loop_time + settings.application_packet_cleanup_seconds
+            )
         if settings.email_smtp_host:
-            loop_time = asyncio.get_running_loop().time()
             if loop_time >= next_reminder_sweep_at:
                 try:
                     async with SessionFactory() as db:

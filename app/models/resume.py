@@ -68,6 +68,12 @@ class ResumeVersion(Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    parent_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resume_versions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    purpose_role_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("placement_roles.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     resume_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("resumes.id", ondelete="CASCADE"), nullable=True, index=True
     )
@@ -82,9 +88,7 @@ class ResumeVersion(Base):
     checksum: Mapped[str] = mapped_column(String(64), index=True)
     content_type: Mapped[str] = mapped_column(String(80), default="application/pdf")
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(
-        String(24), default=ResumeStatus.QUEUED.value, index=True
-    )
+    status: Mapped[str] = mapped_column(String(24), default=ResumeStatus.QUEUED.value, index=True)
     scan_status: Mapped[str] = mapped_column(
         String(24), default=ScanStatus.QUARANTINED.value, index=True
     )

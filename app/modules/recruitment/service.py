@@ -946,6 +946,9 @@ async def _application_response(db: AsyncSession, application: Application) -> A
         rule_snapshot=dict(application.rule_snapshot),
         eligibility_snapshot=dict(application.eligibility_snapshot),
         decision_snapshot=dict(application.decision_snapshot),
+        profile_snapshot=dict(application.profile_snapshot),
+        application_form_snapshot=dict(application.application_form_snapshot),
+        disclosure_status=application.disclosure_status,
         institution_timezone=institution.timezone if institution else "UTC",
         created_at=application.created_at,
         updated_at=application.updated_at,
@@ -1000,9 +1003,7 @@ async def create_application(
     payload: ApplicationCreate,
 ) -> tuple[Application, bool]:
     institution = _institution(institution_id)
-    await db.scalar(
-        select(User.id).where(User.id == student_user_id).with_for_update()
-    )
+    await db.scalar(select(User.id).where(User.id == student_user_id).with_for_update())
     existing_key = await db.scalar(
         select(Application).where(
             Application.institution_id == institution,

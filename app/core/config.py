@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     email_reminder_batch_size: int = Field(default=500, ge=1, le=5_000)
     email_delivery_webhook_key: str | None = None
     maintenance_message: str | None = None
+    application_wizard_v1: bool = False
+    application_packet_cleanup_seconds: int = Field(default=3600, ge=60, le=86_400)
 
     @model_validator(mode="after")
     def production_requires_real_malware_scanning(self) -> "Settings":

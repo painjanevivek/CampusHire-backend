@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.modules.resumes.builder import ResumeContent
+
 ResumePipelineStage = Literal[
     "quarantined",
     "scanning",
@@ -58,6 +60,8 @@ class ResumeVersionResponse(BaseModel):
     processing_stage: ResumePipelineStage
     safe_error_code: str | None
     locked_by_application: bool = False
+    parent_version_id: UUID | None = None
+    purpose_role_id: UUID | None = None
     extracted_data: dict[str, Any] = Field(default_factory=dict)
     job: ResumeJobResponse | None = None
     suggestions: list[ResumeSuggestionResponse] = Field(default_factory=list)
@@ -70,6 +74,11 @@ class ResumeUploadResponse(BaseModel):
     scan_status: str
     duplicate: bool
     job_id: UUID | None
+
+
+class TailoredResumeRequest(BaseModel):
+    role_id: UUID
+    content: ResumeContent
 
 
 class ExtractionFieldDecision(BaseModel):

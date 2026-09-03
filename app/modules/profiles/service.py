@@ -133,7 +133,7 @@ async def update_profile(
     return profile
 
 
-def to_response(profile: StudentProfile) -> ProfileResponse:
+def to_response(profile: StudentProfile, account_email: str | None = None) -> ProfileResponse:
     score, complete, checklist = readiness(profile)
     return ProfileResponse(
         id=profile.id,
@@ -144,6 +144,9 @@ def to_response(profile: StudentProfile) -> ProfileResponse:
         department=profile.department,
         academic_year=profile.academic_year,
         phone=profile.phone,
+        account_email=account_email,
+        city=profile.city,
+        country_code=profile.country_code,
         education=profile.education,
         skills=profile.skills,
         target_roles=profile.target_roles,

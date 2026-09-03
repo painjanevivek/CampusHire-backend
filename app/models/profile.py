@@ -23,6 +23,8 @@ class StudentProfile(Base, TimestampMixin):
     department: Mapped[str | None] = mapped_column(String(120), nullable=True)
     academic_year: Mapped[str | None] = mapped_column(String(32), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
     education: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     skills: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     target_roles: Mapped[list[str]] = mapped_column(JSON, default=list)

@@ -33,6 +33,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "applications.review",
             "applications.bulk",
             "applications.override",
+            "applications.disclosures.read",
             "intelligence.review",
             "operations.read",
             "operations.manage",

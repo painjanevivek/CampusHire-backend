@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.models.auth import UserRole
-from app.models.recruitment import Application
+from app.models.recruitment import Application, PlacementRole
 from app.models.resume import ScanStatus
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
@@ -25,6 +25,7 @@ from app.modules.resumes.schemas import (
     ResumeVersionResponse,
     SuggestionDecisionRequest,
     SuggestionReviewBatch,
+    TailoredResumeRequest,
 )
 from app.modules.resumes.service import validate_upload_envelope
 from app.modules.resumes.storage import ObjectStore, ObjectStoreError, build_object_store
@@ -183,6 +184,73 @@ async def read_resume(
         return to_response(await get_owned_version(db, principal.user.id, resume_id))
     except ResumeWorkflowError as error:
         raise _workflow_http_error(error) from error
+
+
+@router.get("/{resume_id}/editable-content", response_model=ResumeContent)
+async def read_editable_resume_content(
+    resume_id: UUID, db: Database, principal: CurrentPrincipal
+) -> ResumeContent:
+    try:
+        version = await get_owned_version(db, principal.user.id, resume_id)
+        accepted = version.extracted_data.get("accepted")
+        if not isinstance(accepted, dict):
+            raise ResumeWorkflowError("resume_not_editable")
+        return ResumeContent.model_validate(accepted)
+    except (ResumeWorkflowError, ValueError) as error:
+        if isinstance(error, ResumeWorkflowError):
+            raise _workflow_http_error(error) from error
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="resume_not_editable"
+        ) from error
+
+
+@router.post(
+    "/{resume_id}/tailored-versions",
+    response_model=ResumeVersionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def create_tailored_resume_version(
+    request: Request,
+    resume_id: UUID,
+    payload: TailoredResumeRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ResumeVersionResponse:
+    try:
+        parent = await get_owned_version(db, principal.user.id, resume_id)
+        role = await db.scalar(
+            select(PlacementRole).where(
+                PlacementRole.id == payload.role_id,
+                PlacementRole.institution_id == principal.institution_id,
+            )
+        )
+        if role is None:
+            raise ResumeWorkflowError("role_not_found")
+        version = await create_generated_version(
+            db,
+            user_id=principal.user.id,
+            institution_id=principal.institution_id,
+            content=payload.content,
+            store=_store(),
+            settings=get_settings(),
+            parent_version_id=parent.id,
+            purpose_role_id=role.id,
+        )
+    except ResumeWorkflowError as error:
+        raise _workflow_http_error(error) from error
+    record_audit_event(
+        db,
+        event_type="resume.tailored",
+        actor_user_id=principal.user.id,
+        institution_id=principal.institution_id,
+        resource_type="resume_version",
+        resource_id=str(version.id),
+        correlation_id=request.state.correlation_id,
+        details={"parent_version_id": str(parent.id), "role_id": str(payload.role_id)},
+    )
+    await db.commit()
+    return to_response(version)
 
 
 @router.post(

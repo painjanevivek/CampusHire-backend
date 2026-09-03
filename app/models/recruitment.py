@@ -130,6 +130,76 @@ class EligibilityEvaluation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class RoleApplicationForm(Base, TimestampMixin):
+    __tablename__ = "role_application_forms"
+    __table_args__ = (
+        UniqueConstraint("role_id", "version", name="uq_role_application_form_version"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), index=True
+    )
+    role_id: Mapped[UUID] = mapped_column(
+        ForeignKey("placement_roles.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    purpose: Mapped[str] = mapped_column(String(500))
+    compliance_owner: Mapped[str] = mapped_column(String(160))
+    retention_days: Mapped[int] = mapped_column(Integer)
+    questions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ApplicationDraft(Base, TimestampMixin):
+    __tablename__ = "application_drafts"
+    __table_args__ = (
+        UniqueConstraint(
+            "institution_id", "student_user_id", "role_id", name="uq_application_draft_student_role"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), index=True
+    )
+    role_id: Mapped[UUID] = mapped_column(
+        ForeignKey("placement_roles.id", ondelete="CASCADE"), index=True
+    )
+    student_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    form_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("role_application_forms.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    resume_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resume_versions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    profile_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_step: Mapped[str] = mapped_column(String(32), default="resume")
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    last_saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    submitted_application_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("applications.id", ondelete="SET NULL", use_alter=True), nullable=True
+    )
+
+
+class ApplicationDisclosureDraft(Base):
+    __tablename__ = "application_disclosure_drafts"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    application_draft_id: Mapped[UUID] = mapped_column(
+        ForeignKey("application_drafts.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    encrypted_payload: Mapped[str] = mapped_column(Text)
+    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class Application(Base, TimestampMixin):
     __tablename__ = "applications"
     __table_args__ = (
@@ -166,8 +236,29 @@ class Application(Base, TimestampMixin):
     rule_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     eligibility_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     decision_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    profile_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    application_form_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    disclosure_status: Mapped[str] = mapped_column(String(32), default="not_configured")
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     withdrawal_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class ApplicationDisclosure(Base):
+    __tablename__ = "application_disclosures"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), index=True
+    )
+    application_id: Mapped[UUID] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    form_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("role_application_forms.id", ondelete="RESTRICT"), index=True
+    )
+    encrypted_payload: Mapped[str] = mapped_column(Text)
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class ApplicationStatusEvent(Base):

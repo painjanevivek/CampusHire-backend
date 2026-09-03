@@ -38,7 +38,8 @@ ProfilePayload = (
 
 @router.get("", response_model=ProfileResponse)
 async def read_profile(db: Database, principal: CurrentPrincipal) -> ProfileResponse:
-    return to_response(await get_or_create(db, principal.user, principal.institution_id))
+    profile = await get_or_create(db, principal.user, principal.institution_id)
+    return to_response(profile, principal.user.email)
 
 
 async def _update(
@@ -57,7 +58,7 @@ async def _update(
                 "current_revision": error.current_revision,
             },
         ) from error
-    return to_response(profile)
+    return to_response(profile, principal.user.email)
 
 
 @router.patch(

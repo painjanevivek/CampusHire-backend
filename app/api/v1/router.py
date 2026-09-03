@@ -1,6 +1,11 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes.admin_recruitment import router as admin_recruitment_router
+from app.api.v1.routes.application_packets import admin_router as application_packet_admin_router
+from app.api.v1.routes.application_packets import compliance_router
+from app.api.v1.routes.application_packets import (
+    student_router as application_packet_student_router,
+)
 from app.api.v1.routes.audit import router as audit_router
 from app.api.v1.routes.auth import router as auth_router
 from app.api.v1.routes.communications import router as communications_router
@@ -27,9 +32,12 @@ api_router.include_router(profiles_router, tags=["student profile"])
 api_router.include_router(privacy_router, tags=["privacy"])
 api_router.include_router(resumes_router, tags=["resumes"])
 api_router.include_router(opportunities_router, tags=["opportunities and applications"])
+api_router.include_router(application_packet_student_router, tags=["application packets"])
 api_router.include_router(student_engagement_router, tags=["readiness and communication"])
 api_router.include_router(student_intelligence_router, tags=["semantic relevance"])
 api_router.include_router(admin_recruitment_router, tags=["placement administration"])
+api_router.include_router(application_packet_admin_router, tags=["placement administration"])
+api_router.include_router(compliance_router, tags=["application compliance"])
 api_router.include_router(audit_router, tags=["audit"])
 api_router.include_router(admin_intelligence_router, tags=["reviewed intelligence"])
 api_router.include_router(admin_engagement_router, tags=["placement communication"])

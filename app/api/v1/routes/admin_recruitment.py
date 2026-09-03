@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.core.config import get_settings
+from app.modules.application_packets.service import publish_pending_form_for_role
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
@@ -503,6 +504,7 @@ async def publish_admin_role(
 ) -> RoleResponse:
     try:
         role = await publish_role(db, principal.institution_id, role_id)
+        await publish_pending_form_for_role(db, principal.institution_id, role_id)
         response = await role_response(db, role)
     except RecruitmentError as error:
         raise _http_error(error) from error
@@ -762,9 +764,7 @@ async def change_application_status(
         deep_link=f"/applications/{application.id}",
         created_by_user_id=principal.user.id,
     )
-    await _enqueue_application_update(
-        db, response, application.institution_id, payload.reason
-    )
+    await _enqueue_application_update(db, response, application.institution_id, payload.reason)
     await db.commit()
     return response
 

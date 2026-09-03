@@ -13,6 +13,28 @@ qualify this candidate.
 
 [Active real-data pilot dossier](REAL_DATA_PILOT_RELEASE_DOSSIER.md)
 
+## Working-tree application packet qualification
+
+Recorded: `2026-09-03T17:41:13Z`
+
+The role-specific application packet implementation has passed internal synthetic qualification on
+the current uncommitted Frontend and Backend working trees:
+
+- Backend: `158 passed, 1 skipped`; Ruff clean; strict MyPy clean across 101 source files; Alembic
+  reports the single head `20260903_0019` and the new migration compiles from `20260902_0018`.
+- Frontend: `165 passed`; TypeScript clean; ESLint clean; the Next.js production build includes
+  `/opportunities/[roleId]/apply`.
+- Browser: the four-step existing-resume path, profile snapshot, optional compliance disclosure
+  controls, review recovery after reload, accuracy gate, and `390 × 844` reflow were exercised with
+  synthetic data in the Codex in-app browser.
+
+This qualification is not a new immutable compatibility candidate. The mirrored phase-08/phase-09
+manifest below remains unchanged because these working-tree changes do not yet have final commit
+SHAs or registry-qualified image digests. A subsequent candidate must bind the committed Frontend
+and Backend heads, regenerated OpenAPI digest, Alembic head, image digests, and fresh evidence
+timestamps. External UAT, legal or institutional-policy approval, governance signoff, registry
+promotion, signature/provenance, and authorized go/no-go remain unclaimed and pending.
+
 ## Active Phase 10 evidence references
 
 | Gate | Candidate state | Accepted reference boundary |

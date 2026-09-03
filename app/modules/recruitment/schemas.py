@@ -281,6 +281,9 @@ class ApplicationResponse(BaseModel):
     rule_snapshot: dict[str, object]
     eligibility_snapshot: dict[str, object]
     decision_snapshot: dict[str, object]
+    profile_snapshot: dict[str, object]
+    application_form_snapshot: dict[str, object]
+    disclosure_status: str
     institution_timezone: str
     created_at: datetime
     updated_at: datetime

@@ -69,9 +69,7 @@ async def _next_version_number(
     return resume, resume.latest_version_number
 
 
-def _pipeline_stage(
-    version: ResumeVersion, job: ResumeProcessingJob | None
-) -> ResumePipelineStage:
+def _pipeline_stage(version: ResumeVersion, job: ResumeProcessingJob | None) -> ResumePipelineStage:
     if version.status == ResumeStatus.CANCELLED.value:
         return "cancelled"
     if version.status == ResumeStatus.FAILED.value:
@@ -131,6 +129,8 @@ def to_response(version: ResumeVersion) -> ResumeVersionResponse:
         generator_version=version.extracted_data.get("generator_version"),
         processing_stage=_pipeline_stage(version, version.processing_job),
         safe_error_code=version.safe_error_code,
+        parent_version_id=version.parent_version_id,
+        purpose_role_id=version.purpose_role_id,
         extracted_data=version.extracted_data,
         job=_job_response(version.processing_job, version),
         suggestions=[
@@ -227,6 +227,8 @@ async def create_generated_version(
     content: ResumeContent,
     store: ObjectStore,
     settings: Settings,
+    parent_version_id: UUID | None = None,
+    purpose_role_id: UUID | None = None,
 ) -> ResumeVersion:
     try:
         data = generate_pdf(content)
@@ -247,6 +249,8 @@ async def create_generated_version(
             resume_id=resume.id,
             user_id=user_id,
             institution_id=institution_id,
+            parent_version_id=parent_version_id,
+            purpose_role_id=purpose_role_id,
             version_number=version_number,
             source=ResumeSource.GENERATED.value,
             storage_key=clean_key,
@@ -498,6 +502,11 @@ async def delete_owned_version(
     )
     if application_id is not None:
         raise ResumeWorkflowError("resume_version_locked_by_application")
+    tailored_version_id = await db.scalar(
+        select(ResumeVersion.id).where(ResumeVersion.parent_version_id == version.id).limit(1)
+    )
+    if tailored_version_id is not None:
+        raise ResumeWorkflowError("resume_version_locked_by_tailored_version")
     if version.status in {ResumeStatus.QUEUED.value, ResumeStatus.PROCESSING.value}:
         raise ResumeWorkflowError("resume_processing_in_progress")
     storage_key = version.storage_key
