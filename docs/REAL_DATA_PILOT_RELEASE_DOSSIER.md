@@ -5,6 +5,21 @@ authorized decision.** This document is a controlled, privacy-safe index; it is 
 approval and must not contain credentials, participant identities, private contact details, or
 student data.
 
+## Active candidate binding
+
+| Field | Bound value |
+| --- | --- |
+| Candidate | `campushire-frontend-phase-08_backend-phase-09_20260903` |
+| Canonical manifest | `.github/release/pilot-compatibility-manifest.json` |
+| Canonical manifest SHA-256 | `44c8b729542b8f4ea1fe706fa6497b7a8f21180fdb7abd4dcc85969c02c9334c` |
+| Security qualification | Pending; fresh affected review required for this candidate |
+| Accountable approvals | Pending; candidate-specific controlled references required |
+
+Only references explicitly attached to this candidate binding can close a gate. The dated Phase 10
+security closures, governance register, conditional 2026-08-24 approval, staging records, and
+earlier dossiers remain historical evidence for their recorded source pairs and conditions; none
+is active evidence for this phase-08/phase-09 compatibility candidate.
+
 ## Pilot charter
 
 | Control | Approved operational baseline | Evidence required before activation |

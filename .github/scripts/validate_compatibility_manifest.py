@@ -46,15 +46,19 @@ EXPECTED_POST_CANDIDATE_CONTROL_PATHS = {
         ".github/tests/test_validate_compatibility_manifest.py",
         ".github/workflows/ci.yml",
         "docs/CURRENT_RELEASE_STATUS.md",
+        "docs/REAL_DATA_PILOT_RELEASE_DOSSIER.md",
     },
 }
 EXPECTED_EXTERNAL_GATES = {
+    "affected_security_review",
     "authorized_go_no_go",
     "governance_signoff",
     "registry_promotion",
     "representative_uat",
     "signature_and_provenance",
 }
+ACTIVE_STATUS_PATH = Path("docs/CURRENT_RELEASE_STATUS.md")
+ACTIVE_DOSSIER_PATH = Path("docs/REAL_DATA_PILOT_RELEASE_DOSSIER.md")
 
 
 class ManifestError(ValueError):
@@ -217,6 +221,48 @@ def validate_structure(manifest: Mapping[str, Any]) -> None:
             raise ManifestError(f"external_gates.{gate} must remain pending without evidence")
 
 
+def validate_active_evidence_references(
+    manifest: Mapping[str, Any],
+    manifest_hash: str,
+    status_text: str,
+    dossier_text: str,
+) -> None:
+    candidate_id = manifest["candidate_id"]
+    required_status_text = {
+        f"Candidate | `{candidate_id}`",
+        f"Canonical manifest SHA-256 | `{manifest_hash}`",
+        "[Active real-data pilot dossier](REAL_DATA_PILOT_RELEASE_DOSSIER.md)",
+        "| Security qualification | Pending for this candidate |",
+        "| Accountable approvals | Pending for this candidate |",
+    }
+    missing_status = sorted(item for item in required_status_text if item not in status_text)
+    if missing_status:
+        raise ManifestError(
+            f"authoritative status is not bound to the active manifest/dossier: {missing_status}"
+        )
+
+    required_dossier_text = {
+        f"| Candidate | `{candidate_id}` |",
+        f"| Canonical manifest SHA-256 | `{manifest_hash}` |",
+        "| Security qualification | Pending; fresh affected review required for this candidate |",
+        "| Accountable approvals | Pending; candidate-specific controlled references required |",
+    }
+    missing_dossier = sorted(item for item in required_dossier_text if item not in dossier_text)
+    if missing_dossier:
+        raise ManifestError(
+            f"active dossier is not bound to the current candidate: {missing_dossier}"
+        )
+
+    historical_claims = {
+        "Security qualification | Phase 10 security closure",
+        "Accountable approvals | Approved with prerequisites on 2026-08-24",
+    }
+    active_text = f"{status_text}\n{dossier_text}"
+    reused = sorted(claim for claim in historical_claims if claim in active_text)
+    if reused:
+        raise ManifestError(f"historical evidence is reused as active candidate evidence: {reused}")
+
+
 def validate_repository(name: str, root: Path, repository: Mapping[str, Any]) -> None:
     commit = repository["commit_sha"]
     remote = run_git(root, ["remote", "get-url", "origin"])
@@ -270,6 +316,12 @@ def validate_manifest(
         raise ManifestError("canonical manifest SHA-256 does not match its immutable lock")
     validate_structure(manifest)
     roots = {"frontend": frontend_root.resolve(), "backend": backend_root.resolve()}
+    validate_active_evidence_references(
+        manifest,
+        expected_manifest_hash,
+        (roots["backend"] / ACTIVE_STATUS_PATH).read_text(encoding="utf-8"),
+        (roots["backend"] / ACTIVE_DOSSIER_PATH).read_text(encoding="utf-8"),
+    )
     for name, root in roots.items():
         validate_repository(name, root, manifest["repositories"][name])
 

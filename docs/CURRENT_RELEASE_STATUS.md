@@ -11,12 +11,24 @@ The identical machine-readable compatibility manifest is checked into both repos
 and completion documents remain historical evidence for their exact source pairs and do not
 qualify this candidate.
 
+[Active real-data pilot dossier](REAL_DATA_PILOT_RELEASE_DOSSIER.md)
+
+## Active Phase 10 evidence references
+
+| Gate | Candidate state | Accepted reference boundary |
+| --- | --- | --- |
+| Security qualification | Pending for this candidate | The 2026-08-28 Deep Scan closures are historical records bound to older frontend/backend revisions. They are not scan evidence for the phase-08/phase-09 pair. |
+| Accountable approvals | Pending for this candidate | Historical conditional approvals and governance registers do not authorize this candidate. Candidate-specific controlled references must be attached to the active dossier. |
+
+Historical records keep their original outcomes for auditability. Their dates, scan IDs, source
+revisions, and conditions are scope labels—not transferable release evidence.
+
 ## Immutable compatibility identity
 
 | Item | Bound value | Verification boundary |
 | --- | --- | --- |
 | Candidate | `campushire-frontend-phase-08_backend-phase-09_20260903` | Source compatibility verified; image records are non-authoritative |
-| Canonical manifest SHA-256 | `14b9ffa4afa36277143058ca0b4ddb961328dd6eac4490a593a953e68f5a2a29` | Checked by both CI validators against the adjacent immutable lock |
+| Canonical manifest SHA-256 | `44c8b729542b8f4ea1fe706fa6497b7a8f21180fdb7abd4dcc85969c02c9334c` | Checked by both CI validators against the adjacent immutable lock |
 | Frontend phase-08 source | `fa02ff057e075d03f7447bcfdc6d8c148d7c5748` | Full commit and phase subject verified |
 | Backend phase-09 source | `cf8ceaa55e0cd7ad3cb016e5ab6f096b07e80e00` | Full commit and phase subject verified |
 | OpenAPI Git-blob SHA-256 | `dc90f81eb4802740ab932d82c0dc31a55d6d569e28a73a01700c218f78e83603` | Frontend, Backend, and both bound commits are byte-identical after checkout normalization |
@@ -71,8 +83,9 @@ Frontend phase-08 commit. Both run the same validator and focused negative tests
 
 ## External evidence boundary
 
-The compatibility manifest deliberately records `pending` with `null` evidence for representative
-UAT, governance signoff, registry promotion, signature/provenance, and authorized go/no-go. No
+The compatibility manifest deliberately records `pending` with `null` evidence for affected
+security review, representative UAT, governance signoff, registry promotion,
+signature/provenance, and authorized go/no-go. No
 historical approval, synthetic exercise, automated browser run, or local image build substitutes for
 those accountable external decisions. If either bound source commit, OpenAPI snapshot, migration
 head, build parameter, or promoted image digest changes, create and verify a new candidate rather

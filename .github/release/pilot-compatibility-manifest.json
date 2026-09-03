@@ -38,6 +38,10 @@
     ]
   },
   "external_gates": {
+    "affected_security_review": {
+      "status": "pending",
+      "evidence": null
+    },
     "representative_uat": {
       "status": "pending",
       "evidence": null
