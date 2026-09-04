@@ -13,7 +13,13 @@ class Settings(BaseSettings):
     app_host: str = "127.0.0.1"
     app_port: int = Field(default=8000, ge=1, le=65535)
     database_url: str = "postgresql+asyncpg://campushire:campushire@localhost:5432/campushire"
+    database_pool_size: int = Field(default=5, ge=1, le=50)
+    database_max_overflow: int = Field(default=5, ge=0, le=50)
+    database_pool_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
+    database_pool_recycle_seconds: int = Field(default=300, ge=30, le=3_600)
     redis_url: str = "redis://localhost:6379/0"
+    redis_max_connections: int = Field(default=64, ge=1, le=1_024)
+    redis_pool_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     frontend_origins: list[AnyHttpUrl] = Field(
         default_factory=lambda: [AnyHttpUrl("http://localhost:3000")]
     )

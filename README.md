@@ -17,6 +17,10 @@ The API is available at `http://localhost:8000`, with versioned routes under `/a
 
 When port 8000 is occupied, set `APP_PORT=8001` and include the exact frontend origin, for example `FRONTEND_ORIGINS='["http://127.0.0.1:3002"]'`, before running `uvicorn app.main:app --reload --port 8001`. Keep origin and cookie configuration environment-specific.
 
+For concurrency tuning and the local 1,000-request smoke test, see
+[`docs/SCALING.md`](docs/SCALING.md). The test establishes code-path behavior;
+it is not a production capacity guarantee.
+
 ### Synthetic demo sign-in
 
 For local development or automated test environments only, set `DEMO_LOGIN_ENABLED=true`, provide the four `DEMO_STUDENT_*` and `DEMO_ADMIN_*` values shown in `.env.example`, then run `python scripts/seed_demo_accounts.py`. The `/api/v1/auth/demo-sign-in` endpoint chooses those credentials on the server; passwords are never sent to the browser. Student demo sign-in creates a normal session. Set `DEMO_ADMIN_MFA_BYPASS=true` only when the synthetic T&P demo must skip MFA during local testing; the bypass is recorded in the audit log and is rejected outside development/test. Normal administrator sign-in still requires MFA. Configuration validation prevents demo sign-in from being enabled in staging or production.
@@ -34,7 +38,7 @@ python scripts/evaluate_matching.py
 ## Vercel API deployment
 
 The HTTP API can run as a Vercel Python Function. Set `PROCESS_ROLE=api`, use a
-managed PostgreSQL pooler, and configure OCI Object Storage with
+managed PostgreSQL pooler with a small bounded process-local pool, and configure OCI Object Storage with
 `OCI_AUTH_MODE=api_key`. The durable worker, ClamAV, and Docker parser remain on
 an always-on external host. See [the Vercel deployment runbook](docs/VERCEL_DEPLOYMENT.md).
 

@@ -34,7 +34,13 @@ and copy any additional enabled-service values from `.env.example`.
 APP_ENV=production
 PROCESS_ROLE=api
 DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@MANAGED-POOLER/DATABASE
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=5
+DATABASE_POOL_TIMEOUT_SECONDS=10
+DATABASE_POOL_RECYCLE_SECONDS=300
 REDIS_URL=rediss://MANAGED-REDIS
+REDIS_MAX_CONNECTIONS=64
+REDIS_POOL_TIMEOUT_SECONDS=1
 QDRANT_URL=https://MANAGED-QDRANT
 FRONTEND_ORIGINS=["https://app.campushire.example"]
 TRUSTED_HOSTS=["api.campushire.example","BACKEND-PROJECT.vercel.app"]
@@ -63,8 +69,10 @@ EMAIL_DELIVERY_WEBHOOK_KEY=
 ```
 
 Use the database provider's transaction-pooler URL when it offers one. The API
-role disables SQLAlchemy's process-local connection pool so the external pooler
-owns connection reuse across short-lived Vercel instances.
+uses a small bounded SQLAlchemy pool per warm instance so it can reuse driver
+connections without opening an unbounded number across Vercel instances. Keep
+the pool deliberately small; the managed transaction pooler still owns global
+connection multiplexing.
 
 Store the OCI private key and every other credential only as encrypted Vercel
 environment variables. Do not add PEM files or populated `.env` files to Git.

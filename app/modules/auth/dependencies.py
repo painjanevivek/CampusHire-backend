@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload
 
 from app.core.config import get_settings
 from app.core.database import get_db
@@ -108,7 +108,7 @@ async def get_current_session(
         )
     session = await db.scalar(
         select(Session)
-        .options(selectinload(Session.user), selectinload(Session.active_membership))
+        .options(joinedload(Session.user), joinedload(Session.active_membership))
         .where(Session.token_hash == hash_secret(session_token), Session.revoked_at.is_(None))
     )
     if session is None or _is_expired(session.expires_at) or not session.user.is_active:

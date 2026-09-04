@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -29,6 +30,16 @@ def verify_password(password_hash: str, password: str) -> bool:
         return password_hasher.verify(password_hash, password)
     except (VerifyMismatchError, InvalidHashError):
         return False
+
+
+async def hash_password_async(password: str) -> str:
+    """Run memory-hard password hashing without blocking the API event loop."""
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password_hash: str, password: str) -> bool:
+    """Run memory-hard password verification without blocking other requests."""
+    return await asyncio.to_thread(verify_password, password_hash, password)
 
 
 def new_secret() -> str:

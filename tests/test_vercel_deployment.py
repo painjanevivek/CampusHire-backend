@@ -2,7 +2,6 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.pool import NullPool
 
 import app.worker as worker_module
 from app.core.config import Settings
@@ -31,11 +30,17 @@ def production_settings(**overrides: Any) -> Settings:
     return Settings(_env_file=None, **values)
 
 
-def test_vercel_api_role_uses_external_pooler_without_local_worker_dependencies() -> None:
+def test_vercel_api_role_uses_bounded_pool_without_local_worker_dependencies() -> None:
     settings = production_settings()
 
     assert settings.process_role == "api"
-    assert database_engine_options(settings) == {"poolclass": NullPool}
+    assert database_engine_options(settings) == {
+        "pool_size": 5,
+        "max_overflow": 5,
+        "pool_timeout": 10.0,
+        "pool_recycle": 300,
+        "pool_pre_ping": True,
+    }
 
 
 def test_production_worker_still_requires_clamav_and_docker_parser() -> None:
@@ -54,7 +59,13 @@ def test_production_worker_accepts_hardened_processing_dependencies() -> None:
     )
 
     assert settings.process_role == "worker"
-    assert database_engine_options(settings) == {"pool_pre_ping": True}
+    assert database_engine_options(settings) == {
+        "pool_size": 5,
+        "max_overflow": 5,
+        "pool_timeout": 10.0,
+        "pool_recycle": 300,
+        "pool_pre_ping": True,
+    }
 
 
 async def test_api_role_cannot_accidentally_start_the_durable_worker(

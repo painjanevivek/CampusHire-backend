@@ -14,12 +14,17 @@ from app.core.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.core.rate_limit import create_rate_limit_client
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     configure_logging()
-    yield
+    application.state.rate_limit_redis = create_rate_limit_client(get_settings())
+    try:
+        yield
+    finally:
+        await application.state.rate_limit_redis.aclose()
 
 
 def create_app() -> FastAPI:

@@ -3,11 +3,34 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, status
-from redis.asyncio import Redis
+from redis.asyncio import BlockingConnectionPool, Redis
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 
 _fallback: dict[str, tuple[int, int]] = defaultdict(lambda: (0, 0))
+
+
+def create_rate_limit_client(settings: Settings) -> Redis:
+    """Create one bounded Redis pool for the lifetime of an API process."""
+    pool = BlockingConnectionPool.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        max_connections=settings.redis_max_connections,
+        timeout=settings.redis_pool_timeout_seconds,
+        socket_connect_timeout=0.15,
+        socket_timeout=0.15,
+    )
+    return Redis(connection_pool=pool)
+
+
+def rate_limit_client(request: Request, settings: Settings) -> Redis:
+    application = request.scope.get("app")
+    state = application.state if application is not None else request.state
+    client = getattr(state, "rate_limit_redis", None)
+    if client is None:
+        client = create_rate_limit_client(settings)
+        state.rate_limit_redis = client
+    return client
 
 
 async def enforce_fixed_window_limit(
@@ -22,16 +45,10 @@ async def enforce_fixed_window_limit(
     digest = hashlib.sha256(f"{identity}:{request.url.path}".encode()).hexdigest()
     key = f"rate:{namespace}:{digest}"
     try:
-        client = Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=0.15,
-            socket_timeout=0.15,
-        )
-        async with client:
-            count = await client.incr(key)
-            if count == 1:
-                await client.expire(key, 60)
+        client = rate_limit_client(request, settings)
+        count = await client.incr(key)
+        if count == 1:
+            await client.expire(key, 60)
     except Exception as error:
         if not settings.is_development:
             raise HTTPException(

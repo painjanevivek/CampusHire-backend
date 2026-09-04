@@ -23,12 +23,12 @@ from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import (
     decrypt_totp_secret,
     encrypt_totp_secret,
-    hash_password,
+    hash_password_async,
     hash_secret,
     new_secret,
     new_totp_secret,
     normalize_email,
-    verify_password,
+    verify_password_async,
     verify_totp,
 )
 from app.modules.communications.service import enqueue_email, record_product_event
@@ -69,7 +69,9 @@ async def create_student(db: AsyncSession, email: str, password: str) -> User:
     if existing:
         raise DuplicateEmailError
     user = User(
-        email=normalized, password_hash=hash_password(password), role=UserRole.STUDENT.value
+        email=normalized,
+        password_hash=await hash_password_async(password),
+        role=UserRole.STUDENT.value,
     )
     db.add(user)
     await db.flush()
@@ -121,7 +123,7 @@ async def authenticate(
         )
         await db.commit()
         raise InvalidCredentialsError
-    if not verify_password(user.password_hash, password):
+    if not await verify_password_async(user.password_hash, password):
         user.failed_login_count += 1
         if user.failed_login_count >= settings.auth_lockout_attempts:
             user.locked_until = now + timedelta(minutes=settings.auth_lockout_minutes)
@@ -242,7 +244,7 @@ async def accept_invitation(
         raise ExpiredOrUsedTokenError
     user = User(
         email=normalized,
-        password_hash=hash_password(password),
+        password_hash=await hash_password_async(password),
         role=invitation.role,
         institution_id=invitation.institution_id,
     )
@@ -372,7 +374,7 @@ async def confirm_password_reset(
     user = await db.get(User, record.user_id)
     if user is None or not user.is_active:
         raise ExpiredOrUsedTokenError
-    user.password_hash = hash_password(password)
+    user.password_hash = await hash_password_async(password)
     record.used_at = now
     await db.execute(
         update(Session)
@@ -598,7 +600,7 @@ async def disable_mfa(
     code: str,
     correlation_id: str | None,
 ) -> None:
-    if not verify_password(session.user.password_hash, password):
+    if not await verify_password_async(session.user.password_hash, password):
         raise InvalidCredentialsError
     await verify_mfa(db, session, code)
     enrollment = await db.scalar(
