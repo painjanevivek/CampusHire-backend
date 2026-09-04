@@ -17,7 +17,12 @@ from app.models.auth import Institution, Session, User, UserRole
 from app.models.communications import ProductEvent
 from app.models.intelligence import PolicyDocument, ReviewStatus
 from app.models.profile import StudentProfile
-from app.models.recruitment import ApplicationDisclosureDraft, PlacementDrive, PlacementRole
+from app.models.recruitment import (
+    ApplicationDisclosureDraft,
+    PlacementDrive,
+    PlacementRole,
+    RuleSetStatus,
+)
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.application_packets.schemas import ApplicationFormUpdate
 from app.modules.application_packets.service import (
@@ -51,6 +56,7 @@ from app.modules.recruitment.schemas import (
     DriveCreate,
     DriveUpdate,
     RoleCreate,
+    RoleUpdate,
     RuleSetCreate,
 )
 from app.modules.recruitment.service import (
@@ -77,9 +83,11 @@ from app.modules.recruitment.service import (
     publish_rule_set,
     resolve_application_appeal,
     response_for_application,
+    save_drive_changes,
     transition_drive,
     update_application_status,
     update_drive,
+    update_role,
     withdraw_application,
 )
 from app.modules.resumes.builder import ResumeContent, generate_pdf
@@ -279,6 +287,106 @@ async def test_drive_duplication_is_draft_and_rule_preview_is_deterministic() ->
         cloned_roles = await list_roles(db, institution.id, duplicate.id)
         assert len(cloned_roles) == 1
         assert cloned_roles[0].status == "draft"
+
+
+@pytest.mark.asyncio
+async def test_published_drive_edits_activate_only_when_drive_is_saved() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "staged-drive-edit")
+        role, original_rules = await publish_sample_role(
+            db, institution, admin, include_missing_rule=False
+        )
+        drive = await db.get(PlacementDrive, role.drive_id)
+        assert drive is not None
+        original_drive_title = drive.title
+        original_role_title = role.title
+
+        staged_drive = await update_drive(
+            db,
+            institution.id,
+            drive.id,
+            DriveUpdate(title="Updated published drive"),
+        )
+        staged_role = await update_role(
+            db,
+            institution.id,
+            role.id,
+            RoleUpdate(title="Updated published role"),
+        )
+        replacement_rules = await create_rule_set(
+            db,
+            institution.id,
+            role.id,
+            admin.id,
+            RuleSetCreate(
+                rules=[
+                    {
+                        "field": "cgpa",
+                        "operator": "gte",
+                        "value": 8.0,
+                        "label": "Updated minimum CGPA",
+                    }
+                ]
+            ),
+        )
+
+        assert staged_drive.title != "Updated published drive"
+        assert staged_drive.pending_changes["title"] == "Updated published drive"
+        assert staged_role.title != "Updated published role"
+        assert staged_role.pending_changes["title"] == "Updated published role"
+        assert original_rules.status == RuleSetStatus.PUBLISHED.value
+        assert replacement_rules.status == RuleSetStatus.DRAFT.value
+
+        student_view = await list_opportunities(
+            db,
+            institution.id,
+            student.id,
+            query=None,
+            location=None,
+            work_mode=None,
+            skill=None,
+            saved_only=False,
+            page=1,
+            page_size=20,
+        )
+        assert student_view.items[0].drive_title == original_drive_title
+        assert student_view.items[0].title == original_role_title
+        assert student_view.items[0].pending_changes == {}
+        assert student_view.items[0].eligibility.rule_version == str(original_rules.version)
+
+        with pytest.raises(RecruitmentError, match="drive_save_required"):
+            await publish_rule_set(
+                db, institution.id, role.id, replacement_rules.id
+            )
+
+        saved, activated_role_ids = await save_drive_changes(db, institution.id, drive.id)
+
+        assert saved.title == "Updated published drive"
+        assert saved.pending_changes == {}
+        assert role.title == "Updated published role"
+        assert role.pending_changes == {}
+        assert original_rules.status == RuleSetStatus.RETIRED.value
+        assert replacement_rules.status == RuleSetStatus.PUBLISHED.value
+        assert activated_role_ids == []
+
+        refreshed_student_view = await list_opportunities(
+            db,
+            institution.id,
+            student.id,
+            query=None,
+            location=None,
+            work_mode=None,
+            skill=None,
+            saved_only=False,
+            page=1,
+            page_size=20,
+        )
+        assert refreshed_student_view.items[0].drive_title == "Updated published drive"
+        assert refreshed_student_view.items[0].title == "Updated published role"
+        assert (
+            refreshed_student_view.items[0].eligibility.rule_version
+            == str(replacement_rules.version)
+        )
 
 
 @pytest.mark.asyncio

@@ -75,6 +75,8 @@ class DriveResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     role_count: int = 0
+    pending_changes: dict[str, object] = Field(default_factory=dict)
+    has_pending_changes: bool = False
 
 
 class RoleCreate(BaseModel):
@@ -123,6 +125,7 @@ class RoleResponse(BaseModel):
     status: str
     published_at: datetime | None
     deadline_at: datetime
+    pending_changes: dict[str, object] = Field(default_factory=dict)
 
 
 class RuleSetCreate(BaseModel):

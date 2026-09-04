@@ -153,8 +153,26 @@ async def update_company(
 
 async def drive_response(db: AsyncSession, drive: PlacementDrive) -> DriveResponse:
     company_name = await db.scalar(select(Company.name).where(Company.id == drive.company_id))
-    role_count = await db.scalar(
-        select(func.count()).select_from(PlacementRole).where(PlacementRole.drive_id == drive.id)
+    roles = (
+        await db.scalars(select(PlacementRole).where(PlacementRole.drive_id == drive.id))
+    ).all()
+    role_ids = [role.id for role in roles]
+    has_draft_rules = bool(
+        role_ids
+        and await db.scalar(
+            select(EligibilityRuleSet.id).where(
+                EligibilityRuleSet.role_id.in_(role_ids),
+                EligibilityRuleSet.status == RuleSetStatus.DRAFT.value,
+            )
+        )
+    )
+    has_pending_changes = drive.status == PublicationStatus.PUBLISHED.value and bool(
+        drive.pending_changes
+        or has_draft_rules
+        or any(
+            role.pending_changes or role.status == PublicationStatus.DRAFT.value
+            for role in roles
+        )
     )
     return DriveResponse(
         id=drive.id,
@@ -170,7 +188,9 @@ async def drive_response(db: AsyncSession, drive: PlacementDrive) -> DriveRespon
         published_at=drive.published_at,
         created_at=drive.created_at,
         updated_at=drive.updated_at,
-        role_count=role_count or 0,
+        role_count=len(roles),
+        pending_changes=dict(drive.pending_changes),
+        has_pending_changes=has_pending_changes,
     )
 
 
@@ -226,9 +246,14 @@ async def update_drive(
 ) -> PlacementDrive:
     institution = _institution(institution_id)
     drive = await _owned_drive(db, institution, drive_id, lock=True)
-    if drive.status != PublicationStatus.DRAFT.value:
+    if drive.status not in {
+        PublicationStatus.DRAFT.value,
+        PublicationStatus.PUBLISHED.value,
+    }:
         raise RecruitmentError("published_drive_is_immutable")
-    values = payload.model_dump(exclude_unset=True)
+    pending = dict(drive.pending_changes)
+    pending.update(payload.model_dump(mode="json", exclude_unset=True))
+    values = DriveUpdate.model_validate(pending).model_dump(exclude_unset=True)
     company_id = values.get("company_id")
     if company_id is not None:
         company = await db.scalar(
@@ -244,8 +269,11 @@ async def update_drive(
     deadline_at = values.get("deadline_at", drive.deadline_at)
     if _utc(opens_at) >= _utc(deadline_at):
         raise RecruitmentError("drive_window_invalid")
-    for key, value in values.items():
-        setattr(drive, key, value)
+    if drive.status == PublicationStatus.PUBLISHED.value:
+        drive.pending_changes = pending
+    else:
+        for key, value in values.items():
+            setattr(drive, key, value)
     await db.flush()
     await db.refresh(drive)
     return drive
@@ -300,6 +328,97 @@ async def transition_drive(
     await db.flush()
     await db.refresh(drive)
     return drive
+
+
+async def save_drive_changes(
+    db: AsyncSession, institution_id: UUID | None, drive_id: UUID
+) -> tuple[PlacementDrive, list[UUID]]:
+    """Atomically activate all staged drive, role, and eligibility changes."""
+    institution = _institution(institution_id)
+    drive = await _owned_drive(db, institution, drive_id, lock=True)
+    if drive.status != PublicationStatus.PUBLISHED.value:
+        raise RecruitmentError("drive_save_requires_published_drive")
+
+    drive_values = DriveUpdate.model_validate(drive.pending_changes).model_dump(
+        exclude_unset=True
+    )
+    company_id = drive_values.get("company_id", drive.company_id)
+    company = await db.scalar(
+        select(Company).where(
+            Company.id == company_id,
+            Company.institution_id == institution,
+            Company.status != PublicationStatus.ARCHIVED.value,
+        )
+    )
+    if company is None:
+        raise RecruitmentError("company_not_found")
+    opens_at = drive_values.get("opens_at", drive.opens_at)
+    deadline_at = drive_values.get("deadline_at", drive.deadline_at)
+    if _utc(opens_at) >= _utc(deadline_at):
+        raise RecruitmentError("drive_window_invalid")
+    if _utc(deadline_at) <= datetime.now(UTC):
+        raise RecruitmentError("drive_deadline_elapsed")
+
+    roles = (
+        await db.scalars(
+            select(PlacementRole)
+            .where(PlacementRole.drive_id == drive.id)
+            .order_by(PlacementRole.created_at)
+            .with_for_update()
+        )
+    ).all()
+    if not roles:
+        raise RecruitmentError("drive_requires_published_role")
+
+    activated_role_ids: list[UUID] = []
+    for role in roles:
+        if role.pending_changes:
+            role_values = RoleUpdate.model_validate(role.pending_changes).model_dump(
+                exclude_unset=True
+            )
+            for key, value in role_values.items():
+                setattr(role, key, value)
+            role.pending_changes = {}
+
+        draft_rule = await db.scalar(
+            select(EligibilityRuleSet)
+            .where(
+                EligibilityRuleSet.role_id == role.id,
+                EligibilityRuleSet.status == RuleSetStatus.DRAFT.value,
+            )
+            .order_by(EligibilityRuleSet.version.desc())
+            .limit(1)
+        )
+        if draft_rule is not None:
+            await publish_rule_set(
+                db,
+                institution,
+                role.id,
+                draft_rule.id,
+                allow_published_drive=True,
+            )
+
+        published_rule = await db.scalar(
+            select(EligibilityRuleSet.id).where(
+                EligibilityRuleSet.role_id == role.id,
+                EligibilityRuleSet.status == RuleSetStatus.PUBLISHED.value,
+            )
+        )
+        if published_rule is None:
+            raise RecruitmentError("role_requires_published_rules")
+        if role.status == PublicationStatus.DRAFT.value:
+            role.status = PublicationStatus.PUBLISHED.value
+            role.published_at = datetime.now(UTC)
+            activated_role_ids.append(role.id)
+        elif role.status != PublicationStatus.PUBLISHED.value:
+            raise RecruitmentError("role_save_transition_invalid")
+
+    for key, value in drive_values.items():
+        setattr(drive, key, value)
+    drive.pending_changes = {}
+    await db.flush()
+    await db.refresh(drive)
+    return drive, activated_role_ids
 
 
 async def duplicate_drive(
@@ -388,7 +507,12 @@ async def _owned_role(
     return role
 
 
-async def role_response(db: AsyncSession, role: PlacementRole) -> RoleResponse:
+async def role_response(
+    db: AsyncSession,
+    role: PlacementRole,
+    *,
+    include_pending: bool = False,
+) -> RoleResponse:
     row = (
         await db.execute(
             select(PlacementDrive, Company)
@@ -413,6 +537,7 @@ async def role_response(db: AsyncSession, role: PlacementRole) -> RoleResponse:
         status=role.status,
         published_at=role.published_at,
         deadline_at=drive.deadline_at,
+        pending_changes=dict(role.pending_changes) if include_pending else {},
     )
 
 
@@ -427,7 +552,7 @@ async def list_roles(
             .order_by(PlacementRole.created_at)
         )
     ).all()
-    return [await role_response(db, item) for item in roles]
+    return [await role_response(db, item, include_pending=True) for item in roles]
 
 
 async def create_role(
@@ -437,7 +562,10 @@ async def create_role(
     payload: RoleCreate,
 ) -> PlacementRole:
     drive = await _owned_drive(db, institution_id, drive_id)
-    if drive.status != PublicationStatus.DRAFT.value:
+    if drive.status not in {
+        PublicationStatus.DRAFT.value,
+        PublicationStatus.PUBLISHED.value,
+    }:
         raise RecruitmentError("published_drive_is_immutable")
     role = PlacementRole(
         institution_id=_institution(institution_id), drive_id=drive.id, **payload.model_dump()
@@ -455,10 +583,29 @@ async def update_role(
     payload: RoleUpdate,
 ) -> PlacementRole:
     role = await _owned_role(db, institution_id, role_id, lock=True)
-    if role.status != PublicationStatus.DRAFT.value:
+    drive = await _owned_drive(db, institution_id, role.drive_id)
+    if drive.status not in {
+        PublicationStatus.DRAFT.value,
+        PublicationStatus.PUBLISHED.value,
+    }:
         raise RecruitmentError("published_role_is_immutable")
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(role, key, value)
+    values = payload.model_dump(exclude_unset=True)
+    if (
+        role.status == PublicationStatus.PUBLISHED.value
+        and drive.status == PublicationStatus.PUBLISHED.value
+    ):
+        pending = dict(role.pending_changes)
+        pending.update(payload.model_dump(mode="json", exclude_unset=True))
+        RoleUpdate.model_validate(pending)
+        role.pending_changes = pending
+    elif role.status in {
+        PublicationStatus.DRAFT.value,
+        PublicationStatus.PUBLISHED.value,
+    }:
+        for key, value in values.items():
+            setattr(role, key, value)
+    else:
+        raise RecruitmentError("published_role_is_immutable")
     await db.flush()
     await db.refresh(role)
     return role
@@ -471,6 +618,8 @@ async def publish_role(
     if role.status != PublicationStatus.DRAFT.value:
         raise RecruitmentError("role_publish_transition_invalid")
     drive = await _owned_drive(db, institution_id, role.drive_id)
+    if drive.status == PublicationStatus.PUBLISHED.value:
+        raise RecruitmentError("drive_save_required")
     if _utc(drive.deadline_at) <= datetime.now(UTC):
         raise RecruitmentError("role_deadline_elapsed")
     rules = await db.scalar(
@@ -595,9 +744,17 @@ async def create_rule_set(
 
 
 async def publish_rule_set(
-    db: AsyncSession, institution_id: UUID | None, role_id: UUID, rule_set_id: UUID
+    db: AsyncSession,
+    institution_id: UUID | None,
+    role_id: UUID,
+    rule_set_id: UUID,
+    *,
+    allow_published_drive: bool = False,
 ) -> EligibilityRuleSet:
-    await _owned_role(db, institution_id, role_id)
+    role = await _owned_role(db, institution_id, role_id)
+    drive = await _owned_drive(db, institution_id, role.drive_id)
+    if drive.status == PublicationStatus.PUBLISHED.value and not allow_published_drive:
+        raise RecruitmentError("drive_save_required")
     item = await db.scalar(
         select(EligibilityRuleSet)
         .where(

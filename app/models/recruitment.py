@@ -59,6 +59,7 @@ class PlacementDrive(Base, TimestampMixin):
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pending_changes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class PlacementRole(Base, TimestampMixin):
@@ -83,6 +84,7 @@ class PlacementRole(Base, TimestampMixin):
         String(24), default=PublicationStatus.DRAFT.value, index=True
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pending_changes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class EligibilityRuleSet(Base, TimestampMixin):

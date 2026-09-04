@@ -1868,6 +1868,11 @@
             "title": "Description",
             "type": "string"
           },
+          "has_pending_changes": {
+            "default": false,
+            "title": "Has Pending Changes",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1881,6 +1886,11 @@
             "format": "date-time",
             "title": "Opens At",
             "type": "string"
+          },
+          "pending_changes": {
+            "additionalProperties": true,
+            "title": "Pending Changes",
+            "type": "object"
           },
           "published_at": {
             "anyOf": [
@@ -3671,6 +3681,11 @@
           "location": {
             "title": "Location",
             "type": "string"
+          },
+          "pending_changes": {
+            "additionalProperties": true,
+            "title": "Pending Changes",
+            "type": "object"
           },
           "published_at": {
             "anyOf": [
@@ -5601,6 +5616,11 @@
           "location": {
             "title": "Location",
             "type": "string"
+          },
+          "pending_changes": {
+            "additionalProperties": true,
+            "title": "Pending Changes",
+            "type": "object"
           },
           "published_at": {
             "anyOf": [
@@ -9300,6 +9320,65 @@
           }
         },
         "summary": "Add Role",
+        "tags": [
+          "placement administration"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/drives/{drive_id}/save": {
+      "post": {
+        "operationId": "save_published_drive_api_v1_admin_recruitment_drives__drive_id__save_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "drive_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Drive Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Published Drive",
         "tags": [
           "placement administration"
         ]

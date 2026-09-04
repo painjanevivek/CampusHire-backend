@@ -69,6 +69,7 @@ from app.modules.recruitment.service import (
     resolve_application_appeal,
     response_for_application,
     role_response,
+    save_drive_changes,
     transition_drive,
     update_application_status,
     update_company,
@@ -320,6 +321,42 @@ async def edit_drive(
     return response
 
 
+@router.post(
+    "/drives/{drive_id}/save",
+    response_model=DriveResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
+)
+async def save_published_drive(
+    request: Request,
+    drive_id: UUID,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> DriveResponse:
+    try:
+        drive, activated_role_ids = await save_drive_changes(
+            db, principal.institution_id, drive_id
+        )
+        for role_id in activated_role_ids:
+            await publish_pending_form_for_role(db, principal.institution_id, role_id)
+        response = await drive_response(db, drive)
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request,
+        db,
+        principal,
+        event_type="drive.changes_saved",
+        resource_type="placement_drive",
+        resource_id=drive.id,
+        details={"activated_role_count": len(activated_role_ids)},
+    )
+    await db.commit()
+    return response
+
+
 @router.delete(
     "/drives/{drive_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -444,7 +481,7 @@ async def add_role(
 ) -> RoleResponse:
     try:
         role = await create_role(db, principal.institution_id, drive_id, payload)
-        response = await role_response(db, role)
+        response = await role_response(db, role, include_pending=True)
     except RecruitmentError as error:
         raise _http_error(error) from error
     _audit(
@@ -476,7 +513,7 @@ async def edit_role(
 ) -> RoleResponse:
     try:
         role = await update_role(db, principal.institution_id, role_id, payload)
-        response = await role_response(db, role)
+        response = await role_response(db, role, include_pending=True)
     except RecruitmentError as error:
         raise _http_error(error) from error
     _audit(
@@ -505,7 +542,7 @@ async def publish_admin_role(
     try:
         role = await publish_role(db, principal.institution_id, role_id)
         await publish_pending_form_for_role(db, principal.institution_id, role_id)
-        response = await role_response(db, role)
+        response = await role_response(db, role, include_pending=True)
     except RecruitmentError as error:
         raise _http_error(error) from error
     _audit(
