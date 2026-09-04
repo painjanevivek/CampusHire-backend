@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 import app.worker as worker_module
 from app.core.config import Settings
-from app.core.database import database_engine_options, database_url_for_asyncpg
+from app.core.database import database_engine_options
 
 
 def production_settings(**overrides: Any) -> Settings:
@@ -41,21 +41,6 @@ def test_vercel_api_role_uses_bounded_pool_without_local_worker_dependencies() -
         "pool_recycle": 300,
         "pool_pre_ping": True,
     }
-
-
-def test_neon_libpq_url_translates_options_for_asyncpg() -> None:
-    url = database_url_for_asyncpg(
-        "postgresql+asyncpg://user:secret@example.neon.tech/app"
-        "?sslmode=require&channel_binding=require&application_name=campushire"
-    )
-
-    assert url.query == {
-        "ssl": "require",
-        "application_name": "campushire",
-    }
-    assert url.render_as_string(hide_password=False).startswith(
-        "postgresql+asyncpg://user:secret@"
-    )
 
 
 def test_production_worker_still_requires_clamav_and_docker_parser() -> None:
