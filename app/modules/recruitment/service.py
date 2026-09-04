@@ -3,8 +3,10 @@ import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import cast, delete, exists, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.auth import Institution, User
 from app.models.intelligence import PolicyDocument, ReviewStatus, SemanticMatchEvidence
@@ -70,6 +72,20 @@ def _institution(institution_id: UUID | None) -> UUID:
     if institution_id is None:
         raise RecruitmentError("institution_context_required")
     return institution_id
+
+
+def _skill_filter(skill: str) -> ColumnElement[bool]:
+    """Match one complete skill without relying on invalid JSON string operators."""
+    role_skills = (
+        func.jsonb_array_elements_text(cast(PlacementRole.skills, JSONB))
+        .table_valued("value")
+        .alias("role_skill")
+    )
+    return exists(
+        select(1)
+        .select_from(role_skills)
+        .where(func.lower(role_skills.c.value) == skill.strip().lower())
+    )
 
 
 def company_response(company: Company) -> CompanyResponse:
@@ -732,6 +748,7 @@ async def list_opportunities(
         statement = statement.where(
             or_(
                 PlacementRole.title.ilike(needle),
+                PlacementDrive.title.ilike(needle),
                 Company.name.ilike(needle),
                 PlacementRole.description.ilike(needle),
             )
@@ -741,7 +758,7 @@ async def list_opportunities(
     if work_mode:
         statement = statement.where(PlacementRole.work_mode == work_mode)
     if skill:
-        statement = statement.where(PlacementRole.skills.contains([skill]))
+        statement = statement.where(_skill_filter(skill))
     if deadline_within_days is not None:
         statement = statement.where(
             PlacementDrive.deadline_at <= now + timedelta(days=deadline_within_days)

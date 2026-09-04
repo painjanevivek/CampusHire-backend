@@ -6,6 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -16,7 +17,7 @@ from app.models.auth import Institution, Session, User, UserRole
 from app.models.communications import ProductEvent
 from app.models.intelligence import PolicyDocument, ReviewStatus
 from app.models.profile import StudentProfile
-from app.models.recruitment import ApplicationDisclosureDraft, PlacementDrive
+from app.models.recruitment import ApplicationDisclosureDraft, PlacementDrive, PlacementRole
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.application_packets.schemas import ApplicationFormUpdate
 from app.modules.application_packets.service import (
@@ -54,6 +55,7 @@ from app.modules.recruitment.schemas import (
 )
 from app.modules.recruitment.service import (
     RecruitmentError,
+    _skill_filter,
     application_deadline_calendar,
     apply_bulk_application_status,
     create_application,
@@ -342,6 +344,44 @@ async def test_published_drive_cannot_be_deleted() -> None:
             await delete_drive(db, institution.id, role.drive_id)
 
         assert await db.get(PlacementDrive, role.drive_id) is not None
+
+
+def test_postgres_skill_filter_uses_case_insensitive_json_array_elements() -> None:
+    statement = select(PlacementRole.id).where(_skill_filter("next.JS"))
+
+    compiled = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "jsonb_array_elements_text" in compiled
+    assert "lower(role_skill.value) = 'next.js'" in compiled
+    assert " LIKE " not in compiled
+
+
+@pytest.mark.asyncio
+async def test_opportunity_keyword_search_includes_the_drive_title() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "drive-title-search")
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
+
+        result = await list_opportunities(
+            db,
+            institution.id,
+            student.id,
+            query="engineering drive 2027",
+            location=None,
+            work_mode=None,
+            skill=None,
+            saved_only=False,
+            page=1,
+            page_size=20,
+        )
+
+        assert [item.id for item in result.items] == [role.id]
+        assert result.empty_reason is None
 
 
 @pytest.mark.asyncio
