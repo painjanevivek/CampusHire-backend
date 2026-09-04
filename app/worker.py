@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 async def run_worker(*, once: bool = False, worker_id: str | None = None) -> None:
     settings = get_settings()
+    if settings.process_role == "api":
+        raise RuntimeError("The durable worker cannot run with PROCESS_ROLE=api")
     store = build_object_store(settings)
     scanner = build_scanner(settings)
     parser_backend = build_pdf_parser(settings)

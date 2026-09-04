@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: Literal["development", "test", "staging", "production"] = "development"
+    process_role: Literal["all", "api", "worker"] = "all"
     app_host: str = "127.0.0.1"
     app_port: int = Field(default=8000, ge=1, le=65535)
     database_url: str = "postgresql+asyncpg://campushire:campushire@localhost:5432/campushire"
@@ -41,9 +42,16 @@ class Settings(BaseSettings):
     demo_admin_password: SecretStr | None = None
     resume_storage_path: str = ".data/resumes"
     resume_storage_backend: Literal["local", "oci"] = "local"
+    oci_auth_mode: Literal["instance_principal", "api_key"] = "instance_principal"
     oci_object_namespace: str | None = None
     oci_object_bucket: str | None = None
     oci_object_uploads_enabled: bool = True
+    oci_tenancy_ocid: str | None = None
+    oci_user_ocid: str | None = None
+    oci_key_fingerprint: str | None = None
+    oci_region: str | None = None
+    oci_private_key: SecretStr | None = None
+    oci_private_key_passphrase: SecretStr | None = None
     resume_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
     resume_max_pages: int = Field(default=3, ge=1, le=20)
     resume_max_versions: int = Field(default=25, ge=1, le=100)
@@ -110,9 +118,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Demo administrator MFA bypass is restricted to development and test environments"
             )
-        if self.app_env in {"staging", "production"} and self.malware_scanner != "clamav":
+        worker_enabled = self.process_role in {"all", "worker"}
+        if (
+            self.app_env in {"staging", "production"}
+            and worker_enabled
+            and self.malware_scanner != "clamav"
+        ):
             raise ValueError("Staging and production require MALWARE_SCANNER=clamav")
-        if self.app_env in {"staging", "production"} and self.resume_parser_backend != "docker":
+        if (
+            self.app_env in {"staging", "production"}
+            and worker_enabled
+            and self.resume_parser_backend != "docker"
+        ):
             raise ValueError("Staging and production require RESUME_PARSER_BACKEND=docker")
         if self.app_env in {"staging", "production"}:
             if any(origin.scheme != "https" for origin in self.frontend_origins):
@@ -131,6 +148,25 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires private OCI Object Storage")
             if not self.oci_object_namespace or not self.oci_object_bucket:
                 raise ValueError("Production requires OCI object namespace and bucket")
+            if self.oci_auth_mode == "api_key":
+                api_key_identity = (
+                    self.oci_tenancy_ocid,
+                    self.oci_user_ocid,
+                    self.oci_key_fingerprint,
+                    self.oci_region,
+                )
+                private_key = (
+                    self.oci_private_key.get_secret_value()
+                    if self.oci_private_key is not None
+                    else ""
+                )
+                if any(not value or not value.strip() for value in api_key_identity) or not (
+                    private_key.strip()
+                ):
+                    raise ValueError(
+                        "OCI API key authentication requires tenancy, user, fingerprint, "
+                        "region, and private key"
+                    )
         return self
 
     @property

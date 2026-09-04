@@ -74,7 +74,7 @@ class LocalObjectStore:
 
 
 class OciObjectStore:
-    """Private OCI bucket adapter authenticated by a workload instance principal."""
+    """Private OCI bucket adapter authenticated by a configured OCI signer."""
 
     def __init__(
         self,
@@ -158,8 +158,35 @@ def build_object_store(settings: Settings) -> ObjectStore:
     try:
         import oci  # type: ignore[import-untyped]
 
-        signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
-        client = oci.object_storage.ObjectStorageClient(config={}, signer=signer)
+        if settings.oci_auth_mode == "api_key":
+            identity = (
+                settings.oci_tenancy_ocid,
+                settings.oci_user_ocid,
+                settings.oci_key_fingerprint,
+                settings.oci_region,
+            )
+            private_key = settings.oci_private_key
+            if (
+                any(not value or not value.strip() for value in identity)
+                or private_key is None
+                or not private_key.get_secret_value().strip()
+            ):
+                raise ObjectStoreError("resume_storage_configuration")
+            passphrase = settings.oci_private_key_passphrase
+            signer = oci.signer.Signer(
+                tenancy=settings.oci_tenancy_ocid,
+                user=settings.oci_user_ocid,
+                fingerprint=settings.oci_key_fingerprint,
+                private_key_file_location=None,
+                private_key_content=private_key.get_secret_value(),
+                pass_phrase=passphrase.get_secret_value() if passphrase else None,
+            )
+            client = oci.object_storage.ObjectStorageClient(
+                config={"region": settings.oci_region}, signer=signer
+            )
+        else:
+            signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+            client = oci.object_storage.ObjectStorageClient(config={}, signer=signer)
     except Exception as error:
         raise ObjectStoreError("resume_storage_configuration") from error
     return OciObjectStore(

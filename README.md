@@ -31,6 +31,13 @@ python scripts/export_openapi.py
 python scripts/evaluate_matching.py
 ```
 
+## Vercel API deployment
+
+The HTTP API can run as a Vercel Python Function. Set `PROCESS_ROLE=api`, use a
+managed PostgreSQL pooler, and configure OCI Object Storage with
+`OCI_AUTH_MODE=api_key`. The durable worker, ClamAV, and Docker parser remain on
+an always-on external host. See [the Vercel deployment runbook](docs/VERCEL_DEPLOYMENT.md).
+
 ## Boundaries
 
 - PostgreSQL is the durable source of truth.
