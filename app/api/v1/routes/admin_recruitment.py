@@ -88,6 +88,7 @@ def _http_error(error: RecruitmentError) -> HTTPException:
     if code.endswith("_not_found"):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=code)
     if code in {
+        "revision_conflict",
         "company_name_exists",
         "application_appeal_already_resolved",
         "published_drive_is_immutable",

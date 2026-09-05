@@ -232,6 +232,7 @@ class Application(Base, TimestampMixin):
     )
     idempotency_key: Mapped[str] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(32), default="submitted", index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
     role_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     resume_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     facts_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)

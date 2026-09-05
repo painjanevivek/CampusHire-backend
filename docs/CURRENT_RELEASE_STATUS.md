@@ -1,9 +1,9 @@
 # Current Release Status
 
-Recorded: 2026-09-03 (Asia/Calcutta)
+Recorded: 2026-09-05 (Asia/Calcutta)
 
-Decision: **Verified source-compatibility candidate; GO for continued synthetic qualification only; NO-GO
-for real student data.**
+Decision: **Product-experience working trees implemented; continued synthetic qualification only;
+NO-GO for real student data or production promotion.**
 
 This is the authoritative status record for the current two-repository CampusHire candidate.
 The identical machine-readable compatibility manifest is checked into both repositories at
@@ -11,7 +11,48 @@ The identical machine-readable compatibility manifest is checked into both repos
 and completion documents remain historical evidence for their exact source pairs and do not
 qualify this candidate.
 
-## Phase 10 security qualification update — 2026-09-03
+## Product experience upgrade — 2026-09-05
+
+The new student-priority, correction-request, candidate-review, publishing, navigation, comparison,
+preparation, notification, reporting, and landing interfaces are working-tree changes above Frontend
+`7ac8f7704841fc9d6d0d4ca0bbd056186eb76504` and Backend
+`d07997da878ff75e2166a341c0484a44ef00b17d`. These Git heads alone do not identify the new code.
+The exact runtime/test source fingerprints and produced results are recorded in
+[product-experience evidence](evidence/product-experience-20260905.json), with scope, reproduction,
+rollout, and remaining gates in [the implementation record](PRODUCT_EXPERIENCE_UPGRADE.md).
+
+Current automated source checks: Frontend 186 tests pass, typecheck/lint/build pass; Backend 182
+tests pass with one skipped, Ruff and strict MyPy pass. The additive migrations through
+`20260905_0022` applied to local PostgreSQL and compile as upgrade SQL. Real local synthetic browser
+workflows exercised a student response and officer resolution, candidate Back navigation, comparison
+and preparation, and explicit drive publication. The publishing walkthrough also exposed and
+verified a fix for copied rules being inserted before their copied parent roles on PostgreSQL.
+
+All seven existing local performance-budget routes pass after fixing publishing layout shift.
+Warm navigation meets the <=500ms p95 laboratory target with 30 measured transitions per core flow.
+This is small-fixture laboratory evidence, not production capacity or a 1,000-user guarantee.
+Refer to the paired evidence for completed browser/accessibility results and their exact scope.
+
+Final browser results: 92 responsive page/viewport checks pass at 390x844, 768x1024, 1440x900,
+and 1920x1080. Chromium, Firefox, and WebKit each pass 60 public/authenticated accessibility
+checks, with zero unexpected console errors; native keyboard traversal, reduced motion, forced
+colors, and emulated zoom/reflow checks pass. These are automated results, not user feedback.
+
+Remaining gates are explicit:
+
+- `alembic check` fails on older model/database constraint and index representation differences;
+  those existing constraints were retained, not dropped to manufacture a pass.
+- `npm run api:check` exits nonzero because the intentional new contract differs from Git HEAD.
+  Both exported contracts match and repeated generation is byte-stable. A clean committed-candidate
+  check is pending; the immutable compatibility manifest below is unchanged.
+- New-source security qualification, deferred historical security findings, PostgreSQL concurrent-
+  officer stress qualification, large-fixture capacity, staging checks, representative user feedback,
+  registry evidence, and accountable external approvals remain pending.
+
+No new security scan or institutional approval is claimed. Historical Phase 10 results below remain
+bound to their original source pairs and cannot be transferred to these working trees.
+
+## Phase 10 security qualification update — 2026-09-03 (historical source pair)
 
 The Windows worker-profile launch blocker is resolved. The Codex Security launcher prefers the
 independently installed stable CLI on Windows; that executable was still `codex-cli 0.152.0` even

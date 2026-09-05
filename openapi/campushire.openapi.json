@@ -535,6 +535,18 @@
       },
       "ApplicationOverrideCreate": {
         "properties": {
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
           "policy_reference": {
             "maxLength": 300,
             "minLength": 3,
@@ -564,8 +576,101 @@
         "title": "ApplicationOverrideCreate",
         "type": "object"
       },
+      "ApplicationQueueItem": {
+        "properties": {
+          "awaiting_review": {
+            "title": "Awaiting Review",
+            "type": "integer"
+          },
+          "company_name": {
+            "title": "Company Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "open_requests": {
+            "title": "Open Requests",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "role_title": {
+            "title": "Role Title",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "student_name": {
+            "title": "Student Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "student_name",
+          "role_title",
+          "company_name",
+          "status",
+          "revision",
+          "created_at",
+          "open_requests",
+          "awaiting_review"
+        ],
+        "title": "ApplicationQueueItem",
+        "type": "object"
+      },
+      "ApplicationQueuePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationQueueItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ApplicationQueuePage",
+        "type": "object"
+      },
       "ApplicationResponse": {
         "properties": {
+          "allowed_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Actions",
+            "type": "array"
+          },
           "appeals": {
             "items": {
               "$ref": "#/components/schemas/ApplicationAppealResponse"
@@ -577,6 +682,11 @@
             "additionalProperties": true,
             "title": "Application Form Snapshot",
             "type": "object"
+          },
+          "awaiting_review": {
+            "default": 0,
+            "title": "Awaiting Review",
+            "type": "integer"
           },
           "can_withdraw": {
             "title": "Can Withdraw",
@@ -622,6 +732,21 @@
             "title": "Institution Timezone",
             "type": "string"
           },
+          "next_actor": {
+            "default": "placement_team",
+            "title": "Next Actor",
+            "type": "string"
+          },
+          "next_step": {
+            "default": "Your placement team will update this application.",
+            "title": "Next Step",
+            "type": "string"
+          },
+          "open_requests": {
+            "default": 0,
+            "title": "Open Requests",
+            "type": "integer"
+          },
           "overrides": {
             "items": {
               "$ref": "#/components/schemas/OverrideResponse"
@@ -643,6 +768,11 @@
             "format": "uuid",
             "title": "Resume Version Id",
             "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
           },
           "role_id": {
             "format": "uuid",
@@ -757,6 +887,18 @@
       },
       "ApplicationStatusUpdate": {
         "properties": {
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
           "reason": {
             "anyOf": [
               {
@@ -1001,6 +1143,23 @@
             "title": "Confirmation",
             "type": "string"
           },
+          "expected_revisions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "format": "uuid"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revisions"
+          },
           "reason": {
             "maxLength": 500,
             "minLength": 10,
@@ -1075,6 +1234,11 @@
             "title": "Explanation",
             "type": "string"
           },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
           "target_status": {
             "title": "Target Status",
             "type": "string"
@@ -1127,6 +1291,23 @@
             "minItems": 1,
             "title": "Application Ids",
             "type": "array"
+          },
+          "expected_revisions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "format": "uuid"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revisions"
           },
           "reason": {
             "maxLength": 500,
@@ -1347,6 +1528,133 @@
         "title": "CompanyUpdate",
         "type": "object"
       },
+      "CorrectionEventResponse": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_user_id": {
+            "format": "uuid",
+            "title": "Actor User Id",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "resume_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Version Id"
+          }
+        },
+        "required": [
+          "id",
+          "actor_user_id",
+          "action",
+          "body",
+          "resume_version_id",
+          "created_at"
+        ],
+        "title": "CorrectionEventResponse",
+        "type": "object"
+      },
+      "CorrectionResponse": {
+        "properties": {
+          "application_id": {
+            "format": "uuid",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CorrectionEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "overdue": {
+            "default": false,
+            "title": "Overdue",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "awaiting_review",
+              "resolved",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "application_id",
+          "instructions",
+          "deadline_at",
+          "status",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CorrectionResponse",
+        "type": "object"
+      },
       "DashboardEvidence": {
         "properties": {
           "label": {
@@ -1472,6 +1780,11 @@
             "title": "Evidence",
             "type": "array"
           },
+          "institution_timezone": {
+            "default": "Asia/Kolkata",
+            "title": "Institution Timezone",
+            "type": "string"
+          },
           "next_action": {
             "$ref": "#/components/schemas/NextAction"
           },
@@ -1513,6 +1826,13 @@
           "unread_notifications": {
             "title": "Unread Notifications",
             "type": "integer"
+          },
+          "upcoming": {
+            "items": {
+              "$ref": "#/components/schemas/NextAction"
+            },
+            "title": "Upcoming",
+            "type": "array"
           }
         },
         "required": [
@@ -3272,6 +3592,51 @@
         "title": "MembershipStatusUpdate",
         "type": "object"
       },
+      "Metric": {
+        "properties": {
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "sample_size": {
+            "title": "Sample Size",
+            "type": "integer"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "sample_size",
+          "explanation",
+          "href"
+        ],
+        "title": "Metric",
+        "type": "object"
+      },
       "MfaCodeRequest": {
         "properties": {
           "code": {
@@ -3345,9 +3710,26 @@
       },
       "NextAction": {
         "properties": {
+          "category": {
+            "default": "readiness",
+            "title": "Category",
+            "type": "string"
+          },
           "completion_criteria": {
             "title": "Completion Criteria",
             "type": "string"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
           },
           "description": {
             "title": "Description",
@@ -3476,6 +3858,11 @@
             "title": "Body",
             "type": "string"
           },
+          "category": {
+            "default": "updates",
+            "title": "Category",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -3505,6 +3892,30 @@
               }
             ],
             "title": "Read At"
+          },
+          "related_application_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Application Id"
+          },
+          "related_request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Request Id"
           },
           "title": {
             "title": "Title",
@@ -4114,6 +4525,123 @@
         "title": "PreferencesUpdate",
         "type": "object"
       },
+      "PreparationEvidence": {
+        "properties": {
+          "demonstrated": {
+            "title": "Demonstrated",
+            "type": "boolean"
+          },
+          "evidence": {
+            "title": "Evidence",
+            "type": "string"
+          },
+          "requirement": {
+            "title": "Requirement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement",
+          "demonstrated",
+          "evidence"
+        ],
+        "title": "PreparationEvidence",
+        "type": "object"
+      },
+      "PreparationResponse": {
+        "properties": {
+          "activities": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Activities",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/PreparationEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "guidance_stale": {
+            "title": "Guidance Stale",
+            "type": "boolean"
+          },
+          "mapping_status": {
+            "title": "Mapping Status",
+            "type": "string"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirements",
+            "type": "array"
+          },
+          "roadmap_href": {
+            "title": "Roadmap Href",
+            "type": "string"
+          },
+          "role_id": {
+            "format": "uuid",
+            "title": "Role Id",
+            "type": "string"
+          },
+          "role_title": {
+            "title": "Role Title",
+            "type": "string"
+          },
+          "source_profile_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Profile Revision"
+          },
+          "source_resume_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Resume Version Id"
+          },
+          "suggestions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "role_id",
+          "role_title",
+          "source_resume_version_id",
+          "source_profile_revision",
+          "evidence",
+          "requirements",
+          "mapping_status",
+          "roadmap_href",
+          "suggestions",
+          "guidance_stale"
+        ],
+        "title": "PreparationResponse",
+        "type": "object"
+      },
       "ProfileResponse": {
         "properties": {
           "academic_year": {
@@ -4520,6 +5048,155 @@
         "title": "ProfileUpdate",
         "type": "object"
       },
+      "PublishPreview": {
+        "properties": {
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "company_name": {
+            "title": "Company Name",
+            "type": "string"
+          },
+          "completed_steps": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Completed Steps",
+            "type": "array"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "drive_id": {
+            "format": "uuid",
+            "title": "Drive Id",
+            "type": "string"
+          },
+          "opens_at": {
+            "format": "date-time",
+            "title": "Opens At",
+            "type": "string"
+          },
+          "pending_changes": {
+            "additionalProperties": true,
+            "title": "Pending Changes",
+            "type": "object"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/PublishRolePreview"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "drive_id",
+          "title",
+          "company_name",
+          "opens_at",
+          "deadline_at",
+          "blockers",
+          "roles",
+          "pending_changes",
+          "completed_steps"
+        ],
+        "title": "PublishPreview",
+        "type": "object"
+      },
+      "PublishRolePreview": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "form_questions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Form Questions",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "pending_changes": {
+            "additionalProperties": true,
+            "title": "Pending Changes",
+            "type": "object"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirements",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "salary_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salary Display"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "visible_on_publish": {
+            "title": "Visible On Publish",
+            "type": "boolean"
+          },
+          "work_mode": {
+            "title": "Work Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "visible_on_publish",
+          "title",
+          "description",
+          "location",
+          "work_mode",
+          "salary_display",
+          "requirements",
+          "rules",
+          "form_questions",
+          "pending_changes"
+        ],
+        "title": "PublishRolePreview",
+        "type": "object"
+      },
       "ReadinessItem": {
         "properties": {
           "complete": {
@@ -4546,6 +5223,133 @@
           "required"
         ],
         "title": "ReadinessItem",
+        "type": "object"
+      },
+      "ReportResponse": {
+        "properties": {
+          "end_at": {
+            "format": "date-time",
+            "title": "End At",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "start_at": {
+            "format": "date-time",
+            "title": "Start At",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_at",
+          "end_at",
+          "timezone",
+          "metrics"
+        ],
+        "title": "ReportResponse",
+        "type": "object"
+      },
+      "RequestCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "instructions": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Instructions",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instructions"
+        ],
+        "title": "RequestCreate",
+        "type": "object"
+      },
+      "RequestResolution": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "resolve",
+              "reopen",
+              "cancel"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "body": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Body",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "action",
+          "body"
+        ],
+        "title": "RequestResolution",
+        "type": "object"
+      },
+      "RequestResponseCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 4000,
+            "minLength": 10,
+            "title": "Body",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "resume_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Version Id"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "body"
+        ],
+        "title": "RequestResponseCreate",
         "type": "object"
       },
       "ResumeContent": {
@@ -6188,6 +6992,60 @@
           "saved"
         ],
         "title": "SaveResponse",
+        "type": "object"
+      },
+      "SavedViewCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 10,
+            "title": "Filters",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SavedViewCreate",
+        "type": "object"
+      },
+      "SavedViewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 10,
+            "title": "Filters",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id"
+        ],
+        "title": "SavedViewResponse",
         "type": "object"
       },
       "SemanticMatchResponse": {
@@ -8591,6 +9449,292 @@
         ]
       }
     },
+    "/api/v1/admin/recruitment/applications/{application_id}/requests": {
+      "get": {
+        "operationId": "admin_requests_api_v1_admin_recruitment_applications__application_id__requests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CorrectionResponse"
+                  },
+                  "title": "Response Admin Requests Api V1 Admin Recruitment Applications  Application Id  Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Requests",
+        "tags": [
+          "placement experience"
+        ]
+      },
+      "post": {
+        "operationId": "create_request_api_v1_admin_recruitment_applications__application_id__requests_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorrectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Request",
+        "tags": [
+          "placement experience"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/applications/{application_id}/requests/{request_id}/events/{event_id}/resume": {
+      "get": {
+        "operationId": "supplemental_resume_api_v1_admin_recruitment_applications__application_id__requests__request_id__events__event_id__resume_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Supplemental Resume",
+        "tags": [
+          "placement experience"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/applications/{application_id}/requests/{request_id}/resolve": {
+      "post": {
+        "operationId": "resolve_request_api_v1_admin_recruitment_applications__application_id__requests__request_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestResolution"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorrectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Request",
+        "tags": [
+          "placement experience"
+        ]
+      }
+    },
     "/api/v1/admin/recruitment/applications/{application_id}/status": {
       "post": {
         "operationId": "change_application_status_api_v1_admin_recruitment_applications__application_id__status_post",
@@ -9195,6 +10339,65 @@
         ]
       }
     },
+    "/api/v1/admin/recruitment/drives/{drive_id}/publication-preview": {
+      "get": {
+        "operationId": "preview_publication_api_v1_admin_recruitment_drives__drive_id__publication_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "drive_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Drive Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Publication",
+        "tags": [
+          "placement experience"
+        ]
+      }
+    },
     "/api/v1/admin/recruitment/drives/{drive_id}/roles": {
       "get": {
         "operationId": "read_roles_api_v1_admin_recruitment_drives__drive_id__roles_get",
@@ -9381,6 +10584,348 @@
         "summary": "Save Published Drive",
         "tags": [
           "placement administration"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/reports": {
+      "get": {
+        "operationId": "report_api_v1_admin_recruitment_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "drive_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report",
+        "tags": [
+          "placement experience"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/review-queue": {
+      "get": {
+        "operationId": "review_queue_api_v1_admin_recruitment_review_queue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "application_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Application Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "drive_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "requests",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(open|overdue|awaiting_review)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Requests"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review_pending",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Review Pending",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationQueuePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Queue",
+        "tags": [
+          "placement experience"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/review-queue/{application_id}": {
+      "get": {
+        "operationId": "review_detail_api_v1_admin_recruitment_review_queue__application_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Detail",
+        "tags": [
+          "placement experience"
         ]
       }
     },
@@ -10801,6 +12346,148 @@
         "summary": "Read Own Application Disclosures",
         "tags": [
           "application packets"
+        ]
+      }
+    },
+    "/api/v1/applications/{application_id}/requests": {
+      "get": {
+        "operationId": "student_requests_api_v1_applications__application_id__requests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CorrectionResponse"
+                  },
+                  "title": "Response Student Requests Api V1 Applications  Application Id  Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Student Requests",
+        "tags": [
+          "student experience"
+        ]
+      }
+    },
+    "/api/v1/applications/{application_id}/requests/{request_id}/response": {
+      "post": {
+        "operationId": "student_response_api_v1_applications__application_id__requests__request_id__response_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestResponseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorrectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Student Response",
+        "tags": [
+          "student experience"
         ]
       }
     },
@@ -12979,6 +14666,17 @@
         "parameters": [
           {
             "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "deadline",
+              "pattern": "^(newest|deadline|company)$",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "q",
             "required": false,
             "schema": {
@@ -13352,6 +15050,82 @@
         ]
       }
     },
+    "/api/v1/opportunities/{role_id}/preparation": {
+      "get": {
+        "operationId": "preparation_api_v1_opportunities__role_id__preparation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resume_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resume Id"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preparation",
+        "tags": [
+          "student experience"
+        ]
+      }
+    },
     "/api/v1/opportunities/{role_id}/save": {
       "post": {
         "operationId": "save_opportunity_api_v1_opportunities__role_id__save_post",
@@ -13408,6 +15182,235 @@
         "summary": "Save Opportunity",
         "tags": [
           "opportunities and applications"
+        ]
+      }
+    },
+    "/api/v1/opportunity-views": {
+      "get": {
+        "operationId": "saved_views_api_v1_opportunity_views_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SavedViewResponse"
+                  },
+                  "title": "Response Saved Views Api V1 Opportunity Views Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Saved Views",
+        "tags": [
+          "student experience"
+        ]
+      },
+      "post": {
+        "operationId": "create_view_api_v1_opportunity_views_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedViewCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create View",
+        "tags": [
+          "student experience"
+        ]
+      }
+    },
+    "/api/v1/opportunity-views/{view_id}": {
+      "delete": {
+        "operationId": "delete_view_api_v1_opportunity_views__view_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "view_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "View Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete View",
+        "tags": [
+          "student experience"
+        ]
+      },
+      "put": {
+        "operationId": "update_view_api_v1_opportunity_views__view_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "view_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "View Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedViewCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update View",
+        "tags": [
+          "student experience"
         ]
       }
     },

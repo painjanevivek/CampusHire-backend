@@ -502,6 +502,13 @@ async def delete_owned_version(
     )
     if application_id is not None:
         raise ResumeWorkflowError("resume_version_locked_by_application")
+    from app.models.experience import CorrectionEvent
+
+    supplemental_id = await db.scalar(
+        select(CorrectionEvent.id).where(CorrectionEvent.resume_version_id == version.id).limit(1)
+    )
+    if supplemental_id is not None:
+        raise ResumeWorkflowError("resume_version_locked_by_application")
     tailored_version_id = await db.scalar(
         select(ResumeVersion.id).where(ResumeVersion.parent_version_id == version.id).limit(1)
     )

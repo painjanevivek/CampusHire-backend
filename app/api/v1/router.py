@@ -11,6 +11,8 @@ from app.api.v1.routes.auth import router as auth_router
 from app.api.v1.routes.communications import router as communications_router
 from app.api.v1.routes.engagement import admin_router as admin_engagement_router
 from app.api.v1.routes.engagement import student_router as student_engagement_router
+from app.api.v1.routes.experience import admin_router as admin_experience_router
+from app.api.v1.routes.experience import student_router as student_experience_router
 from app.api.v1.routes.health import router as health_router
 from app.api.v1.routes.institutions import operator_router
 from app.api.v1.routes.institutions import router as institutions_router
@@ -42,3 +44,5 @@ api_router.include_router(audit_router, tags=["audit"])
 api_router.include_router(admin_intelligence_router, tags=["reviewed intelligence"])
 api_router.include_router(admin_engagement_router, tags=["placement communication"])
 api_router.include_router(operations_router, tags=["operations"])
+api_router.include_router(admin_experience_router, tags=["placement experience"])
+api_router.include_router(student_experience_router, tags=["student experience"])

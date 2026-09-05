@@ -376,8 +376,32 @@ async def list_notifications(
             .limit(100)
         )
     ).all()
+    from app.models.experience import CorrectionRequest
+
+    request_ids = [item.related_request_id for item in items if item.related_request_id]
+    open_ids = (
+        set(
+            (
+                await db.scalars(
+                    select(CorrectionRequest.id).where(
+                        CorrectionRequest.id.in_(request_ids),
+                        CorrectionRequest.institution_id == institution_id,
+                        CorrectionRequest.status == "open",
+                    )
+                )
+            ).all()
+        )
+        if request_ids
+        else set()
+    )
+    responses = [_notification_response(item) for item in items]
+    for response in responses:
+        if response.related_request_id:
+            response.category = (
+                "needs_action" if response.related_request_id in open_ids else "updates"
+            )
     return NotificationPage(
-        items=[_notification_response(item) for item in items],
+        items=responses,
         unread_count=sum(item.read_at is None for item in items),
     )
 
@@ -539,8 +563,7 @@ async def dashboard(
             key="add_project_evidence",
             title="Add a project",
             description=(
-                "Document one project, the work you completed, "
-                "and a safe CampusHire link."
+                "Document one project, the work you completed, and a safe CampusHire link."
             ),
             reason="Your profile has the required details but no reviewed project yet.",
             href="/resume",
@@ -554,9 +577,7 @@ async def dashboard(
         action = NextAction(
             key="select_roadmap",
             title="Choose your career roadmap",
-            description=(
-                "Select one reviewed path so CampusHire can show the next milestone."
-            ),
+            description=("Select one reviewed path so CampusHire can show the next milestone."),
             reason="A reviewed path keeps suggestions focused and in the right order.",
             href="/roadmap",
             policy_version=READINESS_POLICY_VERSION,
@@ -669,7 +690,16 @@ async def dashboard(
     ):
         state = "ai-unavailable"
 
+    from app.models.auth import Institution
+    from app.modules.experience.priorities import placement_actions
+
+    action, upcoming = await placement_actions(
+        db, institution_id, student_user_id, action, identity_complete, bool(reviewed), processing
+    )
+    institution = await db.get(Institution, institution_id)
     return DashboardResponse(
+        upcoming=upcoming,
+        institution_timezone=institution.timezone if institution else "Asia/Kolkata",
         student_name=(
             profile.full_name.split()[0]
             if profile and profile.full_name

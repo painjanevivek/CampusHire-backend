@@ -71,6 +71,13 @@ class InAppNotification(Base):
     title: Mapped[str] = mapped_column(String(180))
     body: Mapped[str] = mapped_column(Text)
     deep_link: Mapped[str] = mapped_column(String(500))
+    category: Mapped[str] = mapped_column(String(24), default="updates")
+    related_request_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("correction_requests.id", ondelete="SET NULL"), nullable=True
+    )
+    related_application_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("applications.id", ondelete="SET NULL"), nullable=True
+    )
     created_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

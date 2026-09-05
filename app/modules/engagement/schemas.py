@@ -63,6 +63,8 @@ class RoadmapProgressUpdate(BaseModel):
 
 
 class NextAction(BaseModel):
+    category: str = "readiness"
+    deadline_at: datetime | None = None
     key: str
     title: str
     description: str
@@ -115,6 +117,8 @@ class DashboardOpportunity(BaseModel):
 
 
 class DashboardResponse(BaseModel):
+    upcoming: list[NextAction] = Field(default_factory=list)
+    institution_timezone: str = "Asia/Kolkata"
     student_name: str
     readiness: DashboardReadinessSummary
     state: Literal["ready", "incomplete", "processing", "manual-review", "ai-unavailable"]
@@ -140,6 +144,9 @@ class NotificationCreate(BaseModel):
 
 
 class NotificationResponse(BaseModel):
+    category: str = "updates"
+    related_request_id: UUID | None = None
+    related_application_id: UUID | None = None
     id: UUID
     event_key: str
     title: str

@@ -170,8 +170,7 @@ async def drive_response(db: AsyncSession, drive: PlacementDrive) -> DriveRespon
         drive.pending_changes
         or has_draft_rules
         or any(
-            role.pending_changes or role.status == PublicationStatus.DRAFT.value
-            for role in roles
+            role.pending_changes or role.status == PublicationStatus.DRAFT.value for role in roles
         )
     )
     return DriveResponse(
@@ -339,9 +338,7 @@ async def save_drive_changes(
     if drive.status != PublicationStatus.PUBLISHED.value:
         raise RecruitmentError("drive_save_requires_published_drive")
 
-    drive_values = DriveUpdate.model_validate(drive.pending_changes).model_dump(
-        exclude_unset=True
-    )
+    drive_values = DriveUpdate.model_validate(drive.pending_changes).model_dump(exclude_unset=True)
     company_id = drive_values.get("company_id", drive.company_id)
     company = await db.scalar(
         select(Company).where(
@@ -488,7 +485,11 @@ async def duplicate_drive(
                     created_by_user_id=actor_user_id,
                 )
             )
-    db.add_all(clones)
+    # These mappers have no ORM relationship ordering. Persist role parents before
+    # dependent rules so PostgreSQL's immediate FK checks also accept the copy.
+    db.add_all(item for item in clones if isinstance(item, PlacementRole))
+    await db.flush()
+    db.add_all(item for item in clones if isinstance(item, EligibilityRuleSet))
     await db.flush()
     await db.refresh(clone)
     return clone
@@ -512,15 +513,17 @@ async def role_response(
     role: PlacementRole,
     *,
     include_pending: bool = False,
+    drive: PlacementDrive | None = None,
+    company: Company | None = None,
 ) -> RoleResponse:
-    row = (
-        await db.execute(
-            select(PlacementDrive, Company)
-            .join(Company, Company.id == PlacementDrive.company_id)
-            .where(PlacementDrive.id == role.drive_id)
-        )
-    ).one()
-    drive, company = row
+    if drive is None or company is None:
+        drive, company = (
+            await db.execute(
+                select(PlacementDrive, Company)
+                .join(Company, Company.id == PlacementDrive.company_id)
+                .where(PlacementDrive.id == role.drive_id)
+            )
+        ).one()
     return RoleResponse(
         id=role.id,
         drive_id=role.drive_id,
@@ -885,11 +888,13 @@ async def list_opportunities(
     eligibility_status: str | None = None,
     application_status: str | None = None,
     deadline_within_days: int | None = None,
+    sort: str = "deadline",
+    unapplied_only: bool = False,
 ) -> OpportunityPage:
     institution = _institution(institution_id)
     now = datetime.now(UTC)
     statement = (
-        select(PlacementRole)
+        select(PlacementRole, PlacementDrive, Company)
         .join(PlacementDrive, PlacementDrive.id == PlacementRole.drive_id)
         .join(Company, Company.id == PlacementDrive.company_id)
         .where(
@@ -926,8 +931,23 @@ async def list_opportunities(
             (SavedOpportunity.role_id == PlacementRole.id)
             & (SavedOpportunity.student_user_id == student_user_id),
         )
-    all_roles = (await db.scalars(statement.order_by(PlacementDrive.deadline_at))).all()
-    role_ids = [item.id for item in all_roles]
+    if unapplied_only:
+        statement = statement.where(
+            ~PlacementRole.id.in_(
+                select(Application.role_id).where(
+                    Application.student_user_id == student_user_id,
+                    Application.institution_id == institution,
+                )
+            )
+        )
+    all_roles = (
+        await db.execute(
+            statement.order_by(
+                PlacementDrive.deadline_at, PlacementRole.created_at, PlacementRole.id
+            )
+        )
+    ).all()
+    role_ids = [item[0].id for item in all_roles]
     rules = await _published_rules(db, role_ids)
     facts = await _student_facts(db, institution, student_user_id)
     saved_ids = set(
@@ -952,8 +972,8 @@ async def list_opportunities(
         ).all()
     }
     candidates: list[OpportunityResponse] = []
-    for role in all_roles:
-        base = await role_response(db, role)
+    for role, drive, company in all_roles:
+        base = await role_response(db, role, drive=drive, company=company)
         application = applications.get(role.id)
         candidates.append(
             OpportunityResponse(
@@ -970,6 +990,15 @@ async def list_opportunities(
         if (eligibility_status is None or item.eligibility.status == eligibility_status)
         and (application_status is None or item.application_status == application_status)
     ]
+    if sort == "newest":
+        filtered.sort(
+            key=lambda item: (item.published_at or datetime.min.replace(tzinfo=UTC), str(item.id)),
+            reverse=True,
+        )
+    elif sort == "company":
+        filtered.sort(
+            key=lambda item: (item.company_name.casefold(), item.title.casefold(), str(item.id))
+        )
     total = len(filtered)
     items = filtered[(page - 1) * page_size : page * page_size]
     filter_active = any(
@@ -1100,7 +1129,46 @@ async def _application_response(db: AsyncSession, application: Application) -> A
             .order_by(ApplicationAppeal.created_at)
         )
     ).all()
+    from app.models.experience import CorrectionRequest
+    from app.modules.recruitment.domain import TRANSITIONS
+
+    request_counts = {
+        row[0]: row[1]
+        for row in (
+            await db.execute(
+                select(CorrectionRequest.status, func.count())
+                .where(CorrectionRequest.application_id == application.id)
+                .group_by(CorrectionRequest.status)
+            )
+        ).all()
+    }
+    open_requests = request_counts.get("open", 0)
+    awaiting_review = request_counts.get("awaiting_review", 0)
+    terminal = application.status in {"offered", "rejected", "withdrawn"}
+    next_actor = "none" if terminal else "student" if open_requests else "placement_team"
+    next_step = (
+        "This application is closed. Its recorded history remains available."
+        if terminal
+        else "Respond to the placement team's information request."
+        if open_requests
+        else "Your response is with the placement team. No action is required from you."
+        if awaiting_review
+        else (
+            f"Recorded stage: {application.status.replace('_', ' ')}. "
+            "No student action is recorded."
+        )
+    )
     return ApplicationResponse(
+        revision=application.revision,
+        next_actor=next_actor,
+        next_step=next_step,
+        open_requests=open_requests,
+        awaiting_review=awaiting_review,
+        allowed_actions=sorted(
+            str(s)
+            for s in TRANSITIONS.get(ApplicationStatus(application.status), set())
+            if str(s) != "withdrawn"
+        ),
         id=application.id,
         role_id=application.role_id,
         student_user_id=application.student_user_id,
@@ -1392,6 +1460,10 @@ async def withdraw_application(
     previous = application.status
     now = datetime.now(UTC)
     application.status = ApplicationStatus.WITHDRAWN.value
+    application.revision += 1
+    from app.modules.experience.service import close_requests
+
+    await close_requests(db, application, student_user_id)
     application.withdrawn_at = now
     application.withdrawal_reason = payload.reason
     db.add(
@@ -1594,6 +1666,7 @@ async def _owned_application(
             Application.institution_id == _institution(institution_id),
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if item is None:
         raise RecruitmentError("application_not_found")
@@ -1608,6 +1681,8 @@ async def update_application_status(
     payload: ApplicationStatusUpdate,
 ) -> Application:
     application = await _owned_application(db, institution_id, application_id)
+    if payload.expected_revision is not None and application.revision != payload.expected_revision:
+        raise RecruitmentError("revision_conflict")
     try:
         validate_transition(
             ApplicationStatus(application.status), ApplicationStatus(payload.status)
@@ -1616,6 +1691,10 @@ async def update_application_status(
         raise RecruitmentError("application_status_transition_invalid") from error
     previous = application.status
     application.status = payload.status
+    application.revision += 1
+    from app.modules.experience.service import close_requests
+
+    await close_requests(db, application, actor_user_id)
     db.add(
         ApplicationStatusEvent(
             application_id=application.id,
@@ -1663,6 +1742,7 @@ async def preview_bulk_application_status(
             explanation = str(error)
         items.append(
             BulkApplicationPreviewItem(
+                revision=application.revision,
                 application_id=application.id,
                 current_status=application.status,
                 target_status=payload.status,
@@ -1687,8 +1767,18 @@ async def apply_bulk_application_status(
     if preview.blocked_count:
         raise RecruitmentError("bulk_application_transition_invalid")
     updated: list[Application] = []
-    status_payload = ApplicationStatusUpdate(status=payload.status, reason=payload.reason)
-    for application_id in payload.application_ids:
+    if payload.expected_revisions is not None and set(payload.expected_revisions) != set(
+        payload.application_ids
+    ):
+        raise RecruitmentError("revision_conflict")
+    for application_id in sorted(payload.application_ids):
+        status_payload = ApplicationStatusUpdate(
+            status=payload.status,
+            reason=payload.reason,
+            expected_revision=payload.expected_revisions.get(application_id)
+            if payload.expected_revisions
+            else None,
+        )
         updated.append(
             await update_application_status(
                 db,
@@ -1709,8 +1799,14 @@ async def override_application(
     payload: ApplicationOverrideCreate,
 ) -> Application:
     application = await _owned_application(db, institution_id, application_id)
+    if payload.expected_revision is not None and application.revision != payload.expected_revision:
+        raise RecruitmentError("revision_conflict")
     previous = application.status
     application.status = payload.status
+    application.revision += 1
+    from app.modules.experience.service import close_requests
+
+    await close_requests(db, application, actor_user_id)
     now = datetime.now(UTC)
     db.add(
         ApplicationOverride(

@@ -60,6 +60,7 @@ def _http_error(error: RecruitmentError) -> HTTPException:
 async def read_opportunities(
     db: Database,
     tenant: CurrentTenant,
+    sort: Annotated[str, Query(pattern=r"^(newest|deadline|company)$")] = "deadline",
     q: Annotated[str | None, Query(max_length=120)] = None,
     location: Annotated[str | None, Query(max_length=120)] = None,
     work_mode: Annotated[str | None, Query(pattern=r"^(on-site|hybrid|remote)$")] = None,
@@ -93,6 +94,7 @@ async def read_opportunities(
         eligibility_status=eligibility,
         application_status=application_state,
         deadline_within_days=deadline_within_days,
+        sort=sort,
     )
 
 

@@ -271,6 +271,12 @@ class ApplicationAppealResolution(BaseModel):
 
 
 class ApplicationResponse(BaseModel):
+    revision: int = 1
+    next_actor: str = "placement_team"
+    next_step: str = "Your placement team will update this application."
+    open_requests: int = 0
+    awaiting_review: int = 0
+    allowed_actions: list[str] = Field(default_factory=list)
     id: UUID
     role_id: UUID
     student_user_id: UUID
@@ -306,11 +312,13 @@ class AdminApplicationPage(BaseModel):
 
 
 class ApplicationStatusUpdate(BaseModel):
+    expected_revision: int | None = Field(default=None, ge=1)
     status: ApplicationDecision
     reason: str | None = Field(default=None, max_length=500)
 
 
 class BulkApplicationStatusRequest(BaseModel):
+    expected_revisions: dict[UUID, int] | None = None
     application_ids: list[UUID] = Field(min_length=1, max_length=100)
     status: ApplicationDecision
     reason: str = Field(min_length=10, max_length=500)
@@ -328,6 +336,7 @@ class BulkApplicationApplyRequest(BulkApplicationStatusRequest):
 
 
 class BulkApplicationPreviewItem(BaseModel):
+    revision: int = 1
     application_id: UUID
     current_status: str
     target_status: str
@@ -348,6 +357,7 @@ class BulkApplicationApplyResponse(BaseModel):
 
 
 class ApplicationOverrideCreate(BaseModel):
+    expected_revision: int | None = Field(default=None, ge=1)
     status: Literal["shortlisted", "rejected"]
     reason: str = Field(min_length=10, max_length=500)
     policy_reference: str = Field(min_length=3, max_length=300)

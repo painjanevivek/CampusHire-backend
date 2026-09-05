@@ -175,7 +175,7 @@ async def test_dashboard_returns_exactly_one_explainable_next_action() -> None:
         await db.commit()
         response = await dashboard(db, institution.id, student.id)
         assert response.next_action.key == "complete_profile"
-        assert response.next_action.policy_version == "readiness-v1"
+        assert response.next_action.policy_version == "placement-actions-v2"
         assert response.next_action.source_facts == ["required_profile_facts_incomplete"]
         assert response.next_action.estimated_minutes == 8
         assert response.next_action.unlocks == "Role-specific eligibility checks"

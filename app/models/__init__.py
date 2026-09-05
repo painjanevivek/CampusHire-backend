@@ -25,6 +25,7 @@ from app.models.engagement import (
     RoadmapTemplate,
     StudentRoadmap,
 )
+from app.models.experience import CorrectionEvent, CorrectionRequest, SavedOpportunityView
 from app.models.intelligence import PolicyDocument, RoleExtractionProposal, SemanticMatchEvidence
 from app.models.privacy import DataDeletionRequest
 from app.models.profile import StudentProfile
@@ -53,6 +54,9 @@ from app.models.resume import (
 )
 
 __all__ = [
+    "CorrectionEvent",
+    "CorrectionRequest",
+    "SavedOpportunityView",
     "AuditEvent",
     "Application",
     "ApplicationAppeal",

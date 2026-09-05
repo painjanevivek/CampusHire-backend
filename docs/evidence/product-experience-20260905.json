@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-09-05 05:44:18 UTC",
+  "qualification": "local synthetic working-tree evidence; not a production release or approval",
+  "source_pair": {
+    "frontend": {
+      "base_commit": "7ac8f7704841fc9d6d0d4ca0bbd056186eb76504",
+      "source_sha256": "ac60bf53d2e3c409b932f4fd34b3839164ed0ada3451943d95961865f3ec58b4",
+      "file_count": 243,
+      "include_pattern": "^(src/|public/|scripts/|openapi/|package|next|tsconfig|vitest|eslint)"
+    },
+    "backend": {
+      "base_commit": "d07997da878ff75e2166a341c0484a44ef00b17d",
+      "source_sha256": "59e273425d1fdda8a2bba212415ff145a7af119d7a241d08bf4e057e7a0827c9",
+      "file_count": 200,
+      "include_pattern": "^(app/|migrations/|tests/|scripts/|openapi/|pyproject|requirements|uv.lock)"
+    },
+    "fingerprint_method": "git ls-files --cached --others --exclude-standard; PowerShell Sort-Object -Unique; filter include_pattern; each existing file contributes relative/path:lowercase_sha256(file bytes); join with LF without terminal LF; SHA256 UTF-8. Documentation and local .data outputs excluded. Base commits alone do not identify the changed source.",
+    "committed": false,
+    "openapi_sha256": "014a05dbc9ccf717c9da1c410166721cf70192a77332c7f123e35da956fc3d5e",
+    "alembic_head": "20260905_0022"
+  },
+  "automated_checks": {
+    "frontend": {
+      "tests_passed": 186,
+      "tests_failed": 0,
+      "typecheck": "pass",
+      "lint": "pass",
+      "production_build": "pass"
+    },
+    "backend": {
+      "tests_passed": 182,
+      "tests_skipped": 1,
+      "tests_failed": 0,
+      "ruff": "pass",
+      "mypy": "pass: 108 source files"
+    },
+    "openapi": {
+      "current_source_export": "matches checked backend contract",
+      "frontend_backend_contract": "byte-identical",
+      "repeat_generation": "byte-stable",
+      "npm_api_check": "exit 1: intentional uncommitted contract differs from HEAD; not counted as a pass"
+    },
+    "migrations": {
+      "local_postgresql_upgrade": "pass",
+      "offline_upgrade_sql": "pass: 20260905_0020 through 20260905_0022",
+      "alembic_check": "fail: existing model/database unique-constraint/index representations, audit index, drive-window check; existing protections retained"
+    },
+    "diff_whitespace": "pass both repositories"
+  },
+  "responsive_browser": {
+    "passed": true,
+    "checks": 92,
+    "routes_per_viewport": 23,
+    "viewports": [
+      [
+        390,
+        844
+      ],
+      [
+        768,
+        1024
+      ],
+      [
+        1440,
+        900
+      ],
+      [
+        1920,
+        1080
+      ]
+    ],
+    "browser": "Chromium 149.0.7827.55",
+    "horizontal_overflow_failures": 0,
+    "axe_failures": 0,
+    "page_error_failures": 0,
+    "includes": [
+      "landing/public/sign-in",
+      "student core pages",
+      "comparison and role preparation",
+      "application detail",
+      "admin core pages/reports",
+      "selected mobile candidate detail"
+    ]
+  },
+  "accessibility": [
+    {
+      "path": ".data/experience-accessibility-final.json",
+      "sha256": "81647ca9ae1e35c06183f92707b824c0ea848f6ed01584912b369639457da5a3",
+      "passed": true,
+      "checks": 60,
+      "recorded_at": "2026-09-05T05:40:12Z",
+      "engines": [
+        "chromium-headless"
+      ]
+    },
+    {
+      "path": ".data/experience-accessibility-firefox.json",
+      "sha256": "37208c136c29c46d2f1e3a0431c76d6cfa0298dfd5d57505a81d7bede0ab8e2d",
+      "passed": true,
+      "checks": 60,
+      "recorded_at": "2026-09-05T05:40:38Z",
+      "engines": [
+        "firefox-headless"
+      ]
+    },
+    {
+      "path": ".data/experience-accessibility-webkit.json",
+      "sha256": "26ec6b9e156730b85c62a4e42b5909f979b3c69926c6995d74b5845ba4a6a1dc",
+      "passed": true,
+      "checks": 60,
+      "recorded_at": "2026-09-05T05:40:28Z",
+      "engines": [
+        "webkit-headless"
+      ]
+    }
+  ],
+  "accessibility_scope": "Public degraded checks are distinguished from real demo-authenticated routes. Includes native tab traversal, reduced motion, forced colors, and emulated 200%/400% zoom reflow. No unexpected console errors. This is automated evidence, not manual user acceptance.",
+  "performance": {
+    "profile": {
+      "os": "Windows, local production Next.js build and local FastAPI/PostgreSQL, loopback, no network/CPU throttling",
+      "cpu": "13th Gen Intel Core i9-13980HX",
+      "physical_cores": 24,
+      "logical_processors": 32,
+      "memory_bytes": 25369616384,
+      "viewport": [
+        1440,
+        900
+      ],
+      "browser": "Chromium 149.0.7827.55",
+      "fixture_at_measurement": {
+        "applications": 2,
+        "drives": 4,
+        "roles": 4
+      },
+      "notes": "Synthetic walkthroughs add retained requests and copied drives; fixture counts label measurement time, not production scale."
+    },
+    "existing_route_budgets": {
+      "passed": 7,
+      "total": 7,
+      "publishing_cls": 0.0022,
+      "cls_limit": 0.1
+    },
+    "warm_navigation": {
+      "samples_per_flow": 30,
+      "p95_target_ms": 500,
+      "passed": true,
+      "flows": [
+        {
+          "source": "/dashboard",
+          "target": "/opportunities",
+          "p95_ms": 64.33,
+          "mean_requests": 1.1
+        },
+        {
+          "source": "/opportunities",
+          "target": "/applications",
+          "p95_ms": 61.13,
+          "mean_requests": 1.1
+        },
+        {
+          "source": "/admin/applications",
+          "target": "/admin/drives",
+          "p95_ms": 144.28,
+          "mean_requests": 7.0333
+        },
+        {
+          "source": "candidate queue",
+          "target": "candidate detail",
+          "p95_ms": 127.55,
+          "mean_requests": 2.9667
+        },
+        {
+          "source": "drive",
+          "target": "edit drive",
+          "p95_ms": 39.47,
+          "mean_requests": 0
+        }
+      ],
+      "transferred_javascript_bytes": "30 per-flow resource samples recorded; warm transitions transferred 0 additional script bytes in this run; initial-load bundles remain reported separately"
+    },
+    "query_profile": {
+      "samples_per_flow": 30,
+      "flows": [
+        {
+          "flow": "student_dashboard",
+          "mean_queries": 23,
+          "mean_query_ms": 11.84
+        },
+        {
+          "flow": "opportunities",
+          "mean_queries": 6,
+          "mean_query_ms": 3.05
+        },
+        {
+          "flow": "candidate_queue",
+          "mean_queries": 3,
+          "mean_query_ms": 1.54
+        },
+        {
+          "flow": "drive_publication_preview",
+          "mean_queries": 5,
+          "mean_query_ms": 2.2
+        }
+      ],
+      "queue_explain_analyze": "recorded in Backend/.data/experience-query-profile.json",
+      "artifact_sha256": "8b901587cd8fdccfc8df4290440a5fa1491d22c3a1527680921cfb807bd7011a"
+    },
+    "baseline_limit": "Earlier baseline measured real navigation with weaker content-readiness criteria. No percentage improvement is claimed. Pre-change candidate-selection and editor baselines unavailable.",
+    "capacity_claim": false
+  },
+  "task_evidence": {
+    "student_correction_response": "passed through actual dashboard link and application response UI",
+    "officer_correction_resolution": "passed; original snapshots separately asserted unchanged in backend regression",
+    "candidate_context": "consecutive selection and browser Back passed",
+    "guided_publication": "passed against local PostgreSQL after foreign-key insertion-order regression fix; explicit rule/role/drive publish plus reload",
+    "comparison_and_preparation": "passed with two actual synthetic roles",
+    "usability_feedback": "not performed"
+  },
+  "artifacts": {
+    "location_note": "Paths below are relative to Frontend. Raw .data evidence is local and ignored by Git; this committed-ready summary retains hashes and actual outcomes.",
+    "frontend": [
+      {
+        "path": ".data/experience-tests-final.json",
+        "sha256": "2bbb417c71434fd9c3c38a701995e496488cbbf1bc5dae5f8ada93fc2118e322"
+      },
+      {
+        "path": ".data/experience-navigation-final.json",
+        "sha256": "02043a00a3e710bc472e4a349e482f3b01f8b2622d03bc2526ea04412c281bee"
+      },
+      {
+        "path": ".data/experience-performance-final.json",
+        "sha256": "8417dd4ead00dc5d2d52efdc8e572e0cb9af9f74ca2fd15f61284da6a00b4873"
+      },
+      {
+        "path": ".data/experience-browser-final/results.json",
+        "sha256": "6d30133c8ce372ae7a970e0196b6bd2abdeb8732565a419d97d5a33adde3923c"
+      },
+      {
+        "path": ".data/experience-workflows/results.json",
+        "sha256": "369dee9425e87093c6ac89dca4d31c9ee287a9cca854e9da789599c1a971f790"
+      },
+      {
+        "path": ".data/experience-publishing/results.json",
+        "sha256": "c1e7aef2ac32d786b7bcca9c32d17f2802b0259174e0eef6ba680a550163c138"
+      }
+    ]
+  },
+  "pending": [
+    "Commit/freeze exact new candidate pair and rerun Git-clean OpenAPI gate",
+    "Resolve older Alembic model/database drift without weakening constraints",
+    "PostgreSQL concurrent-officer stress and large-fixture capacity qualification",
+    "New-source security qualification and existing open security findings",
+    "Real institution-reviewed preparation mappings; no approvals synthesized",
+    "Representative student/T&P usability feedback",
+    "Staging, registry/image provenance, external governance and authorized real-data go/no-go"
+  ],
+  "excluded": [
+    "Paid infrastructure",
+    "Redis dependency",
+    "Stack migration",
+    "Account deletion feature",
+    "External recruiter portal",
+    "Interview scheduling",
+    "Production capacity guarantee"
+  ]
+}
