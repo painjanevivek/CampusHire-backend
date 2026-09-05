@@ -18,6 +18,7 @@ dependencies = [
   "langgraph==1.2.10",
   "oci==2.184.2",
   "pydantic-settings==2.15.0",
+  "Pillow==12.3.0",
   "pymupdf==1.28.2",
   "python-multipart==0.0.32",
   "qdrant-client==1.19.0",
@@ -58,6 +59,13 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["langgraph.*"]
 follow_imports = "skip"
+
+# Pillow's optional NumPy typing references target newer Python syntax; this
+# application uses PIL images/bytes, never NumPy arrays.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

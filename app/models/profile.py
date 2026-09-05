@@ -1,10 +1,19 @@
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Uuid
+from sqlalchemy import JSON, ForeignKey, Integer, LargeBinary, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
+
+
+class ProfilePhoto(Base, TimestampMixin):
+    __tablename__ = "profile_photos"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    image: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
 class StudentProfile(Base, TimestampMixin):

@@ -22,7 +22,7 @@ class RequestBodyLimitMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("method") != "POST":
+        if scope["type"] != "http" or scope.get("method") not in {"POST", "PUT"}:
             await self.app(scope, receive, send)
             return
         path = str(scope.get("path", ""))
@@ -30,6 +30,8 @@ class RequestBodyLimitMiddleware:
         limit: int | None = None
         if path == "/api/v1/resumes":
             limit = settings.resume_max_bytes + settings.request_body_overhead_bytes
+        elif path == "/api/v1/profile/photo":
+            limit = 2 * 1024 * 1024 + settings.request_body_overhead_bytes
         elif path.endswith("/roster-imports/preview"):
             limit = settings.roster_max_bytes + settings.request_body_overhead_bytes
         if limit is None:

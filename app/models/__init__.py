@@ -28,7 +28,7 @@ from app.models.engagement import (
 from app.models.experience import CorrectionEvent, CorrectionRequest, SavedOpportunityView
 from app.models.intelligence import PolicyDocument, RoleExtractionProposal, SemanticMatchEvidence
 from app.models.privacy import DataDeletionRequest
-from app.models.profile import StudentProfile
+from app.models.profile import ProfilePhoto, StudentProfile
 from app.models.recruitment import (
     Application,
     ApplicationAppeal,
@@ -54,6 +54,7 @@ from app.models.resume import (
 )
 
 __all__ = [
+    "ProfilePhoto",
     "CorrectionEvent",
     "CorrectionRequest",
     "SavedOpportunityView",

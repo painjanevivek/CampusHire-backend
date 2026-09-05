@@ -8,7 +8,7 @@ from app.models.auth import AuditEvent, InstitutionMembership, Session, User
 from app.models.engagement import InAppNotification, RoadmapProgress, StudentRoadmap
 from app.models.intelligence import SemanticMatchEvidence
 from app.models.privacy import DataDeletionRequest
-from app.models.profile import StudentProfile
+from app.models.profile import ProfilePhoto, StudentProfile
 from app.models.recruitment import Application, EligibilityEvaluation, SavedOpportunity
 from app.models.resume import (
     Resume,
@@ -69,6 +69,7 @@ async def request_student_deletion(
     await db.flush()
 
     roadmap_ids = select(StudentRoadmap.id).where(StudentRoadmap.student_user_id == user_id)
+    await db.execute(delete(ProfilePhoto).where(ProfilePhoto.user_id == user_id))
     version_ids = select(ResumeVersion.id).where(ResumeVersion.user_id == user_id)
     job_ids = select(ResumeProcessingJob.id).where(
         ResumeProcessingJob.resume_version_id.in_(version_ids)
