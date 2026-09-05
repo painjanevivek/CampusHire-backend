@@ -1,7 +1,7 @@
 import hashlib
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
@@ -165,13 +165,26 @@ async def semantic_match(
         }
     )
     existing = await db.scalar(
-        select(SemanticMatchEvidence).where(
+        select(SemanticMatchEvidence)
+        .where(
             SemanticMatchEvidence.institution_id == institution_id,
             SemanticMatchEvidence.fingerprint == fingerprint,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if existing is not None:
-        return _match_response(existing)
+        evaluated_at = existing.created_at
+        if evaluated_at.tzinfo is None:
+            evaluated_at = evaluated_at.replace(tzinfo=UTC)
+        # Success is immutable for these source versions. A transient failure is
+        # only a short negative cache, not a permanent result for this fingerprint.
+        if (
+            existing.status == "available"
+            or embedder is None
+            or _now() - evaluated_at < timedelta(seconds=60)
+        ):
+            return _match_response(existing)
 
     status = "available"
     score: int | None = None
@@ -214,6 +227,18 @@ async def semantic_match(
             explanation = [
                 "Skills matching is temporarily unavailable. Your eligibility has not changed."
             ]
+
+    if existing is not None:
+        # The locked failed attempt can recover without deleting history elsewhere
+        # or colliding with the unique source fingerprint. Never rewrite success.
+        existing.status = status
+        existing.score = score
+        existing.components = components
+        existing.explanation = explanation
+        existing.safe_error_code = safe_error_code
+        existing.created_at = _now()
+        await db.flush()
+        return _match_response(existing)
 
     evidence = SemanticMatchEvidence(
         institution_id=institution_id,

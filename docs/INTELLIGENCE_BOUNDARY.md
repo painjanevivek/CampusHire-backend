@@ -1,6 +1,6 @@
 # Reviewed intelligence boundary
 
-CampusHire treats deterministic eligibility as authoritative and semantic relevance as optional evidence. `GET /api/v1/opportunities/{role_id}/match` never changes eligibility or application availability. It returns a versioned `available` result or an explicit `unavailable` state with a safe error code.
+CampusHire treats deterministic eligibility as authoritative and semantic relevance as optional evidence. `POST /api/v1/opportunities/{role_id}/match` never changes eligibility or application availability. It returns a versioned `available` result or an explicit `unavailable` state with a safe error code.
 
 ## Data minimization and versions
 
@@ -16,4 +16,11 @@ Role brief extraction creates a proposal only for draft roles. The source is ret
 
 Policy documents are versioned per institution. Draft or rejected sections never enter retrieval. Approval requires a reason, retires the previous approved version with the same title, and creates an audit event. Answers cite approved sections and return `grounded: false` when no approved evidence supports the question.
 
-Provider outage recovery requires no data repair: eligibility, role management, applications, and manual policy review continue. Re-run semantic matching after provider recovery to create a new versioned result.
+Provider outage recovery requires no data repair: eligibility, role management, applications, and manual policy review continue. Re-run semantic matching after provider recovery to obtain an available versioned result.
+
+Successful results remain cached for their source fingerprint. Failed provider attempts have a
+60-second negative-cache cooldown; a later normal match request can retry the same unchanged
+profile, resume, and role. The existing failed row is locked and refreshed with the retry result
+and evaluation time, avoiding a unique-fingerprint collision. A successful row is never replaced
+by a later outage. This retry does not alter application snapshots or deterministic eligibility,
+and the existing endpoint rate limit still applies. Dashboard reads do not call the provider.

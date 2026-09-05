@@ -3,11 +3,13 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.models import Base
 from app.models.auth import Institution, User, UserRole
+from app.models.intelligence import SemanticMatchEvidence
 from app.models.profile import StudentProfile
 from app.models.recruitment import PlacementRole, PublicationStatus
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
@@ -143,6 +145,79 @@ async def test_match_is_versioned_separate_and_degrades_without_provider() -> No
         )
         assert unavailable.status == "unavailable"
         assert unavailable.safe_error_code == "semantic_provider_unavailable"
+
+
+async def test_failed_match_recovers_for_unchanged_inputs_after_cooldown() -> None:
+    async with Session() as db:
+        institution, _, _, student, role = await seed_context(db)
+        arguments = dict(
+            institution_id=institution.id, student_user_id=student.id, role_id=role.id
+        )
+        failed = await semantic_match(db, **arguments, embedder=None)
+        assert failed.status == "unavailable"
+        evidence = await db.scalar(select(SemanticMatchEvidence))
+        assert evidence is not None
+        original_id = evidence.id
+
+        class CountingEmbedder(FixedEmbedder):
+            calls = 0
+
+            def embed(self, text: str) -> list[float]:
+                self.calls += 1
+                return super().embed(text)
+
+        provider = CountingEmbedder()
+        cooling_down = await semantic_match(db, **arguments, embedder=provider)
+        assert cooling_down.status == "unavailable"
+        assert provider.calls == 0
+
+        evidence.created_at = datetime.now(UTC) - timedelta(minutes=2)
+        await db.flush()
+        recovered = await semantic_match(db, **arguments, embedder=provider)
+        assert recovered.status == "available"
+        assert recovered.score is not None
+        assert recovered.safe_error_code is None
+        assert recovered.source_profile_revision == failed.source_profile_revision
+        assert recovered.source_resume_version_id == failed.source_resume_version_id
+        assert provider.calls == 2
+        assert evidence.id == original_id
+        assert len((await db.scalars(select(SemanticMatchEvidence))).all()) == 1
+
+        cached = await semantic_match(db, **arguments, embedder=None)
+        assert cached.model_dump(exclude={"evaluated_at"}) == recovered.model_dump(
+            exclude={"evaluated_at"}
+        )
+
+
+async def test_failed_match_retry_is_bounded_when_provider_still_fails() -> None:
+    class BrokenEmbedder:
+        calls = 0
+
+        def embed(self, text: str) -> list[float]:
+            self.calls += 1
+            raise RuntimeError("Synthetic provider outage")
+
+    async with Session() as db:
+        institution, _, _, student, role = await seed_context(db)
+        arguments = dict(
+            institution_id=institution.id, student_user_id=student.id, role_id=role.id
+        )
+        await semantic_match(db, **arguments, embedder=None)
+        evidence = await db.scalar(select(SemanticMatchEvidence))
+        assert evidence is not None
+        evidence.created_at = datetime.now(UTC) - timedelta(minutes=2)
+        await db.flush()
+        provider = BrokenEmbedder()
+        retried = await semantic_match(db, **arguments, embedder=provider)
+        assert retried.status == "unavailable"
+        assert retried.score is None
+        assert retried.safe_error_code == "semantic_provider_unavailable"
+        assert provider.calls == 1
+        cached = await semantic_match(db, **arguments, embedder=provider)
+        assert cached.model_dump(exclude={"evaluated_at"}) == retried.model_dump(
+            exclude={"evaluated_at"}
+        )
+        assert provider.calls == 1
 
 
 async def test_only_approved_policy_is_grounded_and_reviewed_extraction_changes_draft_role() -> (
