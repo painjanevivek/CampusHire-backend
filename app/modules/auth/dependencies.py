@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.auth import (
     ADMIN_ROLE_VALUES,
+    Institution,
     InstitutionMembership,
     MembershipStatus,
     Session,
@@ -154,7 +155,9 @@ class TenantContext:
     role: str
 
 
-async def get_current_principal(session: CurrentSession) -> AuthenticatedPrincipal:
+async def get_current_principal(
+    session: CurrentSession, request: Request, db: Database
+) -> AuthenticatedPrincipal:
     membership = session.active_membership
     if membership is not None and membership.status != MembershipStatus.ACTIVE.value:
         raise HTTPException(
@@ -165,6 +168,25 @@ async def get_current_principal(session: CurrentSession) -> AuthenticatedPrincip
             },
         )
     effective_role = membership.role if membership is not None else session.user.role
+    institution_id = (
+        membership.institution_id if membership is not None else session.user.institution_id
+    )
+    if effective_role in ADMIN_ROLES and institution_id is not None:
+        institution = await db.get(Institution, institution_id)
+        is_onboarding_request = "/admin/onboarding" in request.url.path
+        is_auth_request = "/auth/" in request.url.path
+        if (
+            institution is not None
+            and not institution.is_active
+            and not (is_onboarding_request or is_auth_request)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "institution_inactive",
+                    "message": "Complete verified institution onboarding before continuing.",
+                },
+            )
     if effective_role in ADMIN_ROLES and session.mfa_verified_at is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -9,6 +9,7 @@ from app.core.logging import configure_logging
 from app.modules.application_packets.service import purge_expired_application_packet_data
 from app.modules.communications.reminders import enqueue_upcoming_deadline_reminders
 from app.modules.communications.service import OciSmtpEmailProvider, process_next_email
+from app.modules.copilot.service import cleanup_expired_conversations
 from app.modules.privacy.service import process_next_deletion_cleanup
 from app.modules.resumes.parser import build_pdf_parser
 from app.modules.resumes.pipeline import claim_next_job, process_job, recover_stale_jobs
@@ -32,8 +33,28 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
     )
     next_reminder_sweep_at = 0.0
     next_application_packet_cleanup_at = 0.0
+    next_copilot_cleanup_at = 0.0
     while True:
         loop_time = asyncio.get_running_loop().time()
+        if loop_time >= next_copilot_cleanup_at:
+            try:
+                async with SessionFactory() as db:
+                    conversation_count = await cleanup_expired_conversations(db)
+                if conversation_count:
+                    logger.info(
+                        "copilot_retention_enforced",
+                        extra={
+                            "event": "copilot_retention_enforced",
+                            "conversation_count": conversation_count,
+                            "worker_id": worker_identity,
+                        },
+                    )
+            except Exception:
+                logger.exception(
+                    "copilot_cleanup_failed",
+                    extra={"event": "copilot_cleanup_failed", "worker_id": worker_identity},
+                )
+            next_copilot_cleanup_at = loop_time + settings.copilot_cleanup_seconds
         if loop_time >= next_application_packet_cleanup_at:
             try:
                 async with SessionFactory() as db:

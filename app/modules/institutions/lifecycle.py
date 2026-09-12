@@ -49,6 +49,8 @@ async def provision_institution(
     name: str,
     admin_email: str,
     correlation_id: str | None,
+    is_active: bool = True,
+    commit: bool = True,
 ) -> ProvisionedInstitution:
     normalized_email = normalize_email(admin_email)
     conflict = await db.scalar(
@@ -56,7 +58,7 @@ async def provision_institution(
     ) or await db.scalar(select(User.id).where(User.email == normalized_email))
     if conflict is not None:
         raise ProvisionConflictError
-    institution = Institution(code=code, name=name)
+    institution = Institution(code=code, name=name, is_active=is_active)
     db.add(institution)
     await db.flush()
     raw_token = new_secret()
@@ -91,7 +93,8 @@ async def provision_institution(
         correlation_id=correlation_id,
         details={"admin_invitation_id": str(invitation.id)},
     )
-    await db.commit()
+    if commit:
+        await db.commit()
     return ProvisionedInstitution(institution, invitation, raw_token)
 
 
@@ -253,9 +256,7 @@ async def commit_roster(
     )
     if institution is None:
         return None, {}
-    roster, rows = await get_roster_import(
-        db, institution_id, roster_import_id, for_update=True
-    )
+    roster, rows = await get_roster_import(db, institution_id, roster_import_id, for_update=True)
     if roster is None:
         return None, {}
     if roster.status == "committed":

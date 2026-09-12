@@ -14,6 +14,7 @@ from app.modules.auth.dependencies import (
     verify_authenticated_csrf,
     verify_public_csrf,
 )
+from app.modules.auth.registration import start_student_registration
 from app.modules.auth.schemas import (
     DemoSignInRequest,
     InvitationAcceptRequest,
@@ -24,6 +25,7 @@ from app.modules.auth.schemas import (
     MfaSetupResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
+    RegistrationStartResponse,
     SessionResponse,
     SignInRequest,
     SignInResponse,
@@ -103,7 +105,9 @@ async def csrf(request: Request, response: Response, db: Database) -> None:
     _set_csrf_cookie(response, token)
 
 
-@router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup", response_model=RegistrationStartResponse, status_code=status.HTTP_202_ACCEPTED
+)
 async def signup(
     payload: SignupRequest,
     request: Request,
@@ -111,14 +115,23 @@ async def signup(
     db: Database,
     _: Annotated[None, Depends(verify_public_csrf)],
     __: Annotated[None, Depends(enforce_auth_rate_limit)],
-) -> UserResponse:
-    del payload, request, response, db
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail={
-            "code": "invitation_required",
-            "message": "CampusHire accounts are activated from an institution invitation.",
-        },
+) -> RegistrationStartResponse:
+    del response
+    await enforce_auth_identity_rate_limit(request, str(payload.email))
+    result = await start_student_registration(
+        db,
+        email=str(payload.email),
+        invitation_code=payload.invitation_code,
+        correlation_id=request.state.correlation_id,
+    )
+    return RegistrationStartResponse(
+        status=result.status,
+        next_path=result.next_path,
+        message=(
+            "Continue to account activation."
+            if result.next_path
+            else "If your identity is eligible, an activation link has been sent."
+        ),
     )
 
 
@@ -193,9 +206,7 @@ async def demo_sign_in(
             settings.session_ttl_hours,
             request.headers.get("User-Agent"),
             required_role=payload.role,
-            demo_mfa_bypass=(
-                payload.role == "tnp_admin" and settings.demo_admin_mfa_bypass
-            ),
+            demo_mfa_bypass=(payload.role == "tnp_admin" and settings.demo_admin_mfa_bypass),
         )
     except InvalidCredentialsError:
         raise HTTPException(
@@ -307,10 +318,7 @@ async def reset_password(
 
 
 def _require_admin_session(session: CurrentSession) -> None:
-    if (
-        session.active_membership is not None
-        and session.active_membership.status != "active"
-    ):
+    if session.active_membership is not None and session.active_membership.status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "membership_inactive", "message": "Membership is inactive."},

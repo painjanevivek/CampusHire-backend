@@ -229,9 +229,11 @@ async def create_generated_version(
     settings: Settings,
     parent_version_id: UUID | None = None,
     purpose_role_id: UUID | None = None,
+    artifact_id: str | None = None,
+    generated_provenance: dict[str, object] | None = None,
 ) -> ResumeVersion:
     try:
-        data = generate_pdf(content)
+        data = generate_pdf(content, artifact_id=artifact_id)
     except ResumeBuildError as error:
         raise ResumeWorkflowError(str(error)) from error
     checksum = hashlib.sha256(data).hexdigest()
@@ -266,6 +268,7 @@ async def create_generated_version(
                 "accepted": content.model_dump(mode="json"),
                 "evidence_digest": evidence_digest(content),
                 "generator_version": "campushire-generator-v1",
+                "provenance": generated_provenance or {},
             },
             review_completed_at=datetime.now(UTC),
             created_at=datetime.now(UTC),

@@ -17,9 +17,10 @@ from app.models.intelligence import (
     RoleExtractionProposal,
     SemanticMatchEvidence,
 )
+from app.models.onboarding import StudentProject
 from app.models.profile import StudentProfile
 from app.models.recruitment import PlacementRole, PublicationStatus
-from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
+from app.models.resume import ResumeSource, ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.intelligence.schemas import (
     ExtractionCreate,
     ExtractionResponse,
@@ -52,7 +53,7 @@ def _fingerprint(payload: object) -> str:
 
 
 def _profile_projection(
-    profile: StudentProfile, resume: ResumeVersion
+    profile: StudentProfile, resume: ResumeVersion | None, project_count: int
 ) -> tuple[str, set[str], float]:
     """Project only placement evidence; names, contact data, PRN and links are excluded."""
     skills = {
@@ -60,10 +61,15 @@ def _profile_projection(
         for item in profile.skills
         if isinstance(item, dict) and str(item.get("name", "")).strip()
     }
-    data = resume.extracted_data if isinstance(resume.extracted_data, dict) else {}
+    data = (
+        resume.extracted_data
+        if resume is not None and isinstance(resume.extracted_data, dict)
+        else {}
+    )
     safe_resume = {key: data.get(key) for key in ("summary", "skills", "projects", "experience")}
     projects = safe_resume.get("projects")
-    project_evidence = min(1.0, len(projects) / 2) if isinstance(projects, list) else 0.0
+    resume_project_count = len(projects) if isinstance(projects, list) else 0
+    project_evidence = min(1.0, max(project_count, resume_project_count) / 2)
     projection = {
         "department": profile.department,
         "target_roles": profile.target_roles,
@@ -129,27 +135,38 @@ async def semantic_match(
             ResumeVersion.institution_id == institution_id,
             ResumeVersion.status == ResumeStatus.COMPLETED.value,
             ResumeVersion.scan_status == ScanStatus.CLEAN.value,
+            ResumeVersion.source == ResumeSource.GENERATED.value,
         )
         .order_by(ResumeVersion.version_number.desc(), ResumeVersion.created_at.desc())
     )
     if role is None:
         raise IntelligenceError("opportunity_not_found")
     settings = get_settings()
-    if profile is None or resume is None:
+    if profile is None:
         return SemanticMatchResponse(
             status="unavailable",
             score=None,
             components={},
-            explanation=["Complete a reviewed profile and resume before calculating relevance."],
+            explanation=["Complete a reviewed profile before calculating relevance."],
             embedding_model=settings.gemini_embedding_model,
             embedding_version="v1",
             scoring_version="match-v1",
-            source_resume_version_id=resume.id if resume else None,
-            source_profile_revision=profile.revision if profile else None,
+            source_resume_version_id=None,
+            source_profile_revision=None,
             safe_error_code="match_inputs_incomplete",
         )
 
-    student_text, student_skills, project_evidence = _profile_projection(profile, resume)
+    project_count = (
+        await db.scalar(
+            select(func.count())
+            .select_from(StudentProject)
+            .where(StudentProject.profile_id == profile.id)
+        )
+        or 0
+    )
+    student_text, student_skills, project_evidence = _profile_projection(
+        profile, resume, project_count
+    )
     role_text = _role_projection(role)
     fingerprint = _fingerprint(
         {
@@ -157,7 +174,7 @@ async def semantic_match(
             "student": student_user_id,
             "role": role.id,
             "role_updated": role.updated_at,
-            "resume": resume.id,
+            "resume": resume.id if resume else None,
             "profile_revision": profile.revision,
             "embedding_model": settings.gemini_embedding_model,
             "embedding_version": "v1",
@@ -244,7 +261,7 @@ async def semantic_match(
         institution_id=institution_id,
         student_user_id=student_user_id,
         role_id=role.id,
-        resume_version_id=resume.id,
+        resume_version_id=resume.id if resume else None,
         profile_revision=profile.revision,
         fingerprint=fingerprint,
         status=status,

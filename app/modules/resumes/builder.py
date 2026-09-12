@@ -42,7 +42,7 @@ def evidence_digest(content: ResumeContent) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def generate_pdf(content: ResumeContent) -> bytes:
+def generate_pdf(content: ResumeContent, *, artifact_id: str | None = None) -> bytes:
     content_digest = evidence_digest(content)
     document = pymupdf.open()  # type: ignore[no-untyped-call]
     document.set_metadata(
@@ -50,7 +50,10 @@ def generate_pdf(content: ResumeContent) -> bytes:
             "title": f"{content.full_name} - reviewed resume",
             "author": content.full_name,
             "subject": "Student-reviewed CampusHire resume",
-            "keywords": f"campushire-evidence-sha256:{content_digest}",
+            "keywords": (
+                f"campushire-evidence-sha256:{content_digest}"
+                + (f"; artifact:{artifact_id}" if artifact_id else "")
+            ),
             "creator": "CampusHire AI",
             "producer": "CampusHire PDF Generator v1",
             "creationDate": "D:20000101000000Z",
@@ -77,9 +80,7 @@ def generate_pdf(content: ResumeContent) -> bytes:
         ensure_space(len(lines) * 12 + 4)
         assert page is not None
         for line in lines:
-            page.insert_text(
-                (48, y), line, fontsize=font_size, fontname="hebo" if bold else "helv"
-            )
+            page.insert_text((48, y), line, fontsize=font_size, fontname="hebo" if bold else "helv")
             y += 12
         y += 4
 

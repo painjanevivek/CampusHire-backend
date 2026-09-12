@@ -13,12 +13,66 @@ def _reject_password_control_characters(value: str) -> str:
 
 class SignupRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    invitation_code: str | None = Field(default=None, min_length=20, max_length=200)
 
-    @field_validator("password")
+
+class RegistrationStartResponse(BaseModel):
+    status: Literal["verification_sent", "continue_activation"]
+    message: str
+    next_path: str | None = None
+
+
+class InstitutionRegistrationRequestCreate(BaseModel):
+    institution_name: str = Field(min_length=2, max_length=200)
+    institution_code: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
+    institutional_email: EmailStr
+    domain: str = Field(
+        min_length=3,
+        max_length=255,
+        pattern=r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$",
+    )
+
+    @field_validator("domain")
     @classmethod
-    def reject_control_characters(cls, value: str) -> str:
-        return _reject_password_control_characters(value)
+    def normalize_domain(cls, value: str) -> str:
+        return value.strip().casefold().removeprefix("www.")
+
+
+class InstitutionRegistrationStartResponse(BaseModel):
+    request_id: UUID
+    status: Literal["verification_pending"]
+    message: str
+
+
+class RegistrationTokenRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+
+
+class InstitutionRegistrationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    institution_name: str
+    institution_code: str
+    domain: str
+    admin_email: EmailStr
+    status: str
+    duplicate_detected: bool
+    email_verified_at: datetime | None
+    reviewed_at: datetime | None
+    institution_id: UUID | None
+    created_at: datetime
+
+
+class InstitutionRegistrationDecision(BaseModel):
+    decision: Literal["approve", "reject"]
+    reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def require_rejection_reason(cls, value: str | None, info: object) -> str | None:
+        del info
+        return value.strip() if value else None
 
 
 class SignInRequest(BaseModel):

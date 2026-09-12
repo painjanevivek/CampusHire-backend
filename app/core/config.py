@@ -78,7 +78,18 @@ class Settings(BaseSettings):
     clamav_timeout_seconds: float = Field(default=15.0, ge=1, le=120)
     gemini_api_key: str | None = None
     gemini_embedding_model: str = "gemini-embedding-001"
+    gemini_generation_model: str | None = None
     gemini_timeout_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    ai_generation: bool = False
+    ai_resume_studio: bool = False
+    student_copilot: bool = False
+    tnp_copilot: bool = False
+    ai_max_output_tokens: int = Field(default=2_048, ge=128, le=8_192)
+    ai_per_tenant_monthly_budget_cents: int = Field(default=0, ge=0)
+    ai_input_cost_cents_per_million_tokens: int = Field(default=0, ge=0)
+    ai_output_cost_cents_per_million_tokens: int = Field(default=0, ge=0)
+    copilot_retention_days: int = Field(default=30, ge=1, le=365)
+    copilot_cleanup_seconds: int = Field(default=3_600, ge=60, le=86_400)
     semantic_match_requests_per_minute: int = Field(default=10, ge=1, le=100)
     qdrant_url: str = "http://localhost:6333"
     email_smtp_host: str | None = None

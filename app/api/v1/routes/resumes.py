@@ -1,7 +1,6 @@
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy import select
 
@@ -18,21 +17,17 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.communications.service import record_product_event
 from app.modules.resumes.builder import ResumeContent
-from app.modules.resumes.parser import InvalidResumeError
 from app.modules.resumes.schemas import (
     ExtractionReviewRequest,
-    ResumeUploadResponse,
     ResumeVersionResponse,
     SuggestionDecisionRequest,
     SuggestionReviewBatch,
     TailoredResumeRequest,
 )
-from app.modules.resumes.service import validate_upload_envelope
 from app.modules.resumes.storage import ObjectStore, ObjectStoreError, build_object_store
 from app.modules.resumes.workflow import (
     ResumeWorkflowError,
     create_generated_version,
-    create_uploaded_version,
     decide_suggestion,
     delete_owned_version,
     get_owned_version,
@@ -84,52 +79,6 @@ async def list_resumes(db: Database, principal: CurrentPrincipal) -> list[Resume
         to_response(version).model_copy(update={"locked_by_application": version.id in locked_ids})
         for version in versions
     ]
-
-
-@router.post(
-    "",
-    response_model=ResumeUploadResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(verify_authenticated_csrf)],
-)
-async def upload_resume(
-    request: Request,
-    file: Annotated[UploadFile, File()],
-    db: Database,
-    principal: CurrentPrincipal,
-) -> ResumeUploadResponse:
-    settings = get_settings()
-    data = await file.read(settings.resume_max_bytes + 1)
-    try:
-        validate_upload_envelope(data, file.content_type or "", settings.resume_max_bytes)
-        result = await create_uploaded_version(
-            db,
-            user_id=principal.user.id,
-            institution_id=principal.institution_id,
-            data=data,
-            filename=file.filename or "resume.pdf",
-            content_type=file.content_type or "application/pdf",
-            store=_store(),
-            settings=settings,
-        )
-    except InvalidResumeError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
-        ) from error
-    except ResumeWorkflowError as error:
-        raise _workflow_http_error(error) from error
-    record_audit_event(
-        db,
-        event_type="resume.uploaded",
-        actor_user_id=principal.user.id,
-        institution_id=principal.institution_id,
-        resource_type="resume_version",
-        resource_id=str(result.id),
-        correlation_id=request.state.correlation_id,
-        details={"duplicate": result.duplicate, "version_number": result.version_number},
-    )
-    await db.commit()
-    return result
 
 
 @router.post(

@@ -1,7 +1,9 @@
 from app.models.auth import (
     AuditEvent,
     Institution,
+    InstitutionDomain,
     InstitutionMembership,
+    InstitutionRegistrationRequest,
     MembershipInvitation,
     MfaEnrollment,
     MfaRecoveryCode,
@@ -9,6 +11,7 @@ from app.models.auth import (
     RosterImport,
     RosterImportRow,
     Session,
+    StudentRegistrationRequest,
     TermsAcceptance,
     User,
 )
@@ -26,7 +29,26 @@ from app.models.engagement import (
     StudentRoadmap,
 )
 from app.models.experience import CorrectionEvent, CorrectionRequest, SavedOpportunityView
+from app.models.generative_ai import (
+    AiAcceptedFieldProvenance,
+    AiConversation,
+    AiGenerationProposal,
+    AiMessage,
+    AiToolRun,
+)
 from app.models.intelligence import PolicyDocument, RoleExtractionProposal, SemanticMatchEvidence
+from app.models.onboarding import (
+    InstitutionCampus,
+    InstitutionFeatureFlags,
+    InstitutionOnboarding,
+    InstitutionProgram,
+    StudentCareerPreference,
+    StudentCertification,
+    StudentEducation,
+    StudentExperience,
+    StudentPlacementParticipation,
+    StudentProject,
+)
 from app.models.privacy import DataDeletionRequest
 from app.models.profile import ProfilePhoto, StudentProfile
 from app.models.recruitment import (
@@ -59,6 +81,11 @@ __all__ = [
     "CorrectionRequest",
     "SavedOpportunityView",
     "AuditEvent",
+    "AiAcceptedFieldProvenance",
+    "AiConversation",
+    "AiGenerationProposal",
+    "AiMessage",
+    "AiToolRun",
     "Application",
     "ApplicationAppeal",
     "ApplicationDisclosure",
@@ -81,7 +108,13 @@ __all__ = [
     "EligibilityEvaluation",
     "EligibilityRuleSet",
     "Institution",
+    "InstitutionDomain",
     "InstitutionMembership",
+    "InstitutionRegistrationRequest",
+    "InstitutionCampus",
+    "InstitutionFeatureFlags",
+    "InstitutionOnboarding",
+    "InstitutionProgram",
     "MembershipInvitation",
     "MfaEnrollment",
     "MfaRecoveryCode",
@@ -99,6 +132,13 @@ __all__ = [
     "SavedOpportunity",
     "Session",
     "StudentProfile",
+    "StudentCareerPreference",
+    "StudentCertification",
+    "StudentEducation",
+    "StudentExperience",
+    "StudentPlacementParticipation",
+    "StudentProject",
+    "StudentRegistrationRequest",
     "StudentRoadmap",
     "SupportRequest",
     "TermsAcceptance",

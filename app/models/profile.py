@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, ForeignKey, Integer, LargeBinary, String, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, LargeBinary, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -31,6 +32,7 @@ class StudentProfile(Base, TimestampMixin):
     prn: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     department: Mapped[str | None] = mapped_column(String(120), nullable=True)
     academic_year: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    graduation_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(24), nullable=True)
     city: Mapped[str | None] = mapped_column(String(120), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
@@ -42,3 +44,6 @@ class StudentProfile(Base, TimestampMixin):
     revision: Mapped[int] = mapped_column(Integer, default=1)
     readiness: Mapped[int] = mapped_column(default=0)
     is_complete: Mapped[bool] = mapped_column(default=False)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

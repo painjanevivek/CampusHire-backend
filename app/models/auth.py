@@ -36,6 +36,16 @@ class MembershipStatus(StrEnum):
     GRADUATED = "graduated"
 
 
+class RegistrationStatus(StrEnum):
+    VERIFICATION_PENDING = "verification_pending"
+    PENDING_APPROVAL = "pending_approval"
+    DUPLICATE_REVIEW = "duplicate_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    UNMATCHED = "unmatched"
+    ACTIVATION_SENT = "activation_sent"
+
+
 class Institution(Base, TimestampMixin):
     __tablename__ = "institutions"
 
@@ -45,6 +55,62 @@ class Institution(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(default=True)
     roadmaps_enabled: Mapped[bool] = mapped_column(default=True)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata")
+
+
+class InstitutionDomain(Base, TimestampMixin):
+    __tablename__ = "institution_domains"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), index=True
+    )
+    domain: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    verification_status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class StudentRegistrationRequest(Base, TimestampMixin):
+    __tablename__ = "student_registration_requests"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    institution_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    invitation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("membership_invitations.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(32), index=True)
+
+
+class InstitutionRegistrationRequest(Base, TimestampMixin):
+    __tablename__ = "institution_registration_requests"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_name: Mapped[str] = mapped_column(String(200))
+    institution_code: Mapped[str] = mapped_column(String(32), index=True)
+    domain: Mapped[str] = mapped_column(String(255), index=True)
+    admin_email: Mapped[str] = mapped_column(String(320), index=True)
+    duplicate_detected: Mapped[bool] = mapped_column(default=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default=RegistrationStatus.VERIFICATION_PENDING.value, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    institution_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="SET NULL"), nullable=True
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class User(Base, TimestampMixin):

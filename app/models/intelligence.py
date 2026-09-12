@@ -32,8 +32,8 @@ class SemanticMatchEvidence(Base):
     role_id: Mapped[UUID] = mapped_column(
         ForeignKey("placement_roles.id", ondelete="CASCADE"), index=True
     )
-    resume_version_id: Mapped[UUID] = mapped_column(
-        ForeignKey("resume_versions.id", ondelete="RESTRICT"), index=True
+    resume_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resume_versions.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     profile_revision: Mapped[int] = mapped_column(Integer)
     fingerprint: Mapped[str] = mapped_column(String(64), index=True)

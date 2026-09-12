@@ -427,28 +427,24 @@ async def test_resume_download_route_fails_closed_for_another_student(
             other = await create_user(db, "route-other@example.edu")
             await create_session(db, owner, "owner-session", "owner-csrf")
             await create_session(db, other, "other-session", "other-csrf")
+            generated = await create_generated_version(
+                db,
+                user_id=owner.id,
+                institution_id=None,
+                content=resume_content(),
+                store=LocalObjectStore(settings.resume_storage_path),
+                settings=settings,
+            )
+            resume_id = str(generated.id)
 
         client.cookies.set(settings.session_cookie_name, "owner-session")
         client.cookies.set(settings.csrf_cookie_name, "owner-csrf")
-        uploaded = client.post(
+        disabled_upload = client.post(
             "/api/v1/resumes",
             headers={"Origin": "http://localhost:3000", "X-CSRF-Token": "owner-csrf"},
             files={"file": ("resume.pdf", sample_resume_pdf(), "application/pdf")},
         )
-        assert uploaded.status_code == 202, uploaded.text
-        resume_id = uploaded.json()["id"]
-
-        async with TestSession() as db:
-            job_id = await claim_next_job(db)
-            assert job_id is not None
-            await process_job(
-                db,
-                job_id,
-                store=LocalObjectStore(settings.resume_storage_path),
-                scanner=MarkerScanner(),
-                parser=DeterministicParser(),
-                settings=settings,
-            )
+        assert disabled_upload.status_code == 405
 
         owner_download = client.get(f"/api/v1/resumes/{resume_id}/download")
         assert owner_download.status_code == 200

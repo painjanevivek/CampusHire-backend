@@ -17,6 +17,7 @@ from app.models.auth import (
     AuditEvent,
     Institution,
     InstitutionMembership,
+    InstitutionRegistrationRequest,
     MembershipInvitation,
     MembershipStatus,
     Session,
@@ -94,14 +95,45 @@ async def signup(client: TestClient) -> dict[str, str]:
     return response.json()
 
 
-async def test_signup_requires_an_invitation(client: TestClient) -> None:
+async def test_signup_returns_generic_result_when_identity_is_not_matched(
+    client: TestClient,
+) -> None:
     response = client.post(
         "/api/v1/auth/signup",
         headers=csrf_headers(client),
-        json={"email": "student@example.edu", "password": "a long campus passphrase"},
+        json={"email": "student@example.edu"},
     )
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "invitation_required"
+    assert response.status_code == 202
+    assert response.json() == {
+        "status": "verification_sent",
+        "message": "If your identity is eligible, an activation link has been sent.",
+        "next_path": None,
+    }
+
+
+async def test_institution_registration_flags_similar_existing_name_without_granting_access(
+    client: TestClient,
+) -> None:
+    async with TestSession() as db:
+        db.add(Institution(code="existing-campus", name="Example Institute of Technology"))
+        await db.commit()
+
+    response = client.post(
+        "/api/v1/auth/institution-registrations",
+        headers=csrf_headers(client),
+        json={
+            "institution_name": "Example Institute Of Technology",
+            "institution_code": "example-new",
+            "institutional_email": "admin@example-new.edu",
+            "domain": "example-new.edu",
+        },
+    )
+    assert response.status_code == 202, response.text
+    async with TestSession() as db:
+        request = await db.scalar(select(InstitutionRegistrationRequest))
+        assert request is not None
+        assert request.duplicate_detected is True
+        assert await db.scalar(select(User.id).where(User.email == "admin@example-new.edu")) is None
 
 
 async def test_invitation_acceptance_normalizes_email_and_creates_student_session(

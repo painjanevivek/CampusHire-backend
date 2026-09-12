@@ -25,7 +25,7 @@ from app.models.recruitment import (
     RuleSetStatus,
     SavedOpportunity,
 )
-from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
+from app.models.resume import ResumeSource, ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.eligibility.engine import Rule, evaluate
 from app.modules.recruitment.domain import ApplicationStatus, validate_transition
 from app.modules.recruitment.schemas import (
@@ -813,6 +813,7 @@ async def _student_facts(
             ResumeVersion.institution_id == institution_id,
             ResumeVersion.status == ResumeStatus.COMPLETED.value,
             ResumeVersion.scan_status == ScanStatus.CLEAN.value,
+            ResumeVersion.source == ResumeSource.GENERATED.value,
         )
     )
     score = education.get("score")
@@ -1273,6 +1274,7 @@ async def create_application(
             ResumeVersion.institution_id == institution,
             ResumeVersion.status == ResumeStatus.COMPLETED.value,
             ResumeVersion.scan_status == ScanStatus.CLEAN.value,
+            ResumeVersion.source == ResumeSource.GENERATED.value,
         )
     )
     if resume is None:
