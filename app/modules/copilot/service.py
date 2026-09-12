@@ -45,10 +45,69 @@ class ConversationNotFoundError(Exception):
     pass
 
 
-def _minimize_text(value: str) -> str:
+_SENSITIVE_IDENTIFIER_PATTERN = re.compile(
+    r"\b(?:prn|enrollment[\s_-]*(?:number|no|id)|"
+    r"(?:invitation|session|csrf|access|refresh|reset)[\s_-]*(?:token|id))"
+    r"\b\s*[:=#-]?\s*[a-z0-9][a-z0-9._~+/=-]{3,}",
+    re.IGNORECASE,
+)
+_IPV4_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+_BEARER_TOKEN_PATTERN = re.compile(r"\bbearer\s+[a-z0-9._~+/-]+=*", re.IGNORECASE)
+_HIRING_DECISION_PATTERNS = (
+    re.compile(r"\bshortlist(?:ed|ing)?\b", re.IGNORECASE),
+    re.compile(
+        r"\brank(?:ed|ing)?\s+(?:the\s+)?(?:candidate|applicant|student)s?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:hire|hired|hiring|reject|rejected|select|selected|offer|offered)\s+"
+        r"(?:this\s+|the\s+)?(?:candidate|applicant|student)s?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:candidate|applicant|student)s?\b.{0,50}\b(?:should|must|will)\s+"
+        r"(?:be\s+)?(?:hired|rejected|selected|shortlisted|offered)\b",
+        re.IGNORECASE,
+    ),
+)
+_ELIGIBILITY_DECISION_PATTERN = re.compile(
+    r"\b(?:candidate|applicant|student)s?\b.{0,50}\b(?:is|are|should be|must be|will be)\s+"
+    r"(?:ineligible|eligible)\b",
+    re.IGNORECASE,
+)
+_FINALITY_CLAIM_PATTERN = re.compile(
+    r"\b(?:proposal|policy|role|announcement|message|notice|draft|it|this)\s+"
+    r"(?:is|was|has been|will be)\s+(?:approved|published|sent|authoritative)\b",
+    re.IGNORECASE,
+)
+
+
+def _minimize_text(value: str, *, limit: int = 4000) -> str:
     value = re.sub(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b", "[email removed]", value)
     value = re.sub(r"(?<!\d)(?:\+?\d[\d ()-]{7,}\d)(?!\d)", "[phone removed]", value)
-    return value[:4000]
+    value = _SENSITIVE_IDENTIFIER_PATTERN.sub("[identifier removed]", value)
+    value = _IPV4_PATTERN.sub("[ip address removed]", value)
+    value = _BEARER_TOKEN_PATTERN.sub("[token removed]", value)
+    return value[:limit]
+
+
+def validate_copilot_draft(
+    content: CopilotDraft,
+    allowed_sources: set[str],
+    *,
+    allow_eligibility_rules: bool = False,
+) -> None:
+    if not content.source_ids:
+        raise ProposalValidationError("The draft must cite at least one available source")
+    if any(source_id not in allowed_sources for source_id in content.source_ids):
+        raise ProposalValidationError("The draft cited unavailable evidence")
+    text = f"{content.title}\n{content.body}"
+    if any(pattern.search(text) for pattern in _HIRING_DECISION_PATTERNS):
+        raise ProposalValidationError("AI proposals cannot make hiring or ranking decisions")
+    if not allow_eligibility_rules and _ELIGIBILITY_DECISION_PATTERN.search(text):
+        raise ProposalValidationError("AI proposals cannot decide candidate eligibility")
+    if _FINALITY_CLAIM_PATTERN.search(text):
+        raise ProposalValidationError("AI proposals cannot claim approval or publication")
 
 
 def _message_response(item: AiMessage) -> MessageResponse:
@@ -165,6 +224,7 @@ async def read_conversation(db: AsyncSession, **ownership: object) -> Conversati
 
 async def delete_conversation(db: AsyncSession, **ownership: object) -> None:
     item = await get_conversation(db, lock=True, **ownership)  # type: ignore[arg-type]
+    await _delete_unaccepted_proposals_for_conversations(db, [item.id])
     await db.execute(delete(AiMessage).where(AiMessage.conversation_id == item.id))
     item.deleted_at = datetime.now(UTC)
     await db.commit()
@@ -451,8 +511,10 @@ async def add_tnp_message(
         sources: list[dict[str, str]] = [
             {
                 "source_id": f"policy:{policy.id}",
-                "label": policy.title,
-                "facts": json.dumps(policy.sections, default=str)[:6000],
+                "label": _minimize_text(policy.title, limit=200),
+                "facts": _minimize_text(
+                    json.dumps(policy.sections, default=str), limit=6000
+                ),
             }
             for policy in policies
         ]
@@ -480,8 +542,11 @@ async def add_tnp_message(
         except (RuntimeError, ValueError, ValidationError) as error:
             raise GenerationUnavailableError("generation_validation_failed") from error
         allowed_sources = {source["source_id"] for source in sources}
-        if any(source_id not in allowed_sources for source_id in draft.source_ids):
-            raise ProposalValidationError("The draft cited unavailable evidence")
+        validate_copilot_draft(
+            draft,
+            allowed_sources,
+            allow_eligibility_rules=intent == "draft_eligibility_rules",
+        )
         digest = _digest(sources)
         proposal = AiGenerationProposal(
             institution_id=institution_id,
@@ -578,8 +643,11 @@ async def edit_copilot_proposal(
     if item.status != ProposalStatus.DRAFT.value:
         raise ProposalValidationError("Only draft proposals can be edited")
     allowed = {str(value.get("source_id")) for value in item.evidence_references}
-    if any(source_id not in allowed for source_id in content.source_ids):
-        raise ProposalValidationError("The draft cited unavailable evidence")
+    validate_copilot_draft(
+        content,
+        allowed,
+        allow_eligibility_rules=item.capability == "tnp_draft_eligibility_rules",
+    )
     item.edited_content = content.model_dump(mode="json")
     item.revision += 1
     await db.commit()
@@ -613,6 +681,14 @@ async def decide_copilot_proposal(
         raise ProposalConflictError(item.revision)
     if item.status != ProposalStatus.DRAFT.value:
         raise ProposalValidationError("Proposal has already been decided")
+    if approve:
+        content = CopilotDraft.model_validate(item.edited_content or item.generated_content)
+        allowed = {str(value.get("source_id")) for value in item.evidence_references}
+        validate_copilot_draft(
+            content,
+            allowed,
+            allow_eligibility_rules=item.capability == "tnp_draft_eligibility_rules",
+        )
     now = datetime.now(UTC)
     item.status = ProposalStatus.ACCEPTED.value if approve else ProposalStatus.REJECTED.value
     item.accepted_at = now if approve else None
@@ -645,9 +721,45 @@ async def decide_copilot_proposal(
     return _copilot_proposal_response(item)
 
 
+async def _delete_unaccepted_proposals_for_conversations(
+    db: AsyncSession, conversation_ids: list[UUID]
+) -> None:
+    proposal_ids = {
+        proposal_id
+        for proposal_id in (
+            await db.scalars(
+                select(AiMessage.proposal_id).where(
+                    AiMessage.conversation_id.in_(conversation_ids),
+                    AiMessage.proposal_id.is_not(None),
+                )
+            )
+        ).all()
+        if proposal_id is not None
+    }
+    if proposal_ids:
+        await db.execute(
+            delete(AiGenerationProposal).where(
+                AiGenerationProposal.id.in_(proposal_ids),
+                AiGenerationProposal.status != ProposalStatus.ACCEPTED.value,
+            )
+        )
+
+
 async def cleanup_expired_conversations(db: AsyncSession) -> int:
+    expired_ids = list(
+        (
+            await db.scalars(
+                select(AiConversation.id).where(
+                    AiConversation.expires_at <= datetime.now(UTC)
+                )
+            )
+        ).all()
+    )
+    if not expired_ids:
+        return 0
+    await _delete_unaccepted_proposals_for_conversations(db, expired_ids)
     result = await db.execute(
-        delete(AiConversation).where(AiConversation.expires_at <= datetime.now(UTC))
+        delete(AiConversation).where(AiConversation.id.in_(expired_ids))
     )
     await db.commit()
     return int(result.rowcount or 0)  # type: ignore[attr-defined]

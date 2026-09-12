@@ -63,6 +63,14 @@ async def ensure_generation_budget(
         or settings.ai_output_cost_cents_per_million_tokens <= 0
     ):
         raise GenerationUnavailableError("budget_not_configured")
+    # Serialize budget admission on the tenant's feature row. All generation
+    # paths require this row before reaching the provider, so the lock prevents
+    # concurrent requests from spending against the same usage snapshot.
+    await db.execute(
+        select(InstitutionFeatureFlags.institution_id)
+        .where(InstitutionFeatureFlags.institution_id == institution_id)
+        .with_for_update()
+    )
     now = datetime.now(UTC)
     month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
     used_input, used_output = (
@@ -194,6 +202,53 @@ def _content_claims(content: ResumeDraft) -> list[tuple[str, Any]]:
     return claims
 
 
+_GROUNDING_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "of",
+    "on",
+    "or",
+    "profile",
+    "project",
+    "reviewed",
+    "skill",
+    "skills",
+    "that",
+    "the",
+    "to",
+    "using",
+    "with",
+}
+_GROUNDING_ALIASES = {
+    "built": "build",
+    "created": "build",
+    "developed": "build",
+    "implemented": "build",
+    "leading": "lead",
+    "led": "lead",
+    "managed": "lead",
+    "managing": "lead",
+    "optimized": "improve",
+    "optimizing": "improve",
+}
+
+
+def _grounding_terms(value: str) -> set[str]:
+    terms = set(re.findall(r"[a-z][a-z0-9+#.-]{1,}", value.casefold()))
+    return {
+        _GROUNDING_ALIASES.get(term, term)
+        for term in terms
+        if term not in _GROUNDING_STOPWORDS
+    }
+
+
 def validate_grounding(content: ResumeDraft, evidence: list[EvidenceReference]) -> None:
     evidence_map = {item.evidence_id: item.facts for item in evidence}
     unsupported_markers = {
@@ -214,6 +269,8 @@ def validate_grounding(content: ResumeDraft, evidence: list[EvidenceReference]) 
             evidence_map[evidence_id] for evidence_id in claim.evidence_ids
         ).casefold()
         text = claim.text.casefold()
+        if not (_grounding_terms(text) & _grounding_terms(source)):
+            raise ProposalValidationError(f"Claim is not grounded in cited evidence: {field_path}")
         unsupported_numbers = set(re.findall(r"\b\d+(?:\.\d+)?%?\b", text)) - set(
             re.findall(r"\b\d+(?:\.\d+)?%?\b", source)
         )
