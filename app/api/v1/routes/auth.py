@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.core.config import get_settings
 from app.core.rate_limit import enforce_auth_identity_rate_limit, enforce_auth_rate_limit
-from app.models.auth import ADMIN_ROLE_VALUES, InstitutionMembership, User
+from app.models.auth import ADMIN_ROLE_VALUES, InstitutionMembership, User, UserRole
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentSession,
@@ -107,7 +107,7 @@ async def csrf(request: Request, response: Response, db: Database) -> None:
 
 
 @router.post(
-    "/signup", response_model=RegistrationStartResponse, status_code=status.HTTP_202_ACCEPTED
+    "/signup", response_model=RegistrationStartResponse, status_code=status.HTTP_201_CREATED
 )
 async def signup(
     payload: SignupRequest,
@@ -117,7 +117,6 @@ async def signup(
     _: Annotated[None, Depends(verify_public_csrf)],
     __: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> RegistrationStartResponse:
-    del response
     await enforce_auth_identity_rate_limit(request, str(payload.email))
     result = await start_student_registration(
         db,
@@ -126,17 +125,33 @@ async def signup(
         dob=payload.dob,
         email=str(payload.email),
         password=payload.password,
+        terms_version=payload.terms_version,
+        privacy_version=payload.privacy_version,
         invitation_code=payload.invitation_code,
         correlation_id=request.state.correlation_id,
     )
+    if result.status == "registration_unavailable":
+        response.status_code = status.HTTP_409_CONFLICT
+        return RegistrationStartResponse(
+            status=result.status,
+            message=(
+                "This account could not be created. Use a verified college email or sign in "
+                "if the account already exists."
+            ),
+        )
+    auth_session = await authenticate(
+        db,
+        str(payload.email),
+        payload.password,
+        get_settings().session_ttl_hours,
+        request.headers.get("User-Agent"),
+        required_role=UserRole.STUDENT.value,
+    )
+    _set_session_cookies(response, auth_session.token, auth_session.csrf_token)
     return RegistrationStartResponse(
         status=result.status,
         next_path=result.next_path,
-        message=(
-            "Continue to account activation."
-            if result.next_path
-            else "If your identity is eligible, an activation link has been sent."
-        ),
+        message="Account created. Continue to your student profile.",
     )
 
 

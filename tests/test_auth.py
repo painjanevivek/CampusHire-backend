@@ -16,15 +16,19 @@ from app.models import Base
 from app.models.auth import (
     AuditEvent,
     Institution,
+    InstitutionDomain,
     InstitutionMembership,
     InstitutionRegistrationRequest,
     MembershipInvitation,
     MembershipStatus,
     Session,
     StudentRegistrationRequest,
+    TermsAcceptance,
     User,
     UserRole,
 )
+from app.models.communications import EmailDelivery
+from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import hash_password, hash_secret, totp_code
 
@@ -96,7 +100,7 @@ async def signup(client: TestClient) -> dict[str, str]:
     return response.json()
 
 
-async def test_signup_returns_generic_result_when_identity_is_not_matched(
+async def test_signup_fails_without_a_verified_college_identity(
     client: TestClient,
 ) -> None:
     response = client.post(
@@ -109,18 +113,88 @@ async def test_signup_returns_generic_result_when_identity_is_not_matched(
             "email": "student@example.edu",
             "password": "a secure campus passphrase",
             "re_enter_password": "a secure campus passphrase",
+            "terms_version": "2026-08-28",
+            "privacy_version": "2026-08-28",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 409
     assert response.json() == {
-        "status": "verification_sent",
-        "message": "If your identity is eligible, an activation link has been sent.",
+        "status": "registration_unavailable",
+        "message": (
+            "This account could not be created. Use a verified college email or sign in "
+            "if the account already exists."
+        ),
         "next_path": None,
     }
     async with TestSession() as db:
         registration = await db.scalar(select(StudentRegistrationRequest))
         assert registration is not None
         assert registration.password_hash is None
+        assert registration.first_name is None
+        assert registration.surname is None
+        assert registration.date_of_birth is None
+
+
+async def test_signup_creates_a_verified_student_session_without_activation(
+    client: TestClient,
+) -> None:
+    async with TestSession() as db:
+        institution = Institution(code="direct-campus", name="Direct Campus")
+        db.add(institution)
+        await db.flush()
+        db.add(
+            InstitutionDomain(
+                institution_id=institution.id,
+                domain="direct-campus.edu",
+                verification_status="verified",
+                verified_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+
+    response = client.post(
+        "/api/v1/auth/signup",
+        headers=csrf_headers(client),
+        json={
+            "name": "Asha",
+            "surname": "Patil",
+            "dob": "2004-05-16",
+            "email": "asha@direct-campus.edu",
+            "password": "a secure campus passphrase",
+            "re_enter_password": "a secure campus passphrase",
+            "terms_version": "2026-08-28",
+            "privacy_version": "2026-08-28",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json() == {
+        "status": "registered",
+        "message": "Account created. Continue to your student profile.",
+        "next_path": "/onboarding",
+    }
+    assert client.get("/api/v1/auth/me").status_code == 200
+    async with TestSession() as db:
+        user = await db.scalar(select(User).where(User.email == "asha@direct-campus.edu"))
+        assert user is not None
+        membership = await db.scalar(
+            select(InstitutionMembership).where(InstitutionMembership.user_id == user.id)
+        )
+        profile = await db.scalar(select(StudentProfile).where(StudentProfile.user_id == user.id))
+        acceptances = list(
+            (
+                await db.scalars(
+                    select(TermsAcceptance).where(TermsAcceptance.user_id == user.id)
+                )
+            ).all()
+        )
+        assert membership is not None
+        assert membership.status == MembershipStatus.ACTIVE.value
+        assert profile is not None
+        assert profile.full_name == "Asha Patil"
+        assert {item.document_type for item in acceptances} == {"terms", "privacy"}
+        assert await db.scalar(select(MembershipInvitation.id)) is None
+        assert await db.scalar(select(EmailDelivery.id)) is None
 
 
 async def test_institution_registration_flags_similar_existing_name_without_granting_access(

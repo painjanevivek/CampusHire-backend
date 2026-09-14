@@ -7163,8 +7163,8 @@
           },
           "status": {
             "enum": [
-              "verification_sent",
-              "continue_activation"
+              "registered",
+              "registration_unavailable"
             ],
             "title": "Status",
             "type": "string"
@@ -9468,6 +9468,12 @@
             "title": "Password",
             "type": "string"
           },
+          "privacy_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Privacy Version",
+            "type": "string"
+          },
           "re_enter_password": {
             "maxLength": 128,
             "minLength": 12,
@@ -9479,6 +9485,12 @@
             "minLength": 1,
             "title": "Surname",
             "type": "string"
+          },
+          "terms_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Terms Version",
+            "type": "string"
           }
         },
         "required": [
@@ -9487,7 +9499,9 @@
           "dob",
           "email",
           "password",
-          "re_enter_password"
+          "re_enter_password",
+          "terms_version",
+          "privacy_version"
         ],
         "title": "SignupRequest",
         "type": "object"
@@ -19162,7 +19176,7 @@
           "required": true
         },
         "responses": {
-          "202": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {

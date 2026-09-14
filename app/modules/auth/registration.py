@@ -12,13 +12,17 @@ from app.core.config import get_settings
 from app.models.auth import (
     Institution,
     InstitutionDomain,
+    InstitutionMembership,
     InstitutionRegistrationRequest,
     MembershipInvitation,
+    MembershipStatus,
     RegistrationStatus,
     StudentRegistrationRequest,
+    TermsAcceptance,
     User,
     UserRole,
 )
+from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import hash_password_async, hash_secret, new_secret, normalize_email
 from app.modules.communications.service import enqueue_email
@@ -35,7 +39,7 @@ class RegistrationTokenError(Exception):
 
 @dataclass(frozen=True)
 class StudentRegistrationResult:
-    status: Literal["verification_sent", "continue_activation"]
+    status: Literal["registered", "registration_unavailable"]
     next_path: str | None = None
 
 
@@ -56,37 +60,25 @@ async def start_student_registration(
     dob: date,
     email: str,
     password: str,
+    terms_version: str,
+    privacy_version: str,
     invitation_code: str | None,
     correlation_id: str | None,
 ) -> StudentRegistrationResult:
     normalized_email = normalize_email(email)
+    invitation: MembershipInvitation | None = None
     if invitation_code:
         invitation = await db.scalar(
             select(MembershipInvitation).where(
                 MembershipInvitation.token_hash == hash_secret(invitation_code),
                 MembershipInvitation.email == normalized_email,
+                MembershipInvitation.role == UserRole.STUDENT.value,
                 MembershipInvitation.accepted_at.is_(None),
                 MembershipInvitation.revoked_at.is_(None),
             )
         )
-        if invitation is not None and not _expired(invitation.expires_at):
-            password_hash = await hash_password_async(password)
-            db.add(
-                StudentRegistrationRequest(
-                    email=normalized_email,
-                    institution_id=invitation.institution_id,
-                    invitation_id=invitation.id,
-                    first_name=name,
-                    surname=surname,
-                    date_of_birth=dob,
-                    password_hash=password_hash,
-                    status=RegistrationStatus.ACTIVATION_SENT.value,
-                )
-            )
-            await db.commit()
-            return StudentRegistrationResult(
-                status="continue_activation", next_path=f"/activate/{invitation_code}"
-            )
+        if invitation is not None and _expired(invitation.expires_at):
+            invitation = None
 
     email_domain = normalized_email.rpartition("@")[2]
     domain_record = await db.scalar(
@@ -98,18 +90,24 @@ async def start_student_registration(
             Institution.is_active.is_(True),
         )
     )
+    institution_id = (
+        invitation.institution_id
+        if invitation is not None
+        else domain_record.institution_id if domain_record is not None else None
+    )
     attempt = StudentRegistrationRequest(
         email=normalized_email,
-        institution_id=domain_record.institution_id if domain_record else None,
+        institution_id=institution_id,
+        invitation_id=invitation.id if invitation is not None else None,
         status=RegistrationStatus.UNMATCHED.value,
     )
     db.add(attempt)
     await db.flush()
     existing_user = await db.scalar(select(User.id).where(User.email == normalized_email))
-    if domain_record is None or existing_user is not None:
+    if institution_id is None or existing_user is not None:
         record_audit_event(
             db,
-            institution_id=domain_record.institution_id if domain_record else None,
+            institution_id=institution_id,
             event_type="registration.student.unmatched",
             resource_type="student_registration_request",
             resource_id=str(attempt.id),
@@ -118,69 +116,70 @@ async def start_student_registration(
             correlation_id=correlation_id,
         )
         await db.commit()
-        return StudentRegistrationResult(status="verification_sent")
+        return StudentRegistrationResult(status="registration_unavailable")
 
+    now = datetime.now(UTC)
     password_hash = await hash_password_async(password)
-
-    invitation = await db.scalar(
-        select(MembershipInvitation)
-        .where(
-            MembershipInvitation.institution_id == domain_record.institution_id,
-            MembershipInvitation.email == normalized_email,
-            MembershipInvitation.accepted_at.is_(None),
-            MembershipInvitation.revoked_at.is_(None),
-        )
-        .order_by(MembershipInvitation.created_at.desc())
-        .limit(1)
-    )
-    raw_token = new_secret()
-    expires_at = datetime.now(UTC) + timedelta(hours=get_settings().invitation_ttl_hours)
-    if invitation is None:
-        invitation = MembershipInvitation(
-            institution_id=domain_record.institution_id,
-            email=normalized_email,
-            role=UserRole.STUDENT.value,
-            token_hash=hash_secret(raw_token),
-            expires_at=expires_at,
-        )
-        db.add(invitation)
-        await db.flush()
-    else:
-        invitation.token_hash = hash_secret(raw_token)
-        invitation.expires_at = expires_at
-        invitation.resend_count += 1
-    attempt.invitation_id = invitation.id
     attempt.first_name = name
     attempt.surname = surname
     attempt.date_of_birth = dob
-    attempt.password_hash = password_hash
-    attempt.status = RegistrationStatus.ACTIVATION_SENT.value
-    institution = await db.get(Institution, domain_record.institution_id)
-    if institution is None:  # pragma: no cover - protected by foreign key
-        raise RuntimeError("institution_missing")
-    frontend = str(get_settings().frontend_origins[0]).rstrip("/")
-    await enqueue_email(
-        db,
-        institution_id=institution.id,
-        recipient_email=normalized_email,
-        category="account",
-        template_key="invitation",
-        variables={
-            "institution_name": institution.name,
-            "activation_url": f"{frontend}/activate/{raw_token}",
-        },
-        dedupe_key=f"student-registration:{attempt.id}",
+    user = User(
+        institution_id=institution_id,
+        email=normalized_email,
+        password_hash=password_hash,
+        role=UserRole.STUDENT.value,
     )
+    db.add(user)
+    await db.flush()
+    db.add_all(
+        [
+            InstitutionMembership(
+                institution_id=institution_id,
+                user_id=user.id,
+                role=UserRole.STUDENT.value,
+                status=MembershipStatus.ACTIVE.value,
+                verified_at=now,
+                verified_by_user_id=(
+                    invitation.created_by_user_id
+                    if invitation is not None
+                    else domain_record.verified_by_user_id if domain_record is not None else None
+                ),
+            ),
+            StudentProfile(
+                user_id=user.id,
+                institution_id=institution_id,
+                full_name=f"{name} {surname}".strip(),
+                date_of_birth=dob,
+            ),
+            TermsAcceptance(
+                user_id=user.id,
+                invitation_id=invitation.id if invitation is not None else None,
+                document_type="terms",
+                version=terms_version,
+            ),
+            TermsAcceptance(
+                user_id=user.id,
+                invitation_id=invitation.id if invitation is not None else None,
+                document_type="privacy",
+                version=privacy_version,
+            ),
+        ]
+    )
+    attempt.status = RegistrationStatus.ACTIVATED.value
+    if invitation is not None:
+        invitation.accepted_at = now
     record_audit_event(
         db,
-        institution_id=institution.id,
-        event_type="registration.student.activation_sent",
+        actor_user_id=user.id,
+        institution_id=institution_id,
+        event_type="registration.student.completed",
         resource_type="student_registration_request",
         resource_id=str(attempt.id),
         correlation_id=correlation_id,
+        details={"identity_source": "invitation" if invitation is not None else "verified_domain"},
     )
     await db.commit()
-    return StudentRegistrationResult(status="verification_sent")
+    return StudentRegistrationResult(status="registered", next_path="/onboarding")
 
 
 async def start_institution_registration(

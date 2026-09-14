@@ -18,6 +18,8 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
     re_enter_password: str = Field(min_length=12, max_length=128)
+    terms_version: str = Field(min_length=1, max_length=64)
+    privacy_version: str = Field(min_length=1, max_length=64)
     invitation_code: str | None = Field(default=None, min_length=20, max_length=200)
 
     @field_validator("name", "surname")
@@ -41,7 +43,7 @@ class SignupRequest(BaseModel):
 
 
 class RegistrationStartResponse(BaseModel):
-    status: Literal["verification_sent", "continue_activation"]
+    status: Literal["registered", "registration_unavailable"]
     message: str
     next_path: str | None = None
 
