@@ -1,0 +1,40 @@
+# CampusHire agentic AI pilot
+
+CampusHire implements two bounded workflows: `prepare_opportunity` for students and
+`prepare_drive` for T&P. PostgreSQL owns run state, sanitized events, immutable usage attempts,
+source versions, consent, and reviewable artifacts. LangGraph chooses whether to clarify or draft;
+only typed read tools and proposal creation are available. Existing recruitment services remain
+authoritative for eligibility and drive mutations.
+
+Each run reserves 30,000 micro-dollars and shares a lifetime ceiling of four model calls, six tool
+calls, one validated correction, and 90 active seconds. Waiting for review does not consume active
+time, and resuming retains all counters. Provider attempts are written before dispatch so uncertain
+billing is visible and is never retried automatically.
+
+Enable the global `AGENT_RUNS` switch and the institution `agent_runs` flag only after model,
+pricing, monthly allowance, API, and worker configuration are present. `LIVE_SOURCES` and the
+institution `live_sources` flag enable ESCO lookup and source registration. Add every permitted
+official-career domain to `SOURCE_ALLOWED_DOMAINS`; NPTEL and SWAYAM are the defaults. URL checks
+require HTTPS, an allowlisted hostname, a public resolved address, no redirect, and bounded metadata.
+Changed metadata creates a pending version for human review. Campus policy always has higher
+authority than external career information.
+
+Student runs are owner-scoped. T&P drive runs and artifacts are institution and drive scoped for
+authorized reviewers. Applying accepted fields additionally requires `recruitment.manage` and both
+artifact and drive revisions. Practice conversations and answers never enter shared indexes.
+Practice aggregate consent records purpose, version, grant, and revocation; the pilot stores no
+derived assessment contribution until a qualified assessment workflow exists. Students can delete
+cancelled, failed, rejected, or otherwise unaccepted private tasks. Active tasks must first be
+cancelled, and accepted plans follow the destination record's retention rules.
+
+The benchmark manifest contains 20 reviewed scenario templates with five deterministic variants,
+balanced into 50 student and 50 T&P scenarios. Run each expanded scenario three times and report
+per-attempt and all-repeats success. Qualification is calculated independently for both workflows:
+at least 90% task completion, 95% supported factual claims, 98% valid citations, and zero observed
+private disclosure or unauthorized state change. Automated grading assists review; it does not
+replace the reviewed reference judgment.
+
+Schema-valid output is only a candidate. The runner separately validates deterministic eligibility,
+source resolution, source support, student-evidence state, selected drive fields, and planned effort.
+Failures receive at most one bounded correction. Any material that still lacks support is withheld
+and the run ends with a safe error.

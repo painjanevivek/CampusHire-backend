@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from urllib.parse import urlparse
 from uuid import UUID
@@ -24,6 +24,7 @@ class SkillItem(BaseModel):
 class ProfileUpdate(BaseModel):
     expected_revision: int | None = Field(default=None, ge=1)
     full_name: str | None = Field(default=None, min_length=2, max_length=160)
+    date_of_birth: date | None = None
     institution_name: str | None = Field(default=None, min_length=2, max_length=200)
     prn: str | None = Field(default=None, min_length=2, max_length=64)
     department: str | None = Field(default=None, min_length=2, max_length=120)
@@ -79,6 +80,7 @@ class ProfileResponse(BaseModel):
     id: UUID
     institution_id: UUID | None
     full_name: str | None
+    date_of_birth: date | None
     institution_name: str | None
     prn: str | None
     department: str | None
@@ -102,6 +104,7 @@ class ProfileResponse(BaseModel):
 class IdentityUpdate(BaseModel):
     expected_revision: int = Field(ge=1)
     full_name: str | None = Field(default=None, min_length=2, max_length=160)
+    date_of_birth: date | None = None
     institution_name: str | None = Field(default=None, min_length=2, max_length=200)
     prn: str | None = Field(default=None, min_length=2, max_length=64)
     department: str | None = Field(default=None, min_length=2, max_length=120)

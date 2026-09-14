@@ -17,8 +17,10 @@ from app.models.auth import (
     InstitutionDomain,
     InstitutionRegistrationRequest,
     MembershipInvitation,
+    StudentRegistrationRequest,
     UserRole,
 )
+from app.models.profile import StudentProfile
 from app.modules.auth import registration as registration_service
 from app.modules.auth.security import hash_secret, totp_code
 from app.modules.institutions import lifecycle as institution_lifecycle
@@ -105,12 +107,32 @@ async def test_student_signup_activation_and_onboarding_journey(client: TestClie
         "/api/v1/auth/signup",
         headers=csrf_headers(client),
         json={
+            "name": "Student",
+            "surname": "One",
+            "dob": "2004-05-16",
             "email": "student@student-campus.edu",
+            "password": "a secure student passphrase",
+            "re_enter_password": "a secure student passphrase",
             "invitation_code": activation_token,
         },
     )
     assert started.status_code == 202, started.text
     assert started.json()["next_path"] == f"/activate/{activation_token}"
+
+    invitation_state = client.get(f"/api/v1/auth/invitations/{activation_token}")
+    assert invitation_state.status_code == 200
+    assert invitation_state.json()["student_signup_ready"] is True
+
+    mismatched_password = client.post(
+        f"/api/v1/auth/invitations/{activation_token}/accept",
+        headers=csrf_headers(client),
+        json={
+            "password": "a different student passphrase",
+            "terms_version": "2026-08-28",
+            "privacy_version": "2026-08-28",
+        },
+    )
+    assert mismatched_password.status_code == 422
 
     activated = client.post(
         f"/api/v1/auth/invitations/{activation_token}/accept",
@@ -123,6 +145,15 @@ async def test_student_signup_activation_and_onboarding_journey(client: TestClie
     )
     assert activated.status_code == 201, activated.text
     assert activated.json()["role"] == UserRole.STUDENT.value
+
+    async with TestSession() as db:
+        registration = await db.scalar(select(StudentRegistrationRequest))
+        profile = await db.scalar(select(StudentProfile))
+        assert registration is not None and registration.password_hash is None
+        assert registration.status == "activated"
+        assert profile is not None
+        assert profile.full_name == "Student One"
+        assert str(profile.date_of_birth) == "2004-05-16"
 
     loaded = client.get("/api/v1/onboarding")
     assert loaded.status_code == 200, loaded.text

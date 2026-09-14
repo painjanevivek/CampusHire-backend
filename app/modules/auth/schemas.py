@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 def _reject_password_control_characters(value: str) -> str:
@@ -12,8 +12,32 @@ def _reject_password_control_characters(value: str) -> str:
 
 
 class SignupRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    surname: str = Field(min_length=1, max_length=100)
+    dob: date
     email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+    re_enter_password: str = Field(min_length=12, max_length=128)
     invitation_code: str | None = Field(default=None, min_length=20, max_length=200)
+
+    @field_validator("name", "surname")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("Name cannot be blank")
+        return normalized
+
+    @field_validator("password", "re_enter_password")
+    @classmethod
+    def reject_control_characters(cls, value: str) -> str:
+        return _reject_password_control_characters(value)
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "SignupRequest":
+        if self.password != self.re_enter_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class RegistrationStartResponse(BaseModel):
@@ -106,6 +130,7 @@ class InvitationResponse(BaseModel):
     email: EmailStr
     role: str
     expires_at: datetime
+    student_signup_ready: bool = False
 
 
 class InvitationAcceptRequest(BaseModel):

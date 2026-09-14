@@ -84,6 +84,20 @@ class Settings(BaseSettings):
     ai_resume_studio: bool = False
     student_copilot: bool = False
     tnp_copilot: bool = False
+    agent_runs: bool = False
+    live_sources: bool = False
+    practice_aggregates: bool = False
+    agent_max_model_calls: int = Field(default=4, ge=1, le=12)
+    agent_max_tool_calls: int = Field(default=6, ge=1, le=20)
+    agent_max_correction_attempts: int = Field(default=1, ge=0, le=3)
+    agent_max_active_seconds: int = Field(default=90, ge=5, le=300)
+    agent_reserved_cost_microunits: int = Field(default=30_000, ge=1)
+    agent_worker_lease_seconds: int = Field(default=180, ge=30, le=900)
+    agent_worker_poll_seconds: float = Field(default=1.0, ge=0.2, le=30)
+    source_allowed_domains: list[str] = Field(
+        default_factory=lambda: ["nptel.ac.in", "swayam.gov.in"]
+    )
+    source_stale_after_days: int = Field(default=7, ge=1, le=90)
     ai_max_output_tokens: int = Field(default=2_048, ge=128, le=8_192)
     ai_per_tenant_monthly_budget_cents: int = Field(default=0, ge=0)
     ai_input_cost_cents_per_million_tokens: int = Field(default=0, ge=0)

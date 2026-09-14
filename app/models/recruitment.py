@@ -60,6 +60,7 @@ class PlacementDrive(Base, TimestampMixin):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pending_changes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
 
 
 class PlacementRole(Base, TimestampMixin):

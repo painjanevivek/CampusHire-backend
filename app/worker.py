@@ -3,9 +3,13 @@ import asyncio
 import logging
 from uuid import uuid4
 
+from app.ai.providers.gemini import GeminiProvider
+from app.ai.workflows.campus_agent import process_agent_run
 from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.logging import configure_logging
+from app.modules.agentic.sources import sync_next_source
+from app.modules.agentic.worker import claim_next_agent_run, recover_stale_agent_runs
 from app.modules.application_packets.service import purge_expired_application_packet_data
 from app.modules.communications.reminders import enqueue_upcoming_deadline_reminders
 from app.modules.communications.service import OciSmtpEmailProvider, process_next_email
@@ -26,6 +30,12 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
     store = build_object_store(settings)
     scanner = build_scanner(settings)
     parser_backend = build_pdf_parser(settings)
+    agent_generator = None
+    if settings.agent_runs:
+        try:
+            agent_generator = GeminiProvider()
+        except RuntimeError:
+            logger.warning("agent_generation_provider_unavailable")
     worker_identity = worker_id or f"resume-worker-{uuid4().hex[:12]}"
     logger.info(
         "resume_worker_started",
@@ -113,6 +123,50 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
                 logger.info(
                     "transactional_email_processed",
                     extra={"event": "transactional_email_processed", "resource_id": str(email_id)},
+                )
+                if once:
+                    return
+                continue
+        if settings.live_sources:
+            try:
+                async with SessionFactory() as db:
+                    source_id = await sync_next_source(db, settings=settings)
+                if source_id is not None:
+                    logger.info(
+                        "approved_source_checked",
+                        extra={"event": "approved_source_checked", "resource_id": str(source_id)},
+                    )
+                    if once:
+                        return
+            except Exception:
+                logger.exception(
+                    "source_sync_failed",
+                    extra={"event": "source_sync_failed", "worker_id": worker_identity},
+                )
+        if settings.agent_runs:
+            async with SessionFactory() as db:
+                recovered_runs = await recover_stale_agent_runs(db)
+                if recovered_runs:
+                    logger.warning(
+                        "agent_runs_recovered",
+                        extra={"event": "agent_runs_recovered", "job_count": recovered_runs},
+                    )
+                agent_run_id = await claim_next_agent_run(
+                    db,
+                    worker_id=worker_identity,
+                    lease_seconds=settings.agent_worker_lease_seconds,
+                )
+            if agent_run_id is not None:
+                async with SessionFactory() as db:
+                    await process_agent_run(
+                        db,
+                        agent_run_id,
+                        generator=agent_generator,
+                        settings=settings,
+                    )
+                logger.info(
+                    "agent_run_processed",
+                    extra={"event": "agent_run_processed", "resource_id": str(agent_run_id)},
                 )
                 if once:
                     return

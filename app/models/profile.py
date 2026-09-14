@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, LargeBinary, String, Uuid
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, LargeBinary, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -28,6 +28,7 @@ class StudentProfile(Base, TimestampMixin):
         ForeignKey("institutions.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     full_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     institution_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     prn: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     department: Mapped[str | None] = mapped_column(String(120), nullable=True)

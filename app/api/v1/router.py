@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes.admin_recruitment import router as admin_recruitment_router
+from app.api.v1.routes.agentic import student_router as student_agentic_router
+from app.api.v1.routes.agentic import tnp_router as tnp_agentic_router
 from app.api.v1.routes.application_packets import admin_router as application_packet_admin_router
 from app.api.v1.routes.application_packets import compliance_router
 from app.api.v1.routes.application_packets import (
@@ -47,6 +49,8 @@ api_router.include_router(resumes_router, tags=["resumes"])
 api_router.include_router(generative_router, tags=["generative resume studio"])
 api_router.include_router(student_copilot_router, tags=["student copilot"])
 api_router.include_router(tnp_copilot_router, tags=["T&P copilot"])
+api_router.include_router(student_agentic_router, tags=["student agent workflows"])
+api_router.include_router(tnp_agentic_router, tags=["T&P agent workflows"])
 api_router.include_router(opportunities_router, tags=["opportunities and applications"])
 api_router.include_router(application_packet_student_router, tags=["application packets"])
 api_router.include_router(student_engagement_router, tags=["readiness and communication"])

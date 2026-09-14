@@ -44,6 +44,7 @@ from app.modules.auth.service import (
     confirm_password_reset,
     disable_mfa,
     get_invitation,
+    has_prepared_student_registration,
     issue_password_reset,
     list_sessions,
     revoke_all_sessions,
@@ -120,7 +121,11 @@ async def signup(
     await enforce_auth_identity_rate_limit(request, str(payload.email))
     result = await start_student_registration(
         db,
+        name=payload.name,
+        surname=payload.surname,
+        dob=payload.dob,
         email=str(payload.email),
+        password=payload.password,
         invitation_code=payload.invitation_code,
         correlation_id=request.state.correlation_id,
     )
@@ -235,7 +240,14 @@ async def validate_invitation(token: str, db: Database) -> InvitationResponse:
                 "message": "This invitation is no longer available.",
             },
         ) from None
-    return InvitationResponse.model_validate(invitation, from_attributes=True)
+    return InvitationResponse(
+        id=invitation.id,
+        institution_id=invitation.institution_id,
+        email=invitation.email,
+        role=invitation.role,
+        expires_at=invitation.expires_at,
+        student_signup_ready=await has_prepared_student_registration(db, invitation.id),
+    )
 
 
 @router.post(
@@ -267,6 +279,14 @@ async def activate_invitation(
             detail={
                 "code": "invitation_unavailable",
                 "message": "This invitation is no longer available.",
+            },
+        ) from None
+    except InvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "password_confirmation_failed",
+                "message": "Enter the password used during sign-up.",
             },
         ) from None
     auth_session = await authenticate(

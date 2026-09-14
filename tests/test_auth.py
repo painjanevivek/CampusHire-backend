@@ -21,6 +21,7 @@ from app.models.auth import (
     MembershipInvitation,
     MembershipStatus,
     Session,
+    StudentRegistrationRequest,
     User,
     UserRole,
 )
@@ -101,7 +102,14 @@ async def test_signup_returns_generic_result_when_identity_is_not_matched(
     response = client.post(
         "/api/v1/auth/signup",
         headers=csrf_headers(client),
-        json={"email": "student@example.edu"},
+        json={
+            "name": "Asha",
+            "surname": "Patil",
+            "dob": "2004-05-16",
+            "email": "student@example.edu",
+            "password": "a secure campus passphrase",
+            "re_enter_password": "a secure campus passphrase",
+        },
     )
     assert response.status_code == 202
     assert response.json() == {
@@ -109,6 +117,10 @@ async def test_signup_returns_generic_result_when_identity_is_not_matched(
         "message": "If your identity is eligible, an activation link has been sent.",
         "next_path": None,
     }
+    async with TestSession() as db:
+        registration = await db.scalar(select(StudentRegistrationRequest))
+        assert registration is not None
+        assert registration.password_hash is None
 
 
 async def test_institution_registration_flags_similar_existing_name_without_granting_access(

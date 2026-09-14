@@ -14,11 +14,14 @@ from app.models.auth import (
     MfaEnrollment,
     MfaRecoveryCode,
     PasswordResetToken,
+    RegistrationStatus,
     Session,
+    StudentRegistrationRequest,
     TermsAcceptance,
     User,
     UserRole,
 )
+from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import (
     decrypt_totp_secret,
@@ -242,9 +245,27 @@ async def accept_invitation(
     existing = await db.scalar(select(User).where(User.email == normalized))
     if existing is not None:
         raise ExpiredOrUsedTokenError
+    registration = await db.scalar(
+        select(StudentRegistrationRequest)
+        .where(
+            StudentRegistrationRequest.invitation_id == invitation.id,
+            StudentRegistrationRequest.status == RegistrationStatus.ACTIVATION_SENT.value,
+            StudentRegistrationRequest.password_hash.is_not(None),
+        )
+        .order_by(StudentRegistrationRequest.created_at.desc())
+        .limit(1)
+    )
+    if registration is not None:
+        if registration.password_hash is None or not await verify_password_async(
+            registration.password_hash, password
+        ):
+            raise InvalidCredentialsError
+        password_hash = registration.password_hash
+    else:
+        password_hash = await hash_password_async(password)
     user = User(
         email=normalized,
-        password_hash=await hash_password_async(password),
+        password_hash=password_hash,
         role=invitation.role,
         institution_id=invitation.institution_id,
     )
@@ -259,6 +280,23 @@ async def accept_invitation(
         verified_by_user_id=invitation.created_by_user_id,
     )
     db.add(membership)
+    if registration is not None:
+        db.add(
+            StudentProfile(
+                user_id=user.id,
+                institution_id=invitation.institution_id,
+                full_name=" ".join(
+                    value for value in (registration.first_name, registration.surname) if value
+                )
+                or invitation.full_name,
+                date_of_birth=registration.date_of_birth,
+            )
+        )
+        await db.execute(
+            update(StudentRegistrationRequest)
+            .where(StudentRegistrationRequest.invitation_id == invitation.id)
+            .values(password_hash=None, status=RegistrationStatus.ACTIVATED.value)
+        )
     invitation.accepted_at = now
     db.add_all(
         [
@@ -314,6 +352,22 @@ async def get_invitation(db: AsyncSession, raw_token: str) -> MembershipInvitati
     if (expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=UTC)) <= datetime.now(UTC):
         raise ExpiredOrUsedTokenError
     return invitation
+
+
+async def has_prepared_student_registration(
+    db: AsyncSession, invitation_id: UUID
+) -> bool:
+    registration_id = await db.scalar(
+        select(StudentRegistrationRequest.id)
+        .where(
+            StudentRegistrationRequest.invitation_id == invitation_id,
+            StudentRegistrationRequest.status == RegistrationStatus.ACTIVATION_SENT.value,
+            StudentRegistrationRequest.password_hash.is_not(None),
+        )
+        .order_by(StudentRegistrationRequest.created_at.desc())
+        .limit(1)
+    )
+    return registration_id is not None
 
 
 async def issue_password_reset(

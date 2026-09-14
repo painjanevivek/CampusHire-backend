@@ -1,9 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -44,6 +44,7 @@ class RegistrationStatus(StrEnum):
     REJECTED = "rejected"
     UNMATCHED = "unmatched"
     ACTIVATION_SENT = "activation_sent"
+    ACTIVATED = "activated"
 
 
 class Institution(Base, TimestampMixin):
@@ -83,6 +84,10 @@ class StudentRegistrationRequest(Base, TimestampMixin):
     invitation_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("membership_invitations.id", ondelete="SET NULL"), nullable=True
     )
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    surname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[str] = mapped_column(String(32), index=True)
 
 

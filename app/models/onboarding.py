@@ -155,3 +155,6 @@ class InstitutionFeatureFlags(Base, TimestampMixin):
     ai_resume_studio: Mapped[bool] = mapped_column(default=False)
     student_copilot: Mapped[bool] = mapped_column(default=False)
     tnp_copilot: Mapped[bool] = mapped_column(default=False)
+    agent_runs: Mapped[bool] = mapped_column(default=False)
+    live_sources: Mapped[bool] = mapped_column(default=False)
+    practice_aggregates: Mapped[bool] = mapped_column(default=False)

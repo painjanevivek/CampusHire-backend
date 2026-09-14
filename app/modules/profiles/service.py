@@ -139,6 +139,7 @@ def to_response(profile: StudentProfile, account_email: str | None = None) -> Pr
         id=profile.id,
         institution_id=profile.institution_id,
         full_name=profile.full_name,
+        date_of_birth=profile.date_of_birth,
         institution_name=profile.institution_name,
         prn=profile.prn,
         department=profile.department,

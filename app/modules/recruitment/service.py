@@ -190,6 +190,7 @@ async def drive_response(db: AsyncSession, drive: PlacementDrive) -> DriveRespon
         role_count=len(roles),
         pending_changes=dict(drive.pending_changes),
         has_pending_changes=has_pending_changes,
+        revision=drive.revision,
     )
 
 
@@ -273,6 +274,7 @@ async def update_drive(
     else:
         for key, value in values.items():
             setattr(drive, key, value)
+    drive.revision += 1
     await db.flush()
     await db.refresh(drive)
     return drive
@@ -324,6 +326,7 @@ async def transition_drive(
         drive.status = PublicationStatus.ARCHIVED.value
     else:
         raise RecruitmentError("drive_action_invalid")
+    drive.revision += 1
     await db.flush()
     await db.refresh(drive)
     return drive
@@ -413,6 +416,7 @@ async def save_drive_changes(
     for key, value in drive_values.items():
         setattr(drive, key, value)
     drive.pending_changes = {}
+    drive.revision += 1
     await db.flush()
     await db.refresh(drive)
     return drive, activated_role_ids

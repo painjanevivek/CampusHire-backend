@@ -77,6 +77,7 @@ class DriveResponse(BaseModel):
     role_count: int = 0
     pending_changes: dict[str, object] = Field(default_factory=dict)
     has_pending_changes: bool = False
+    revision: int = 1
 
 
 class RoleCreate(BaseModel):

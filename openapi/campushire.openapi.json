@@ -101,6 +101,176 @@
         "title": "AdminIdentityStep",
         "type": "object"
       },
+      "AgentEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "event_type",
+          "summary",
+          "metadata",
+          "created_at"
+        ],
+        "title": "AgentEventResponse",
+        "type": "object"
+      },
+      "AgentRunResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact"
+          },
+          "audience": {
+            "enum": [
+              "student",
+              "tnp"
+            ],
+            "title": "Audience",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RunLimits"
+          },
+          "required_action": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Action"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "safe_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe Error"
+          },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_input",
+              "awaiting_review",
+              "completed",
+              "failed",
+              "cancelled",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_kind": {
+            "enum": [
+              "role",
+              "drive"
+            ],
+            "title": "Target Kind",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow": {
+            "enum": [
+              "prepare_opportunity",
+              "prepare_drive"
+            ],
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "audience",
+          "workflow",
+          "target_kind",
+          "target_id",
+          "status",
+          "revision",
+          "source_fingerprint",
+          "limits",
+          "required_action",
+          "safe_error",
+          "artifact",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AgentRunResponse",
+        "type": "object"
+      },
       "ApplicationAppealCreate": {
         "properties": {
           "confirmation": {
@@ -965,6 +1135,185 @@
           "confirmation"
         ],
         "title": "ApplicationWithdrawal",
+        "type": "object"
+      },
+      "ArtifactApply": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_drive_revision": {
+            "minimum": 1.0,
+            "title": "Expected Drive Revision",
+            "type": "integer"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "fields": {
+            "items": {
+              "enum": [
+                "title",
+                "description",
+                "location",
+                "work_mode",
+                "opens_at",
+                "deadline_at"
+              ],
+              "type": "string"
+            },
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "expected_drive_revision",
+          "fields"
+        ],
+        "title": "ArtifactApply",
+        "type": "object"
+      },
+      "ArtifactDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "accept",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "decision"
+        ],
+        "title": "ArtifactDecision",
+        "type": "object"
+      },
+      "ArtifactEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "additionalProperties": true,
+            "title": "Content",
+            "type": "object"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "content"
+        ],
+        "title": "ArtifactEdit",
+        "type": "object"
+      },
+      "ArtifactResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "additionalProperties": true,
+            "title": "Content",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_references": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence References",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "preparation_plan",
+              "drive_preparation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source_fingerprint": {
+            "title": "Source Fingerprint",
+            "type": "string"
+          },
+          "source_target_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Target Revision"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "accepted",
+              "rejected",
+              "applied"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "kind",
+          "target_id",
+          "status",
+          "revision",
+          "content",
+          "evidence_references",
+          "source_fingerprint",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ArtifactResponse",
         "type": "object"
       },
       "AuditEventPage": {
@@ -2637,6 +2986,11 @@
             ],
             "title": "Published At"
           },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
           "role_count": {
             "default": 0,
             "title": "Role Count",
@@ -3250,6 +3604,36 @@
         "title": "EmailDeliveryResponse",
         "type": "object"
       },
+      "EscoSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "preferred_label": {
+            "title": "Preferred Label",
+            "type": "string"
+          },
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "preferred_label"
+        ],
+        "title": "EscoSkill",
+        "type": "object"
+      },
       "EvidenceReference": {
         "properties": {
           "evidence_id": {
@@ -3679,6 +4063,18 @@
               }
             ],
             "title": "Country Code"
+          },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
           },
           "department": {
             "anyOf": [
@@ -4309,6 +4705,11 @@
           "role": {
             "title": "Role",
             "type": "string"
+          },
+          "student_signup_ready": {
+            "default": false,
+            "title": "Student Signup Ready",
+            "type": "boolean"
           }
         },
         "required": [
@@ -5662,6 +6063,78 @@
         "title": "PolicySectionInput",
         "type": "object"
       },
+      "PracticeConsentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "consent_version": {
+            "title": "Consent Version",
+            "type": "string"
+          },
+          "granted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted At"
+          },
+          "opted_in": {
+            "title": "Opted In",
+            "type": "boolean"
+          },
+          "purpose": {
+            "const": "practice_aggregates",
+            "title": "Purpose",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "purpose",
+          "consent_version",
+          "opted_in",
+          "granted_at",
+          "revoked_at"
+        ],
+        "title": "PracticeConsentResponse",
+        "type": "object"
+      },
+      "PracticeConsentUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "consent_version": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Consent Version",
+            "type": "string"
+          },
+          "opted_in": {
+            "title": "Opted In",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consent_version",
+          "opted_in"
+        ],
+        "title": "PracticeConsentUpdate",
+        "type": "object"
+      },
       "PreferencesUpdate": {
         "properties": {
           "expected_revision": {
@@ -5886,6 +6359,18 @@
             ],
             "title": "Country Code"
           },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
+          },
           "department": {
             "anyOf": [
               {
@@ -6014,6 +6499,7 @@
           "id",
           "institution_id",
           "full_name",
+          "date_of_birth",
           "institution_name",
           "prn",
           "department",
@@ -6075,6 +6561,18 @@
               }
             ],
             "title": "Country Code"
+          },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
           },
           "department": {
             "anyOf": [
@@ -8544,6 +9042,89 @@
         "title": "RuleSetResponse",
         "type": "object"
       },
+      "RunCancel": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "RunCancel",
+        "type": "object"
+      },
+      "RunLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "active_seconds_remaining": {
+            "title": "Active Seconds Remaining",
+            "type": "number"
+          },
+          "actual_cost_microunits": {
+            "title": "Actual Cost Microunits",
+            "type": "integer"
+          },
+          "correction_attempts_remaining": {
+            "title": "Correction Attempts Remaining",
+            "type": "integer"
+          },
+          "model_calls_remaining": {
+            "title": "Model Calls Remaining",
+            "type": "integer"
+          },
+          "reserved_cost_microunits": {
+            "title": "Reserved Cost Microunits",
+            "type": "integer"
+          },
+          "tool_calls_remaining": {
+            "title": "Tool Calls Remaining",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_calls_remaining",
+          "tool_calls_remaining",
+          "correction_attempts_remaining",
+          "active_seconds_remaining",
+          "reserved_cost_microunits",
+          "actual_cost_microunits"
+        ],
+        "title": "RunLimits",
+        "type": "object"
+      },
+      "RunResume": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "interrupt_id": {
+            "maxLength": 120,
+            "minLength": 4,
+            "title": "Interrupt Id",
+            "type": "string"
+          },
+          "response": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Response",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "interrupt_id",
+          "response"
+        ],
+        "title": "RunResume",
+        "type": "object"
+      },
       "SaveResponse": {
         "properties": {
           "role_id": {
@@ -8852,6 +9433,11 @@
       },
       "SignupRequest": {
         "properties": {
+          "dob": {
+            "format": "date",
+            "title": "Dob",
+            "type": "string"
+          },
           "email": {
             "format": "email",
             "title": "Email",
@@ -8869,10 +9455,39 @@
               }
             ],
             "title": "Invitation Code"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          },
+          "re_enter_password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Re Enter Password",
+            "type": "string"
+          },
+          "surname": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Surname",
+            "type": "string"
           }
         },
         "required": [
-          "email"
+          "name",
+          "surname",
+          "dob",
+          "email",
+          "password",
+          "re_enter_password"
         ],
         "title": "SignupRequest",
         "type": "object"
@@ -8936,6 +9551,157 @@
           "skills"
         ],
         "title": "SkillsUpdate",
+        "type": "object"
+      },
+      "SourceReview": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "decision"
+        ],
+        "title": "SourceReview",
+        "type": "object"
+      },
+      "SourceVersionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_url": {
+            "maxLength": 1000,
+            "pattern": "^https://",
+            "title": "Canonical Url",
+            "type": "string"
+          },
+          "permitted_use": {
+            "maxLength": 240,
+            "minLength": 3,
+            "title": "Permitted Use",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "nptel",
+              "swayam",
+              "official_career_page",
+              "faculty_resource"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 2,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_type",
+          "canonical_url",
+          "title",
+          "permitted_use"
+        ],
+        "title": "SourceVersionCreate",
+        "type": "object"
+      },
+      "SourceVersionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "access_scope": {
+            "title": "Access Scope",
+            "type": "string"
+          },
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "canonical_url": {
+            "title": "Canonical Url",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "permitted_use": {
+            "title": "Permitted Use",
+            "type": "string"
+          },
+          "review_status": {
+            "title": "Review Status",
+            "type": "string"
+          },
+          "safe_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe Error"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "source_type",
+          "canonical_url",
+          "title",
+          "version",
+          "review_status",
+          "access_scope",
+          "permitted_use",
+          "metadata",
+          "last_verified_at",
+          "safe_error",
+          "active"
+        ],
+        "title": "SourceVersionResponse",
         "type": "object"
       },
       "StatusEventResponse": {
@@ -9322,6 +10088,53 @@
         "title": "StudentOnboardingUpdate",
         "type": "object"
       },
+      "StudentRunCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "available_minutes_per_week": {
+            "maximum": 10080.0,
+            "minimum": 30.0,
+            "title": "Available Minutes Per Week",
+            "type": "integer"
+          },
+          "existing_plan_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Plan Id"
+          },
+          "goal": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Goal",
+            "type": "string"
+          },
+          "role_id": {
+            "format": "uuid",
+            "title": "Role Id",
+            "type": "string"
+          },
+          "target_date": {
+            "format": "date",
+            "title": "Target Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_id",
+          "goal",
+          "available_minutes_per_week",
+          "target_date"
+        ],
+        "title": "StudentRunCreate",
+        "type": "object"
+      },
       "SuggestionBatchItem": {
         "properties": {
           "action": {
@@ -9526,6 +10339,49 @@
           "message"
         ],
         "title": "TnpMessageCreate",
+        "type": "object"
+      },
+      "TnpRunCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "drive_id": {
+            "format": "uuid",
+            "title": "Drive Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "recruiter_brief": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recruiter Brief"
+          },
+          "source_version_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Source Version Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "drive_id",
+          "expected_revision"
+        ],
+        "title": "TnpRunCreate",
         "type": "object"
       },
       "UserResponse": {
@@ -13981,6 +14837,201 @@
         ]
       }
     },
+    "/api/v1/ai/student-copilot/artifacts/{artifact_id}": {
+      "get": {
+        "operationId": "get_student_artifact_api_v1_ai_student_copilot_artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Student Artifact",
+        "tags": [
+          "student agent workflows"
+        ]
+      },
+      "put": {
+        "operationId": "update_student_artifact_api_v1_ai_student_copilot_artifacts__artifact_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Student Artifact",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/student-copilot/artifacts/{artifact_id}/decision": {
+      "post": {
+        "operationId": "decide_student_artifact_api_v1_ai_student_copilot_artifacts__artifact_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Student Artifact",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
     "/api/v1/ai/student-copilot/conversations": {
       "get": {
         "operationId": "list_student_conversations_api_v1_ai_student_copilot_conversations_get",
@@ -14271,6 +15322,835 @@
         "summary": "Send Student Message",
         "tags": [
           "student copilot"
+        ]
+      }
+    },
+    "/api/v1/ai/student-copilot/practice-consent": {
+      "get": {
+        "operationId": "get_practice_consent_api_v1_ai_student_copilot_practice_consent_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Practice Consent",
+        "tags": [
+          "student agent workflows"
+        ]
+      },
+      "put": {
+        "operationId": "set_practice_consent_api_v1_ai_student_copilot_practice_consent_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeConsentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Practice Consent",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/student-copilot/runs": {
+      "get": {
+        "operationId": "get_student_runs_api_v1_ai_student_copilot_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRunResponse"
+                  },
+                  "title": "Response Get Student Runs Api V1 Ai Student Copilot Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Student Runs",
+        "tags": [
+          "student agent workflows"
+        ]
+      },
+      "post": {
+        "operationId": "start_student_run_api_v1_ai_student_copilot_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 120,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Student Run",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/student-copilot/runs/{run_id}": {
+      "delete": {
+        "operationId": "delete_student_run_api_v1_ai_student_copilot_runs__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Student Run",
+        "tags": [
+          "student agent workflows"
+        ]
+      },
+      "get": {
+        "operationId": "get_student_run_api_v1_ai_student_copilot_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Student Run",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/student-copilot/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_student_run_api_v1_ai_student_copilot_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCancel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Student Run",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/student-copilot/runs/{run_id}/events": {
+      "get": {
+        "operationId": "get_student_run_events_api_v1_ai_student_copilot_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentEventResponse"
+                  },
+                  "title": "Response Get Student Run Events Api V1 Ai Student Copilot Runs  Run Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Student Run Events",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/student-copilot/runs/{run_id}/resume": {
+      "post": {
+        "operationId": "resume_student_run_api_v1_ai_student_copilot_runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunResume"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Student Run",
+        "tags": [
+          "student agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/artifacts/{artifact_id}": {
+      "get": {
+        "operationId": "get_tnp_artifact_api_v1_ai_tnp_copilot_artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tnp Artifact",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      },
+      "put": {
+        "operationId": "update_tnp_artifact_api_v1_ai_tnp_copilot_artifacts__artifact_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Tnp Artifact",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/artifacts/{artifact_id}/apply": {
+      "post": {
+        "operationId": "apply_tnp_artifact_api_v1_ai_tnp_copilot_artifacts__artifact_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactApply"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Tnp Artifact",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/artifacts/{artifact_id}/decision": {
+      "post": {
+        "operationId": "decide_tnp_artifact_api_v1_ai_tnp_copilot_artifacts__artifact_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Tnp Artifact",
+        "tags": [
+          "T&P agent workflows"
         ]
       }
     },
@@ -14759,6 +16639,658 @@
         "summary": "Review Tnp Proposal",
         "tags": [
           "T&P copilot"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/runs": {
+      "get": {
+        "operationId": "get_tnp_runs_api_v1_ai_tnp_copilot_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRunResponse"
+                  },
+                  "title": "Response Get Tnp Runs Api V1 Ai Tnp Copilot Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tnp Runs",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      },
+      "post": {
+        "operationId": "start_tnp_run_api_v1_ai_tnp_copilot_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 120,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TnpRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Tnp Run",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/runs/{run_id}": {
+      "get": {
+        "operationId": "get_tnp_run_api_v1_ai_tnp_copilot_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tnp Run",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_tnp_run_api_v1_ai_tnp_copilot_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCancel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Tnp Run",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/runs/{run_id}/events": {
+      "get": {
+        "operationId": "get_tnp_run_events_api_v1_ai_tnp_copilot_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentEventResponse"
+                  },
+                  "title": "Response Get Tnp Run Events Api V1 Ai Tnp Copilot Runs  Run Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tnp Run Events",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/runs/{run_id}/resume": {
+      "post": {
+        "operationId": "resume_tnp_run_api_v1_ai_tnp_copilot_runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunResume"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Tnp Run",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/sources": {
+      "get": {
+        "operationId": "get_sources_api_v1_ai_tnp_copilot_sources_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceVersionResponse"
+                  },
+                  "title": "Response Get Sources Api V1 Ai Tnp Copilot Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Sources",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      },
+      "post": {
+        "operationId": "create_source_api_v1_ai_tnp_copilot_sources_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceVersionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Source",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/sources/esco": {
+      "get": {
+        "operationId": "search_esco_api_v1_ai_tnp_copilot_sources_esco_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "term",
+            "required": true,
+            "schema": {
+              "maxLength": 120,
+              "minLength": 2,
+              "title": "Term",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EscoSkill"
+                  },
+                  "title": "Response Search Esco Api V1 Ai Tnp Copilot Sources Esco Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Esco",
+        "tags": [
+          "T&P agent workflows"
+        ]
+      }
+    },
+    "/api/v1/ai/tnp-copilot/sources/{source_id}/review": {
+      "post": {
+        "operationId": "decide_source_api_v1_ai_tnp_copilot_sources__source_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Source",
+        "tags": [
+          "T&P agent workflows"
         ]
       }
     },

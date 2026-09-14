@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from difflib import SequenceMatcher
 from typing import Literal
 from uuid import UUID
@@ -20,7 +20,7 @@ from app.models.auth import (
     UserRole,
 )
 from app.modules.audit.service import record_audit_event
-from app.modules.auth.security import hash_secret, new_secret, normalize_email
+from app.modules.auth.security import hash_password_async, hash_secret, new_secret, normalize_email
 from app.modules.communications.service import enqueue_email
 from app.modules.institutions.lifecycle import ProvisionConflictError, provision_institution
 
@@ -51,7 +51,11 @@ def _institution_name_key(value: str) -> str:
 async def start_student_registration(
     db: AsyncSession,
     *,
+    name: str,
+    surname: str,
+    dob: date,
     email: str,
+    password: str,
     invitation_code: str | None,
     correlation_id: str | None,
 ) -> StudentRegistrationResult:
@@ -66,11 +70,16 @@ async def start_student_registration(
             )
         )
         if invitation is not None and not _expired(invitation.expires_at):
+            password_hash = await hash_password_async(password)
             db.add(
                 StudentRegistrationRequest(
                     email=normalized_email,
                     institution_id=invitation.institution_id,
                     invitation_id=invitation.id,
+                    first_name=name,
+                    surname=surname,
+                    date_of_birth=dob,
+                    password_hash=password_hash,
                     status=RegistrationStatus.ACTIVATION_SENT.value,
                 )
             )
@@ -111,6 +120,8 @@ async def start_student_registration(
         await db.commit()
         return StudentRegistrationResult(status="verification_sent")
 
+    password_hash = await hash_password_async(password)
+
     invitation = await db.scalar(
         select(MembershipInvitation)
         .where(
@@ -139,6 +150,10 @@ async def start_student_registration(
         invitation.expires_at = expires_at
         invitation.resend_count += 1
     attempt.invitation_id = invitation.id
+    attempt.first_name = name
+    attempt.surname = surname
+    attempt.date_of_birth = dob
+    attempt.password_hash = password_hash
     attempt.status = RegistrationStatus.ACTIVATION_SENT.value
     institution = await db.get(Institution, domain_record.institution_id)
     if institution is None:  # pragma: no cover - protected by foreign key

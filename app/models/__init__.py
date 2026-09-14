@@ -1,3 +1,12 @@
+from app.models.agentic import (
+    AgentEvent,
+    AgentRun,
+    DrivePreparationArtifact,
+    GenerationUsage,
+    PracticeConsent,
+    PreparationPlan,
+    SourceVersion,
+)
 from app.models.auth import (
     AuditEvent,
     Institution,
@@ -76,6 +85,8 @@ from app.models.resume import (
 )
 
 __all__ = [
+    "AgentEvent",
+    "AgentRun",
     "ProfilePhoto",
     "CorrectionEvent",
     "CorrectionRequest",
@@ -105,9 +116,11 @@ __all__ = [
     "SemanticMatchEvidence",
     "Company",
     "DataDeletionRequest",
+    "DrivePreparationArtifact",
     "EligibilityEvaluation",
     "EligibilityRuleSet",
     "Institution",
+    "GenerationUsage",
     "InstitutionDomain",
     "InstitutionMembership",
     "InstitutionRegistrationRequest",
@@ -121,6 +134,8 @@ __all__ = [
     "PasswordResetToken",
     "PlacementDrive",
     "PlacementRole",
+    "PracticeConsent",
+    "PreparationPlan",
     "RoleApplicationForm",
     "Resume",
     "ResumeJobEvent",
@@ -139,6 +154,7 @@ __all__ = [
     "StudentPlacementParticipation",
     "StudentProject",
     "StudentRegistrationRequest",
+    "SourceVersion",
     "StudentRoadmap",
     "SupportRequest",
     "TermsAcceptance",
