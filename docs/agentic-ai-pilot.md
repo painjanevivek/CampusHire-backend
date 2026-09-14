@@ -9,7 +9,8 @@ authoritative for eligibility and drive mutations.
 Each run reserves 30,000 micro-dollars and shares a lifetime ceiling of four model calls, six tool
 calls, one validated correction, and 90 active seconds. Waiting for review does not consume active
 time, and resuming retains all counters. Provider attempts are written before dispatch so uncertain
-billing is visible and is never retried automatically.
+billing is visible and is never retried automatically. Worker execution is fenced by the claimed
+lease owner, so a late worker cannot overwrite or clear a safely recovered claim.
 
 Enable the global `AGENT_RUNS` switch and the institution `agent_runs` flag only after model,
 pricing, monthly allowance, API, and worker configuration are present. `LIVE_SOURCES` and the
@@ -21,7 +22,10 @@ authority than external career information.
 
 Student runs are owner-scoped. T&P drive runs and artifacts are institution and drive scoped for
 authorized reviewers. Applying accepted fields additionally requires `recruitment.manage` and both
-artifact and drive revisions. Practice conversations and answers never enter shared indexes.
+artifact and drive revisions. During review, students may edit only the plan summary and T&P may
+edit only the announcement draft; eligibility, citations, blockers, and proposed drive fields stay
+bound to validated generation evidence. Decided artifacts are immutable. Practice conversations
+and answers never enter shared indexes.
 Practice aggregate consent records purpose, version, grant, and revocation; the pilot stores no
 derived assessment contribution until a qualified assessment workflow exists. Students can delete
 cancelled, failed, rejected, or otherwise unaccepted private tasks. Active tasks must first be

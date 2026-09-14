@@ -17,7 +17,7 @@ from app.models.agentic import (
     PreparationPlan,
 )
 from app.models.auth import Institution
-from app.models.recruitment import PlacementDrive, PlacementRole
+from app.models.recruitment import PlacementDrive
 from app.modules.agentic.schemas import (
     AgentEventResponse,
     AgentRunResponse,
@@ -37,7 +37,7 @@ from app.modules.agentic.schemas import (
 )
 from app.modules.generative.service import GenerationUnavailableError, require_capability
 from app.modules.recruitment.schemas import DriveUpdate
-from app.modules.recruitment.service import RecruitmentError, update_drive
+from app.modules.recruitment.service import RecruitmentError, get_opportunity, update_drive
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled", "expired"}
 
@@ -135,14 +135,10 @@ async def create_student_run(
     idempotency_key: str,
 ) -> AgentRunResponse:
     await require_capability(db, institution_id, "agent_runs")
-    role = await db.scalar(
-        select(PlacementRole).where(
-            PlacementRole.id == payload.role_id,
-            PlacementRole.institution_id == institution_id,
-        )
-    )
-    if role is None:
-        raise AgentRunValidationError("opportunity_not_found")
+    try:
+        await get_opportunity(db, institution_id, user_id, payload.role_id)
+    except RecruitmentError as error:
+        raise AgentRunValidationError("opportunity_not_found") from error
     return await _create_run(
         db,
         institution_id=institution_id,
@@ -527,9 +523,12 @@ async def edit_artifact(
         if item is None:
             raise AgentRunNotFoundError()
         _artifact_revision(item.revision, payload.expected_revision)
-        item.content = PreparationPlanContent.model_validate(payload.content).model_dump(
-            mode="json"
-        )
+        await _require_artifact_editable(db, item.run_id, item.status)
+        current = PreparationPlanContent.model_validate(item.content).model_dump(mode="json")
+        updated = PreparationPlanContent.model_validate(payload.content).model_dump(mode="json")
+        if _without_key(current, "summary") != _without_key(updated, "summary"):
+            raise AgentRunValidationError("artifact_authority_fields_immutable")
+        item.content = updated
         item.revision += 1
         await db.commit()
         await db.refresh(item)
@@ -545,7 +544,14 @@ async def edit_artifact(
     if item2 is None:
         raise AgentRunNotFoundError()
     _artifact_revision(item2.revision, payload.expected_revision)
-    item2.content = DrivePreparationContent.model_validate(payload.content).model_dump(mode="json")
+    await _require_artifact_editable(db, item2.run_id, item2.status)
+    current_drive = DrivePreparationContent.model_validate(item2.content).model_dump(mode="json")
+    updated_drive = DrivePreparationContent.model_validate(payload.content).model_dump(mode="json")
+    if _without_key(current_drive, "announcement_draft") != _without_key(
+        updated_drive, "announcement_draft"
+    ):
+        raise AgentRunValidationError("artifact_authority_fields_immutable")
+    item2.content = updated_drive
     item2.revision += 1
     await db.commit()
     await db.refresh(item2)
@@ -736,6 +742,20 @@ async def update_consent(
 def _expected_revision(run: AgentRun, expected: int) -> None:
     if run.revision != expected:
         raise AgentRunConflictError(run.revision)
+
+
+async def _require_artifact_editable(
+    db: AsyncSession, run_id: UUID, artifact_status: str
+) -> None:
+    if artifact_status != "draft":
+        raise AgentRunValidationError("artifact_not_editable")
+    run_status = await db.scalar(select(AgentRun.status).where(AgentRun.id == run_id))
+    if run_status != "awaiting_review":
+        raise AgentRunValidationError("artifact_not_editable")
+
+
+def _without_key(content: dict[str, Any], key: str) -> dict[str, Any]:
+    return {name: value for name, value in content.items() if name != key}
 
 
 def _artifact_revision(current: int, expected: int) -> None:

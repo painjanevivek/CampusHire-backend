@@ -163,6 +163,7 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
                         agent_run_id,
                         generator=agent_generator,
                         settings=settings,
+                        lease_owner=worker_identity,
                     )
                 logger.info(
                     "agent_run_processed",

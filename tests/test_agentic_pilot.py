@@ -30,8 +30,10 @@ from app.modules.agentic.evaluation import EvaluationAttempt, score_attempts
 from app.modules.agentic.schemas import (
     ArtifactApply,
     ArtifactDecision,
+    ArtifactEdit,
     PracticeConsentUpdate,
     RunResume,
+    StudentRunCreate,
     TnpRunCreate,
 )
 from app.modules.agentic.service import (
@@ -39,8 +41,10 @@ from app.modules.agentic.service import (
     AgentRunValidationError,
     apply_drive_artifact,
     authorized_run,
+    create_student_run,
     decide_artifact,
     delete_private_run,
+    edit_artifact,
     read_consent,
     resume_run,
     update_consent,
@@ -240,6 +244,44 @@ def test_preparation_validation_preserves_deterministic_eligibility() -> None:
 
 
 @pytest.mark.asyncio
+async def test_student_run_rejects_an_unpublished_opportunity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with agent_database() as session_factory:
+        async with session_factory() as db:
+            institution, student, _, role = await seed_recruitment_context(
+                db,
+                code="student-draft-agent",
+                email="student-draft-agent@example.edu",
+                role=UserRole.STUDENT.value,
+            )
+            role.status = PublicationStatus.DRAFT.value
+            role.published_at = None
+            await db.commit()
+
+            async def allow_capability(*_args: Any, **_kwargs: Any) -> None:
+                return None
+
+            monkeypatch.setattr(
+                "app.modules.agentic.service.require_capability",
+                allow_capability,
+            )
+            with pytest.raises(AgentRunValidationError, match="opportunity_not_found"):
+                await create_student_run(
+                    db,
+                    institution_id=institution.id,
+                    user_id=student.id,
+                    payload=StudentRunCreate(
+                        role_id=role.id,
+                        goal="Prepare for this unpublished role",
+                        available_minutes_per_week=300,
+                        target_date=(datetime.now(UTC) + timedelta(days=14)).date(),
+                    ),
+                    idempotency_key="student-draft-agent-run",
+                )
+
+
+@pytest.mark.asyncio
 async def test_student_runs_are_private_while_drive_runs_are_shared_in_tenant() -> None:
     engine = create_async_engine(
         "sqlite+aiosqlite://",
@@ -382,6 +424,15 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
             await process_agent_run(
                 db,
                 run.id,
+                generator=SequenceGenerator(),
+                settings=agent_settings(),
+                lease_owner="worker-a",
+            )
+            await db.refresh(run)
+            assert (run.status, run.lease_owner) == ("running", "worker-b")
+            await process_agent_run(
+                db,
+                run.id,
                 generator=SequenceGenerator(
                     {
                         "action": "request_clarification",
@@ -392,6 +443,7 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                     }
                 ),
                 settings=agent_settings(),
+                lease_owner="worker-b",
             )
             await db.refresh(run)
             assert run.status == "awaiting_input"
@@ -467,6 +519,7 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                     },
                 ),
                 settings=agent_settings(),
+                lease_owner="worker-c",
             )
             await db.refresh(run)
             assert run.status == "awaiting_review"
@@ -477,6 +530,21 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                 reference["source_id"] == f"role:{role.id}"
                 for reference in plan.evidence_references
             )
+            edited = await edit_artifact(
+                db,
+                artifact_id=plan.id,
+                institution_id=institution.id,
+                user_id=student.id,
+                audience="student",
+                payload=ArtifactEdit(
+                    expected_revision=plan.revision,
+                    content={
+                        **plan.content,
+                        "summary": "Student-reviewed wording for the bounded preparation plan.",
+                    },
+                ),
+            )
+            assert edited.content["summary"].startswith("Student-reviewed wording")
 
             accepted = await decide_artifact(
                 db,
@@ -484,11 +552,23 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                 institution_id=institution.id,
                 user_id=student.id,
                 audience="student",
-                payload=ArtifactDecision(expected_revision=plan.revision, decision="accept"),
+                payload=ArtifactDecision(expected_revision=edited.revision, decision="accept"),
             )
             await db.refresh(run)
             assert accepted.status == "accepted"
             assert run.status == "completed"
+            with pytest.raises(AgentRunValidationError, match="artifact_not_editable"):
+                await edit_artifact(
+                    db,
+                    artifact_id=plan.id,
+                    institution_id=institution.id,
+                    user_id=student.id,
+                    audience="student",
+                    payload=ArtifactEdit(
+                        expected_revision=accepted.revision,
+                        content={**accepted.content, "summary": "Changed after acceptance."},
+                    ),
+                )
             with pytest.raises(AgentRunValidationError, match="artifact_already_decided"):
                 await decide_artifact(
                     db,
@@ -586,6 +666,7 @@ async def test_tnp_run_uses_fresh_approved_source_and_applies_only_selected_fiel
                     },
                 ),
                 settings=agent_settings(),
+                lease_owner="tnp-worker",
             )
             artifact = await db.scalar(
                 select(DrivePreparationArtifact).where(DrivePreparationArtifact.run_id == run.id)
@@ -596,13 +677,55 @@ async def test_tnp_run_uses_fresh_approved_source_and_applies_only_selected_fiel
                 and reference["version"] == "1"
                 for reference in artifact.evidence_references
             )
+            edited = await edit_artifact(
+                db,
+                artifact_id=artifact.id,
+                institution_id=institution.id,
+                user_id=reviewer.id,
+                audience="tnp",
+                payload=ArtifactEdit(
+                    expected_revision=artifact.revision,
+                    content={
+                        **artifact.content,
+                        "announcement_draft": (
+                            "Reviewer-edited announcement for the Graduate Python Drive."
+                        ),
+                    },
+                ),
+            )
+            assert edited.content["announcement_draft"].startswith("Reviewer-edited")
+            with pytest.raises(
+                AgentRunValidationError,
+                match="artifact_authority_fields_immutable",
+            ):
+                await edit_artifact(
+                    db,
+                    artifact_id=artifact.id,
+                    institution_id=institution.id,
+                    user_id=reviewer.id,
+                    audience="tnp",
+                    payload=ArtifactEdit(
+                        expected_revision=edited.revision,
+                        content={
+                            **edited.content,
+                            "field_proposals": [
+                                {
+                                    "field": "description",
+                                    "proposed_value": "Unreviewed replacement description.",
+                                    "rationale": "This was not generated from reviewed evidence.",
+                                    "source_ids": [f"source:{source.id}"],
+                                }
+                            ],
+                        },
+                    ),
+                )
             accepted = await decide_artifact(
                 db,
                 artifact_id=artifact.id,
                 institution_id=institution.id,
                 user_id=reviewer.id,
                 audience="tnp",
-                payload=ArtifactDecision(expected_revision=artifact.revision, decision="accept"),
+                payload=ArtifactDecision(expected_revision=edited.revision, decision="accept"),
             )
 
             with pytest.raises(ValidationError):

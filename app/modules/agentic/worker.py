@@ -92,7 +92,13 @@ async def process_next_agent_run(
     )
     if run_id is None:
         return None
-    await process_agent_run(db, run_id, generator=generator, settings=settings)
+    await process_agent_run(
+        db,
+        run_id,
+        generator=generator,
+        settings=settings,
+        lease_owner=worker_id,
+    )
     run = await db.get(AgentRun, run_id)
     if run is not None:
         run.lease_owner = None

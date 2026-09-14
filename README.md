@@ -86,9 +86,10 @@ CampusHire deliberately uses the smallest mechanism appropriate to each task. No
 | Resume wording suggestions | Conservative deterministic wording transformations | No invented outcomes or metrics; explicit student acceptance |
 | Role extraction proposals | Proposal/review workflow in intelligence services | An authorized reviewer must approve before a draft role changes |
 | Role-specific preparation | Reviewed profile/resume evidence and approved roadmap mappings | No automatic provider call on page visit; absent mappings remain explicit |
+| Agentic preparation pilot | Bounded Gemini structured generation for student opportunity preparation and T&P drive review | Explicit launch, versioned evidence, finite budgets, interruption/resume, and human review; accepted drive fields require a separate authorized apply action |
 | Next-action guidance | Ordered server-side priority rules | Not model planning and not an autonomous agent |
 
-**Do not describe the current implementation as an autonomous recruiting agent or a general-purpose generative chatbot.** The inspected Gemini provider implements embeddings; the policy graph does not call a text-generation model.
+**Do not describe the current implementation as an autonomous recruiting agent or a general-purpose generative chatbot.** The Gemini provider supports embeddings and configured structured generation for the two bounded pilot workflows. The policy graph remains a separate retrieval-only workflow and does not call a text-generation model. See [Agentic AI pilot](docs/agentic-ai-pilot.md).
 
 ### The actual LangGraph policy workflow
 
@@ -126,9 +127,9 @@ The student embedding projection excludes explicit identity/contact fields such 
 
 Source revisions and model metadata identify a match. Successful fingerprints are cached; failed attempts have a 60-second negative-cache cooldown before a normal request can retry. Dashboard reads do not call the provider. A missing provider or failed vector operation cannot rewrite formal eligibility. See [Reviewed Intelligence Boundary](docs/INTELLIGENCE_BOUNDARY.md).
 
-### Where generative AI could be added — not implemented here
+### Where additional generative AI could be added
 
-A future model-backed rewrite or policy-summary service could fit inside these existing review boundaries:
+A future model-backed resume rewrite or policy-summary service could fit inside these existing review boundaries:
 
 ```mermaid
 flowchart LR
@@ -139,7 +140,7 @@ flowchart LR
     V -->|Unsupported or unavailable| F[Safe fallback without changing facts]
 ```
 
-This is an **extension design**, not the current runtime. It would require implementation, groundedness and failure evaluations, provider/privacy approval, timeout and cost controls, and tests proving that generated content cannot fabricate qualifications or bypass eligibility. LangGraph and a model SDK being installed do not establish those capabilities.
+This is an **extension design beyond the two pilot workflows**, not the current resume or policy runtime. It would require implementation, groundedness and failure evaluations, provider/privacy approval, timeout and cost controls, and tests proving that generated content cannot fabricate qualifications or bypass eligibility. LangGraph and a model SDK being installed do not establish those additional capabilities.
 
 ## Resume processing and human review
 

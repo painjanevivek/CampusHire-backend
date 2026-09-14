@@ -55,9 +55,14 @@ async def process_agent_run(
     *,
     generator: StructuredGenerator | None,
     settings: Settings,
+    lease_owner: str,
 ) -> None:
     run = await db.get(AgentRun, run_id)
-    if run is None or run.status != "running":
+    if (
+        run is None
+        or run.status != "running"
+        or run.lease_owner != lease_owner
+    ):
         return
     started = time.perf_counter()
     initial_active_time_ms = run.active_time_ms
@@ -65,6 +70,8 @@ async def process_agent_run(
         if generator is None:
             raise AgentValidationFailure("generation_provider_unavailable")
         context, evidence = await _collect_context(db, run, settings)
+        if not await _claim_is_current(db, run, lease_owner, lock=True):
+            return
         run.source_fingerprint = source_fingerprint(
             {"context": context, "evidence": evidence, "target": str(run.target_id)}
         )
@@ -78,6 +85,8 @@ async def process_agent_run(
 
         graph = _build_graph(db, run, generator, settings)
         state = await graph.ainvoke({"context": context, "evidence": evidence})
+        if not await _claim_is_current(db, run, lease_owner, lock=True):
+            return
         decision = PlannerDecision.model_validate(state["decision"])
         if decision.action == "request_clarification":
             interrupt_id = f"clarify-{run.revision}"
@@ -108,17 +117,52 @@ async def process_agent_run(
         await _append_event(db, run, "awaiting_review", "A validated proposal is ready for review.")
         await db.commit()
     except AgentBudgetExhausted:
-        await _fail(db, run, "run_budget_exhausted", "The run reached its configured limit.")
+        if await _claim_is_current(db, run, lease_owner, lock=True):
+            await _fail(db, run, "run_budget_exhausted", "The run reached its configured limit.")
     except (AgentValidationFailure, ValidationError) as error:
-        await _fail(db, run, str(error), "The proposal could not be validated safely.")
+        if await _claim_is_current(db, run, lease_owner, lock=True):
+            await _fail(db, run, str(error), "The proposal could not be validated safely.")
     except Exception:
-        await _fail(db, run, "agent_execution_failed", "The task could not be completed.")
+        if await _claim_is_current(db, run, lease_owner, lock=True):
+            await _fail(db, run, "agent_execution_failed", "The task could not be completed.")
     finally:
         elapsed = round((time.perf_counter() - started) * 1_000)
-        run.active_time_ms = initial_active_time_ms + elapsed
-        run.lease_owner = None
-        run.lease_expires_at = None
-        await db.commit()
+        current = await db.scalar(
+            select(AgentRun)
+            .where(AgentRun.id == run_id)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if current is not None and current.lease_owner == lease_owner:
+            current.active_time_ms = initial_active_time_ms + elapsed
+            current.lease_owner = None
+            current.lease_expires_at = None
+            await db.commit()
+        else:
+            await db.rollback()
+
+
+async def _claim_is_current(
+    db: AsyncSession,
+    run: AgentRun,
+    lease_owner: str,
+    *,
+    lock: bool,
+) -> bool:
+    statement = (
+        select(AgentRun)
+        .where(AgentRun.id == run.id)
+        .execution_options(populate_existing=True)
+    )
+    if lock:
+        statement = statement.with_for_update()
+    current = await db.scalar(statement)
+    return bool(
+        current is not None
+        and current.status == "running"
+        and not current.cancel_requested
+        and current.lease_owner == lease_owner
+    )
 
 
 def _build_graph(
