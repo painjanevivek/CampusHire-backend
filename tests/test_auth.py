@@ -21,6 +21,7 @@ from app.models.auth import (
     InstitutionRegistrationRequest,
     MembershipInvitation,
     MembershipStatus,
+    PlatformAdminAssignment,
     Session,
     StudentRegistrationRequest,
     TermsAcceptance,
@@ -31,6 +32,7 @@ from app.models.communications import EmailDelivery
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import hash_password, hash_secret, totp_code
+from app.modules.platform_admin.service import transfer_platform_admin
 
 engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -183,9 +185,7 @@ async def test_signup_creates_a_verified_student_session_without_activation(
         profile = await db.scalar(select(StudentProfile).where(StudentProfile.user_id == user.id))
         acceptances = list(
             (
-                await db.scalars(
-                    select(TermsAcceptance).where(TermsAcceptance.user_id == user.id)
-                )
+                await db.scalars(select(TermsAcceptance).where(TermsAcceptance.user_id == user.id))
             ).all()
         )
         assert membership is not None
@@ -268,10 +268,17 @@ async def test_demo_login_is_hidden_when_disabled(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "demo_login_unavailable"
 
 
-async def test_demo_login_uses_server_credentials_and_can_bypass_admin_mfa_locally(
+async def test_demo_login_uses_server_credentials_when_mfa_is_not_enrolled(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, _, demo_admin, _ = await seed_institution_memberships()
+    async with TestSession() as db:
+        await transfer_platform_admin(
+            db,
+            user_id=demo_admin.id,
+            reason="Explicit synthetic test administrator migration",
+            actor_user_id=None,
+        )
     with monkeypatch.context() as patch:
         patch.setenv("DEMO_LOGIN_ENABLED", "true")
         patch.setenv("DEMO_ADMIN_MFA_BYPASS", "true")
@@ -297,25 +304,13 @@ async def test_demo_login_uses_server_credentials_and_can_bypass_admin_mfa_local
             json={"role": "tnp_admin"},
         )
         assert admin.status_code == 200, admin.text
-        assert admin.json()["user"]["role"] == "tnp_admin"
+        assert admin.json()["user"]["role"] == "platform_admin"
         assert admin.json()["next_step"] == "complete"
         assert client.get("/api/v1/auth/me").status_code == 200
         async with TestSession() as db:
-            session = await db.scalar(
-                select(Session).where(Session.user_id == demo_admin.id)
-            )
+            session = await db.scalar(select(Session).where(Session.user_id == demo_admin.id))
             assert session is not None
             assert session.mfa_verified_at is not None
-            events = list(
-                (
-                    await db.scalars(
-                        select(AuditEvent).where(
-                            AuditEvent.event_type == "auth.demo_mfa_bypass"
-                        )
-                    )
-                ).all()
-            )
-            assert len(events) == 1
 
         patch.setenv("DEMO_ADMIN_MFA_BYPASS", "false")
         get_settings.cache_clear()
@@ -326,7 +321,7 @@ async def test_demo_login_uses_server_credentials_and_can_bypass_admin_mfa_local
             json={"role": "tnp_admin"},
         )
         assert protected_admin.status_code == 200, protected_admin.text
-        assert protected_admin.json()["next_step"] == "mfa_setup"
+        assert protected_admin.json()["next_step"] == "complete"
     get_settings.cache_clear()
 
 
@@ -757,16 +752,86 @@ async def seed_institution_owner() -> tuple[Institution, User]:
         return institution, owner
 
 
+async def seed_platform_admin() -> User:
+    async with TestSession() as db:
+        admin = User(
+            email="platform-admin@example.com",
+            username="platform-admin",
+            password_hash=hash_password("a secure platform passphrase"),
+            role=UserRole.PLATFORM_ADMIN.value,
+        )
+        db.add(admin)
+        await db.flush()
+        db.add(PlatformAdminAssignment(singleton_key=1, user_id=admin.id))
+        await db.commit()
+        return admin
+
+
+async def test_legacy_owner_uses_tnp_workspace_not_platform_admin_workspace(
+    client: TestClient,
+) -> None:
+    _, owner = await seed_institution_owner()
+
+    response = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "identifier": owner.username,
+            "password": "a secure owner passphrase",
+            "workspace": "admin",
+        },
+    )
+
+    assert response.status_code == 401
+
+    response = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "identifier": owner.username,
+            "password": "a secure owner passphrase",
+            "workspace": "tnp",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["user"]["workspace"] == "tnp"
+
+
+async def test_singleton_platform_admin_receives_only_platform_capabilities(
+    client: TestClient,
+) -> None:
+    await seed_platform_admin()
+
+    response = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "identifier": "platform-admin",
+            "password": "a secure platform passphrase",
+            "workspace": "admin",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    user = response.json()["user"]
+    assert user["workspace"] == "admin"
+    assert "platform.institutions.manage" in user["capabilities"]
+    assert "applications.review" not in user["capabilities"]
+    assert client.get("/api/v1/platform/dashboard").status_code == 200
+    assert client.get("/api/v1/admin/recruitment/applications").status_code == 403
+
+
 @pytest.mark.asyncio
-async def test_owner_provisions_staff_credentials_with_first_sign_in_gates(
+async def test_platform_admin_provisions_staff_credentials_with_first_sign_in_gates(
     client: TestClient,
 ) -> None:
     institution, _ = await seed_institution_owner()
-    sign_in(client, "owner.admin", "a secure owner passphrase")
+    await seed_platform_admin()
+    sign_in(client, "platform-admin", "a secure platform passphrase")
     csrf = client.cookies[get_settings().csrf_cookie_name]
 
     created = client.post(
-        f"/api/v1/institutions/{institution.id}/staff-accounts",
+        f"/api/v1/platform/institutions/{institution.id}/staff-accounts",
         headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
         json={
             "username": "placement.reviewer",
@@ -814,7 +879,7 @@ async def test_owner_provisions_staff_credentials_with_first_sign_in_gates(
         json={"terms_version": "2026-08-28", "privacy_version": "2026-08-28"},
     )
     assert accepted.status_code == 200, accepted.text
-    assert accepted.json()["next_step"] == "mfa_setup"
+    assert accepted.json()["next_step"] == "complete"
 
     headers = csrf_headers(client)
     setup = client.post("/api/v1/auth/mfa/setup", headers=headers)
@@ -834,9 +899,7 @@ async def test_owner_provisions_staff_credentials_with_first_sign_in_gates(
         assert user.password_hash.startswith("$argon2id$")
         acceptances = list(
             (
-                await db.scalars(
-                    select(TermsAcceptance).where(TermsAcceptance.user_id == user.id)
-                )
+                await db.scalars(select(TermsAcceptance).where(TermsAcceptance.user_id == user.id))
             ).all()
         )
         assert {item.document_type for item in acceptances} == {"terms", "privacy"}

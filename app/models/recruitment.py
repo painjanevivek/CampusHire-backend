@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
@@ -278,6 +278,13 @@ class Application(Base, TimestampMixin):
     idempotency_key: Mapped[str] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(32), default="submitted", index=True)
     revision: Mapped[int] = mapped_column(Integer, default=1)
+    assignee_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    review_due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    assignment_revision: Mapped[int] = mapped_column(Integer, default=0)
     role_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     resume_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     facts_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
@@ -420,11 +427,48 @@ class ApplicationAppeal(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(32), default="submitted", index=True)
     reason: Mapped[str] = mapped_column(String(1000))
     supporting_evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
+    assignee_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    escalation_state: Mapped[str] = mapped_column(String(32), default="none", index=True)
+    disputed_decision_actor_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     administrator_response: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     resolved_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CaseAssignmentHistory(Base):
+    """Append-only ownership history for applications and appeals."""
+
+    __tablename__ = "case_assignment_history"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), index=True
+    )
+    case_type: Mapped[str] = mapped_column(String(24), index=True)
+    case_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    from_assignee_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    to_assignee_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    reason: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
 
 
 class SavedOpportunity(Base):

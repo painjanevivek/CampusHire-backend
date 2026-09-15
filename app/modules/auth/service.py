@@ -164,15 +164,17 @@ async def authenticate(
     has_membership = await db.scalar(
         select(InstitutionMembership.id).where(InstitutionMembership.user_id == user.id).limit(1)
     )
-    if has_membership is not None and membership is None:
+    if (
+        has_membership is not None
+        and membership is None
+        and user.role != UserRole.PLATFORM_ADMIN.value
+    ):
         raise InvalidCredentialsError
     effective_role = membership.role if membership is not None else user.role
     if required_role is not None and effective_role != required_role:
         raise InvalidCredentialsError
     if required_roles is not None and effective_role not in required_roles:
         raise InvalidCredentialsError
-    requires_mfa = effective_role in ADMIN_ROLE_VALUES
-    bypasses_mfa = requires_mfa and demo_mfa_bypass
     enrollment = await db.scalar(
         select(MfaEnrollment).where(
             MfaEnrollment.user_id == user.id,
@@ -180,6 +182,10 @@ async def authenticate(
             MfaEnrollment.disabled_at.is_(None),
         )
     )
+    # MFA is optional until an administrator elects to enrol an authenticator
+    # from Account settings. Enrolment makes it mandatory for later sign-ins.
+    requires_mfa = effective_role in ADMIN_ROLE_VALUES and enrollment is not None
+    bypasses_mfa = requires_mfa and demo_mfa_bypass
     next_step = "terms_acceptance" if user.requires_terms_acceptance else "complete"
     if requires_mfa and not bypasses_mfa and not user.requires_terms_acceptance:
         next_step = "mfa_challenge" if enrollment is not None else "mfa_setup"
@@ -406,7 +412,7 @@ async def accept_staff_terms(
         )
     )
     await db.commit()
-    return "mfa_challenge" if enrollment is not None else "mfa_setup"
+    return "mfa_challenge" if enrollment is not None else "complete"
 
 
 async def get_invitation(db: AsyncSession, raw_token: str) -> MembershipInvitation:
@@ -532,6 +538,17 @@ async def confirm_password_reset(
         dedupe_key=f"security-password-reset:{record.id}",
     )
     await db.commit()
+
+
+async def is_mfa_enabled(db: AsyncSession, user_id: UUID) -> bool:
+    enrollment_id = await db.scalar(
+        select(MfaEnrollment.id).where(
+            MfaEnrollment.user_id == user_id,
+            MfaEnrollment.enrolled_at.is_not(None),
+            MfaEnrollment.disabled_at.is_(None),
+        )
+    )
+    return enrollment_id is not None
 
 
 async def begin_mfa_setup(db: AsyncSession, session: Session) -> str:

@@ -45,7 +45,11 @@ class Settings(BaseSettings):
     demo_student_email: EmailStr | None = None
     demo_student_password: SecretStr | None = None
     demo_admin_email: EmailStr | None = None
+    demo_admin_username: str = Field(min_length=3, max_length=64, default="admin")
     demo_admin_password: SecretStr | None = None
+    demo_tnp_email: EmailStr | None = None
+    demo_tnp_username: str = Field(min_length=3, max_length=64, default="tnp")
+    demo_tnp_password: SecretStr | None = None
     resume_storage_path: str = ".data/resumes"
     resume_storage_backend: Literal["local", "oci"] = "local"
     oci_auth_mode: Literal["instance_principal", "api_key"] = "instance_principal"
@@ -80,6 +84,13 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_generation_model: str | None = None
     gemini_timeout_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    copilot_generation_provider: Literal["gemini", "openrouter"] = "gemini"
+    openrouter_api_key: SecretStr | None = None
+    openrouter_model: str | None = None
+    openrouter_base_url: AnyHttpUrl = AnyHttpUrl("https://openrouter.ai/api/v1")
+    openrouter_timeout_seconds: float = Field(default=30.0, ge=1.0, le=120.0)
+    openrouter_site_url: AnyHttpUrl | None = None
+    openrouter_app_name: str = Field(default="CampusHire", min_length=1, max_length=80)
     ai_generation: bool = False
     ai_resume_studio: bool = False
     student_copilot: bool = False
@@ -137,7 +148,11 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Demo login requires configured student and administrator credentials"
                 )
-            passwords = (self.demo_student_password, self.demo_admin_password)
+            passwords = (
+                self.demo_student_password,
+                self.demo_admin_password,
+                self.demo_tnp_password,
+            )
             if any(
                 password is not None and len(password.get_secret_value()) < 12
                 for password in passwords

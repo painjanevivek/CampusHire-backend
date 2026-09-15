@@ -94,8 +94,8 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE applications
-        SET packet_digest = md5(CAST(id AS text) || ':legacy-import')
-            || md5(':legacy-import:' || CAST(id AS text))
+        SET packet_digest = md5(CAST(id AS text) || chr(58) || 'legacy-import')
+            || md5(chr(58) || 'legacy-import' || chr(58) || CAST(id AS text))
         WHERE packet_digest IS NULL
         """
     )

@@ -1,15 +1,16 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.auth import (
-    ADMIN_ROLE_VALUES,
+    TNP_ROLE_VALUES,
     InstitutionMembership,
     MembershipStatus,
+    Session,
     User,
     UserRole,
 )
@@ -41,8 +42,8 @@ async def create_staff_account(
     actor_role: str,
     correlation_id: str | None,
 ) -> tuple[User, InstitutionMembership]:
-    if actor_role != UserRole.TNP_OWNER.value:
-        raise MembershipPermissionError("Only an institution owner can create T&P accounts")
+    if actor_role != UserRole.PLATFORM_ADMIN.value:
+        raise MembershipPermissionError("Only the Platform Admin can create T&P accounts")
     if role not in {
         UserRole.TNP_ADMIN.value,
         UserRole.TNP_REVIEWER.value,
@@ -129,9 +130,11 @@ async def paginate_memberships(
     page: int,
     page_size: int,
 ) -> tuple[list[InstitutionMembership], int]:
-    statement = select(InstitutionMembership).join(
-        User, User.id == InstitutionMembership.user_id
-    ).where(InstitutionMembership.institution_id == institution_id)
+    statement = (
+        select(InstitutionMembership)
+        .join(User, User.id == InstitutionMembership.user_id)
+        .where(InstitutionMembership.institution_id == institution_id)
+    )
     if query:
         needle = f"%{query.strip()}%"
         statement = statement.where(
@@ -178,8 +181,8 @@ async def verify_membership(
     actor_role: str,
     correlation_id: str | None,
 ) -> InstitutionMembership:
-    if role in ADMIN_ROLE_VALUES and actor_role != UserRole.TNP_OWNER.value:
-        raise MembershipPermissionError("Only an institution owner can assign administrator roles")
+    if role in TNP_ROLE_VALUES and actor_role != UserRole.PLATFORM_ADMIN.value:
+        raise MembershipPermissionError("Only the Platform Admin can assign T&P roles")
     user = await db.scalar(select(User).where(User.id == user_id, User.is_active.is_(True)))
     if user is None:
         raise MembershipUserNotFoundError
@@ -229,6 +232,7 @@ async def update_membership_status(
     actor_user_id: UUID,
     actor_role: str,
     correlation_id: str | None,
+    role: str | None = None,
 ) -> InstitutionMembership | None:
     membership = await db.scalar(
         select(InstitutionMembership).where(
@@ -238,35 +242,25 @@ async def update_membership_status(
     )
     if membership is None:
         return None
-    if membership.role in ADMIN_ROLE_VALUES:
-        if actor_role != UserRole.TNP_OWNER.value:
-            raise MembershipPermissionError(
-                "Only an institution owner can change an administrator membership"
-            )
-        if membership.user_id == actor_user_id:
-            raise MembershipPermissionError(
-                "Use another institution owner to change your administrator membership"
-            )
-        if (
-            membership.role == UserRole.TNP_OWNER.value
-            and membership.status == MembershipStatus.ACTIVE.value
-            and status != MembershipStatus.ACTIVE.value
-        ):
-            active_owner_count = await db.scalar(
-                select(func.count())
-                .select_from(InstitutionMembership)
-                .where(
-                    InstitutionMembership.institution_id == institution_id,
-                    InstitutionMembership.role == UserRole.TNP_OWNER.value,
-                    InstitutionMembership.status == MembershipStatus.ACTIVE.value,
-                )
-            )
-            if (active_owner_count or 0) <= 1:
-                raise MembershipPermissionError(
-                    "At least one active institution owner must remain"
-                )
+    if membership.role in TNP_ROLE_VALUES:
+        if actor_role != UserRole.PLATFORM_ADMIN.value:
+            raise MembershipPermissionError("Only the Platform Admin can change a T&P membership")
+    if role is not None and role not in {
+        UserRole.TNP_ADMIN.value,
+        UserRole.TNP_REVIEWER.value,
+        UserRole.TNP_AUDITOR.value,
+    }:
+        raise MembershipPermissionError("Unsupported T&P role")
     previous_status = membership.status
+    previous_role = membership.role
     membership.status = status
+    if role is not None:
+        membership.role = role
+        user = await db.get(User, membership.user_id)
+        if user is not None:
+            user.role = role
+    if previous_status != status or previous_role != membership.role:
+        await db.execute(delete(Session).where(Session.user_id == membership.user_id))
     record_audit_event(
         db,
         actor_user_id=actor_user_id,
@@ -276,7 +270,13 @@ async def update_membership_status(
         resource_id=str(membership.id),
         reason=reason,
         correlation_id=correlation_id,
-        details={"previous_status": previous_status, "status": status, "role": membership.role},
+        details={
+            "previous_status": previous_status,
+            "status": status,
+            "previous_role": previous_role,
+            "role": membership.role,
+            "sessions_revoked": previous_status != status or previous_role != membership.role,
+        },
     )
     await db.commit()
     await db.refresh(membership)

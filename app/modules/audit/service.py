@@ -63,7 +63,7 @@ def record_audit_event(
 
 
 def _audit_filters(
-    institution_id: UUID,
+    institution_id: UUID | None,
     *,
     actor_user_id: UUID | None = None,
     resource_type: str | None = None,
@@ -73,7 +73,9 @@ def _audit_filters(
     start_at: datetime | None = None,
     end_at: datetime | None = None,
 ) -> list[ColumnElement[bool]]:
-    filters: list[ColumnElement[bool]] = [AuditEvent.institution_id == institution_id]
+    filters: list[ColumnElement[bool]] = []
+    if institution_id is not None:
+        filters.append(AuditEvent.institution_id == institution_id)
     if actor_user_id:
         filters.append(AuditEvent.actor_user_id == actor_user_id)
     if resource_type:
@@ -108,7 +110,7 @@ def audit_response(event: AuditEvent) -> AuditEventResponse:
 
 async def list_audit_events(
     db: AsyncSession,
-    institution_id: UUID,
+    institution_id: UUID | None,
     *,
     actor_user_id: UUID | None = None,
     resource_type: str | None = None,
@@ -152,7 +154,7 @@ async def list_audit_events(
 
 async def export_audit_events(
     db: AsyncSession,
-    institution_id: UUID,
+    institution_id: UUID | None,
     **filters: Any,
 ) -> AsyncIterator[AuditEventResponse]:
     conditions = _audit_filters(

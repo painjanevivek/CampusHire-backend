@@ -16,6 +16,7 @@ from app.models.auth import (
     Institution,
     InstitutionMembership,
     MembershipStatus,
+    PlatformAdminAssignment,
     Session,
     User,
 )
@@ -25,6 +26,22 @@ Database = Annotated[AsyncSession, Depends(get_db)]
 
 ADMIN_ROLES = ADMIN_ROLE_VALUES
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
+    "platform_admin": frozenset(
+        {
+            "platform.dashboard.read",
+            "platform.institutions.read",
+            "platform.institutions.manage",
+            "platform.staff.manage",
+            "platform.records.read",
+            "platform.reports.read",
+            "platform.operations.read",
+            "platform.operations.manage",
+            "platform.audit.read",
+            "platform.audit.export",
+            "platform.settings.read",
+            "platform.settings.manage",
+        }
+    ),
     "tnp_owner": frozenset(
         {
             "institution.manage",
@@ -67,6 +84,18 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ),
     "tnp_auditor": frozenset({"recruitment.read", "operations.read", "audit.read", "audit.export"}),
 }
+
+
+def permissions_for_role(role: str) -> frozenset[str]:
+    return ROLE_PERMISSIONS.get(role, frozenset())
+
+
+def workspace_for_role(role: str) -> str:
+    if role == "platform_admin":
+        return "admin"
+    if role in ADMIN_ROLES:
+        return "tnp"
+    return "student"
 
 
 def _is_expired(value: datetime) -> bool:
@@ -179,9 +208,26 @@ async def get_current_principal(
     institution_id = (
         membership.institution_id if membership is not None else session.user.institution_id
     )
-    if effective_role in ADMIN_ROLES and institution_id is not None:
+    if effective_role == "platform_admin":
+        assignment = await db.get(PlatformAdminAssignment, 1)
+        if (
+            assignment is None
+            or assignment.user_id != session.user.id
+            or membership is not None
+            or institution_id is not None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "platform_admin_assignment_required",
+                    "message": "This account is not the active Platform Admin.",
+                },
+            )
+    if institution_id is not None:
         institution = await db.get(Institution, institution_id)
-        is_onboarding_request = "/admin/onboarding" in request.url.path
+        is_onboarding_request = any(
+            path in request.url.path for path in ("/tnp/onboarding", "/admin/onboarding")
+        )
         is_auth_request = "/auth/" in request.url.path
         if (
             institution is not None
@@ -270,7 +316,7 @@ def require_permissions(*permissions: str):  # type: ignore[no-untyped-def]
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
                     "code": "permission_denied",
-                    "message": "This administrator role cannot perform that action.",
+                    "message": "This workspace role cannot perform that action.",
                 },
             )
         return principal

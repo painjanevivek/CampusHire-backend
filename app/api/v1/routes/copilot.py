@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.ai.providers.base import StructuredGenerator
-from app.ai.providers.gemini import GeminiProvider
+from app.ai.providers.factory import build_copilot_generator
 from app.core.rate_limit import enforce_fixed_window_limit
 from app.models.auth import UserRole
 from app.modules.auth.dependencies import (
@@ -53,7 +53,7 @@ tnp_router = APIRouter(
 
 def _generator() -> StructuredGenerator | None:
     try:
-        return GeminiProvider()
+        return build_copilot_generator()
     except RuntimeError:
         return None
 

@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,14 +10,24 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import Base
 from app.models.auth import Institution, InstitutionMembership, MembershipStatus, User, UserRole
-from app.models.privacy import DataDeletionRequest
+from app.models.privacy import DataDeletionRequest, LegalHold
 from app.models.profile import StudentProfile
 from app.models.recruitment import Application
 from app.models.resume import Resume, ResumeProcessingJob, ResumeVersion, ScanStatus
 from app.modules.auth.security import hash_password
+from app.modules.privacy.schemas import (
+    LegalHoldCreate,
+    LegalHoldRelease,
+    PrivacyRequestCreate,
+    PrivacyRequestDecision,
+)
 from app.modules.privacy.service import (
     PrivacyError,
+    create_legal_hold,
+    create_privacy_request,
+    decide_privacy_request,
     process_next_deletion_cleanup,
+    release_legal_hold,
     request_student_deletion,
 )
 from app.modules.resumes.storage import LocalObjectStore, ObjectStoreError
@@ -231,3 +241,100 @@ async def test_private_cleanup_records_a_safe_terminal_failure() -> None:
         assert request.status == "failed"
         assert request.safe_error_code == "private_object_cleanup_unavailable"
         assert "secret" not in request.safe_error_code
+
+
+async def test_privacy_hold_requires_a_real_scoped_record_and_preserves_release_history() -> None:
+    async with Session() as db:
+        institution, student = await seed_student(db)
+        officer = User(
+            institution_id=institution.id,
+            email="privacy-officer@example.edu",
+            password_hash=hash_password("a secure officer passphrase"),
+            role=UserRole.TNP_ADMIN.value,
+        )
+        db.add(officer)
+        await db.flush()
+        db.add_all(
+            [
+                InstitutionMembership(
+                    institution_id=institution.id,
+                    user_id=student.id,
+                    role=UserRole.STUDENT.value,
+                    status=MembershipStatus.ACTIVE.value,
+                ),
+                InstitutionMembership(
+                    institution_id=institution.id,
+                    user_id=officer.id,
+                    role=UserRole.TNP_ADMIN.value,
+                    status=MembershipStatus.ACTIVE.value,
+                ),
+            ]
+        )
+        await db.commit()
+        request = await create_privacy_request(
+            db,
+            user_id=student.id,
+            institution_id=institution.id,
+            payload=PrivacyRequestCreate(request_type="erasure", details="Remove optional data"),
+            correlation_id="privacy-hold-workflow",
+        )
+        with pytest.raises(PrivacyError, match="privacy_request_active_hold_required"):
+            await decide_privacy_request(
+                db,
+                request_id=request.id,
+                institution_id=institution.id,
+                actor_user_id=officer.id,
+                payload=PrivacyRequestDecision(
+                    action="hold",
+                    owner_user_id=officer.id,
+                    reason="A verified retention reason is still required.",
+                    expected_updated_at=request.updated_at,
+                ),
+                correlation_id="privacy-hold-workflow",
+                max_cleanup_attempts=3,
+            )
+
+        hold = await create_legal_hold(
+            db,
+            institution_id=institution.id,
+            actor_user_id=officer.id,
+            payload=LegalHoldCreate(
+                user_id=student.id,
+                scope={"privacy_request_id": str(request.id)},
+                reason="Placement evidence retention period remains active.",
+                owner_user_id=officer.id,
+                review_at=datetime.now(UTC) + timedelta(days=30),
+            ),
+            correlation_id="privacy-hold-workflow",
+        )
+        held = await decide_privacy_request(
+            db,
+            request_id=request.id,
+            institution_id=institution.id,
+            actor_user_id=officer.id,
+            payload=PrivacyRequestDecision(
+                action="hold",
+                owner_user_id=officer.id,
+                reason="Processing is paused by the recorded retention hold.",
+                expected_updated_at=request.updated_at,
+            ),
+            correlation_id="privacy-hold-workflow",
+            max_cleanup_attempts=3,
+        )
+        assert held.status == "held"
+
+        released = await release_legal_hold(
+            db,
+            institution_id=institution.id,
+            hold_id=hold.id,
+            actor_user_id=officer.id,
+            payload=LegalHoldRelease(
+                reason="The approved retention period has concluded.",
+                expected_updated_at=hold.updated_at,
+            ),
+            correlation_id="privacy-hold-workflow",
+        )
+        assert released.released_at is not None
+        stored = await db.get(LegalHold, hold.id)
+        assert stored is not None
+        assert stored.release_reason == "The approved retention period has concluded."

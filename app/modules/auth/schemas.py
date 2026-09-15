@@ -120,7 +120,7 @@ class SignInRequest(BaseModel):
 
 
 class DemoSignInRequest(BaseModel):
-    role: Literal["student", "tnp_admin"]
+    role: Literal["student", "tnp_admin", "platform_admin"]
 
 
 class UserResponse(BaseModel):
@@ -133,6 +133,8 @@ class UserResponse(BaseModel):
     institution_id: UUID | None = None
     membership_id: UUID | None = None
     membership_status: str | None = None
+    workspace: Literal["admin", "tnp", "student"] = "student"
+    capabilities: list[str] = Field(default_factory=list)
 
 
 class SignInResponse(BaseModel):
@@ -185,6 +187,10 @@ class MfaCodeRequest(BaseModel):
 class MfaSetupResponse(BaseModel):
     secret: str
     provisioning_uri: str
+
+
+class MfaStatusResponse(BaseModel):
+    enabled: bool
 
 
 class MfaConfirmResponse(BaseModel):

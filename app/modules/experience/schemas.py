@@ -54,6 +54,10 @@ class ApplicationQueueItem(BaseModel):
     company_name: str
     status: str
     revision: int
+    assignee_user_id: UUID | None = None
+    review_due_at: datetime | None = None
+    assignment_revision: int = 0
+    due_state: Literal["unassigned", "on_track", "due_soon", "overdue", "complete"]
     created_at: datetime
     open_requests: int
     awaiting_review: int

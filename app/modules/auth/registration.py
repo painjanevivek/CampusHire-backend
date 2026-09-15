@@ -93,7 +93,9 @@ async def start_student_registration(
     institution_id = (
         invitation.institution_id
         if invitation is not None
-        else domain_record.institution_id if domain_record is not None else None
+        else domain_record.institution_id
+        if domain_record is not None
+        else None
     )
     attempt = StudentRegistrationRequest(
         email=normalized_email,
@@ -142,7 +144,9 @@ async def start_student_registration(
                 verified_by_user_id=(
                     invitation.created_by_user_id
                     if invitation is not None
-                    else domain_record.verified_by_user_id if domain_record is not None else None
+                    else domain_record.verified_by_user_id
+                    if domain_record is not None
+                    else None
                 ),
             ),
             StudentProfile(
@@ -242,9 +246,7 @@ async def start_institution_registration(
         (
             await db.scalars(
                 select(InstitutionRegistrationRequest.institution_name)
-                .where(
-                    InstitutionRegistrationRequest.status != RegistrationStatus.REJECTED.value
-                )
+                .where(InstitutionRegistrationRequest.status != RegistrationStatus.REJECTED.value)
                 .order_by(InstitutionRegistrationRequest.created_at.desc())
                 .limit(500)
             )
@@ -333,6 +335,7 @@ async def decide_institution_registration(
     approve: bool,
     reason: str | None,
     correlation_id: str | None,
+    reviewed_by_user_id: UUID | None = None,
 ) -> InstitutionRegistrationRequest | None:
     item = await db.scalar(
         select(InstitutionRegistrationRequest)
@@ -353,8 +356,10 @@ async def decide_institution_registration(
         item.status = RegistrationStatus.REJECTED.value
         item.rejection_reason = reason.strip()[:500]
         item.reviewed_at = datetime.now(UTC)
+        item.reviewed_by_user_id = reviewed_by_user_id
         record_audit_event(
             db,
+            actor_user_id=reviewed_by_user_id,
             event_type="registration.institution.rejected",
             resource_type="institution_registration_request",
             resource_id=str(item.id),
@@ -379,6 +384,7 @@ async def decide_institution_registration(
     item.institution_id = provisioned.institution.id
     item.status = RegistrationStatus.APPROVED.value
     item.reviewed_at = datetime.now(UTC)
+    item.reviewed_by_user_id = reviewed_by_user_id
     db.add(
         InstitutionDomain(
             institution_id=provisioned.institution.id,
@@ -389,6 +395,7 @@ async def decide_institution_registration(
     )
     record_audit_event(
         db,
+        actor_user_id=reviewed_by_user_id,
         institution_id=provisioned.institution.id,
         event_type="registration.institution.approved",
         resource_type="institution_registration_request",

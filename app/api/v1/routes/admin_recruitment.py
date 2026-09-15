@@ -30,6 +30,9 @@ from app.modules.recruitment.schemas import (
     BulkApplicationApplyResponse,
     BulkApplicationPreviewResponse,
     BulkApplicationStatusRequest,
+    CaseAssignmentHistoryResponse,
+    CaseAssignmentRequest,
+    CaseClaimRequest,
     CompanyCreate,
     CompanyResponse,
     CompanyUpdate,
@@ -48,6 +51,9 @@ from app.modules.recruitment.service import (
     RecruitmentError,
     application_appeal_response,
     apply_bulk_application_status,
+    assign_appeal_case,
+    assign_application_case,
+    claim_application_case,
     company_response,
     create_company,
     create_drive,
@@ -57,6 +63,7 @@ from app.modules.recruitment.service import (
     drive_response,
     duplicate_drive,
     list_admin_applications,
+    list_case_assignment_history,
     list_companies,
     list_drives,
     list_roles,
@@ -78,7 +85,7 @@ from app.modules.recruitment.service import (
 )
 
 router = APIRouter(
-    prefix="/admin/recruitment",
+    prefix="/recruitment",
     dependencies=[Depends(require_permissions("recruitment.read"))],
 )
 
@@ -89,6 +96,8 @@ def _http_error(error: RecruitmentError) -> HTTPException:
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=code)
     if code in {
         "revision_conflict",
+        "assignment_revision_conflict",
+        "application_already_assigned",
         "company_name_exists",
         "application_appeal_already_resolved",
         "published_drive_is_immutable",
@@ -337,9 +346,7 @@ async def save_published_drive(
     principal: CurrentPrincipal,
 ) -> DriveResponse:
     try:
-        drive, activated_role_ids = await save_drive_changes(
-            db, principal.institution_id, drive_id
-        )
+        drive, activated_role_ids = await save_drive_changes(db, principal.institution_id, drive_id)
         for role_id in activated_role_ids:
             await publish_pending_form_for_role(db, principal.institution_id, role_id)
         response = await drive_response(db, drive)
@@ -670,6 +677,10 @@ async def read_applications(
     principal: CurrentPrincipal,
     role_id: UUID | None = None,
     application_status: str | None = None,
+    work_view: Annotated[
+        str | None,
+        Query(pattern=r"^(my_work|unassigned|awaiting_student|responses_received|overdue)$"),
+    ] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 25,
 ) -> AdminApplicationPage:
@@ -680,7 +691,149 @@ async def read_applications(
         application_status,
         page=page,
         page_size=page_size,
+        actor_user_id=principal.user.id,
+        actor_role=principal.role,
+        work_view=work_view,
     )
+
+
+@router.post(
+    "/applications/{application_id}/claim",
+    response_model=ApplicationResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.review")),
+    ],
+)
+async def claim_application(
+    request: Request,
+    application_id: UUID,
+    payload: CaseClaimRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ApplicationResponse:
+    try:
+        application = await claim_application_case(
+            db,
+            institution_id=principal.institution_id,
+            application_id=application_id,
+            actor_user_id=principal.user.id,
+            expected_revision=payload.expected_revision,
+        )
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request,
+        db,
+        principal,
+        event_type="application.assigned",
+        resource_type="application",
+        resource_id=application.id,
+        details={"assignee_user_id": str(principal.user.id), "source": "claim"},
+    )
+    await db.commit()
+    return await response_for_application(db, application)
+
+
+@router.post(
+    "/applications/{application_id}/assignment",
+    response_model=ApplicationResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.bulk")),
+    ],
+)
+async def assign_application(
+    request: Request,
+    application_id: UUID,
+    payload: CaseAssignmentRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ApplicationResponse:
+    try:
+        application = await assign_application_case(
+            db,
+            institution_id=principal.institution_id,
+            application_id=application_id,
+            actor_user_id=principal.user.id,
+            payload=payload,
+        )
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request,
+        db,
+        principal,
+        event_type="application.assigned",
+        resource_type="application",
+        resource_id=application.id,
+        reason=payload.reason,
+        details={
+            "assignee_user_id": (
+                str(payload.assignee_user_id) if payload.assignee_user_id else "unassigned"
+            )
+        },
+    )
+    await db.commit()
+    return await response_for_application(db, application)
+
+
+@router.get(
+    "/applications/{application_id}/assignment-history",
+    response_model=list[CaseAssignmentHistoryResponse],
+)
+async def read_application_assignment_history(
+    application_id: UUID, db: Database, principal: CurrentPrincipal
+) -> list[CaseAssignmentHistoryResponse]:
+    return await list_case_assignment_history(
+        db,
+        institution_id=principal.institution_id,
+        case_type="application",
+        case_id=application_id,
+    )
+
+
+@router.post(
+    "/application-appeals/{appeal_id}/assignment",
+    response_model=ApplicationAppealResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.bulk")),
+    ],
+)
+async def assign_application_appeal(
+    request: Request,
+    appeal_id: UUID,
+    payload: CaseAssignmentRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ApplicationAppealResponse:
+    try:
+        appeal = await assign_appeal_case(
+            db,
+            institution_id=principal.institution_id,
+            appeal_id=appeal_id,
+            actor_user_id=principal.user.id,
+            payload=payload,
+        )
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request,
+        db,
+        principal,
+        event_type="application.appeal_assigned",
+        resource_type="application_appeal",
+        resource_id=appeal.id,
+        reason=payload.reason,
+        details={
+            "assignee_user_id": (
+                str(payload.assignee_user_id) if payload.assignee_user_id else "unassigned"
+            )
+        },
+    )
+    await db.commit()
+    return application_appeal_response(appeal)
 
 
 @router.post(
@@ -777,7 +930,12 @@ async def change_application_status(
 ) -> ApplicationResponse:
     try:
         application = await update_application_status(
-            db, principal.institution_id, application_id, principal.user.id, payload
+            db,
+            principal.institution_id,
+            application_id,
+            principal.user.id,
+            payload,
+            actor_role=principal.role,
         )
         response = await response_for_application(db, application)
     except RecruitmentError as error:

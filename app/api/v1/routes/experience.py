@@ -29,11 +29,15 @@ from app.modules.experience.schemas import (
     SavedViewResponse,
 )
 from app.modules.recruitment.schemas import ApplicationResponse
-from app.modules.recruitment.service import RecruitmentError, response_for_application
+from app.modules.recruitment.service import (
+    RecruitmentError,
+    require_assigned_review_access,
+    response_for_application,
+)
 
 student_router = APIRouter(dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
 admin_router = APIRouter(
-    prefix="/admin/recruitment", dependencies=[Depends(require_permissions("recruitment.read"))]
+    prefix="/recruitment", dependencies=[Depends(require_permissions("recruitment.read"))]
 )
 write_dependencies = [Depends(verify_authenticated_csrf)]
 review_dependencies = [*write_dependencies, Depends(require_permissions("applications.review"))]
@@ -108,12 +112,18 @@ async def create_request(
     application_id: UUID, payload: RequestCreate, db: Database, principal: CurrentPrincipal
 ) -> CorrectionResponse:
     try:
+        application = await service.owned_application(
+            db, institution(principal), application_id
+        )
+        require_assigned_review_access(
+            application, actor_user_id=principal.user.id, actor_role=principal.role
+        )
         result = await service.create_request(
             db, institution(principal), principal.user.id, application_id, payload
         )
         await db.commit()
         return result
-    except service.ExperienceError as error:
+    except (service.ExperienceError, RecruitmentError) as error:
         raise failure(error) from error
 
 
@@ -130,12 +140,18 @@ async def resolve_request(
     principal: CurrentPrincipal,
 ) -> CorrectionResponse:
     try:
+        application = await service.owned_application(
+            db, institution(principal), application_id
+        )
+        require_assigned_review_access(
+            application, actor_user_id=principal.user.id, actor_role=principal.role
+        )
         result = await service.resolve_request(
             db, institution(principal), principal.user.id, application_id, request_id, payload
         )
         await db.commit()
         return result
-    except service.ExperienceError as error:
+    except (service.ExperienceError, RecruitmentError) as error:
         raise failure(error) from error
 
 
@@ -152,6 +168,10 @@ async def review_queue(
     requests: Annotated[str | None, Query(pattern="^(open|overdue|awaiting_review)$")] = None,
     q: Annotated[str | None, Query(max_length=120)] = None,
     review_pending: bool = False,
+    work_view: Annotated[
+        str | None,
+        Query(pattern="^(my_work|unassigned|awaiting_student|responses_received|overdue)$"),
+    ] = None,
 ) -> ApplicationQueuePage:
     return await queries.review_queue(
         db,
@@ -165,6 +185,9 @@ async def review_queue(
         requests=requests,
         q=q,
         review_pending=review_pending,
+        actor_user_id=principal.user.id,
+        actor_role=principal.role,
+        work_view=work_view,
     )
 
 
@@ -183,7 +206,10 @@ async def supplemental_resume(
 
     try:
         application = await service.owned_application(db, institution(principal), application_id)
-    except service.ExperienceError as error:
+        require_assigned_review_access(
+            application, actor_user_id=principal.user.id, actor_role=principal.role
+        )
+    except (service.ExperienceError, RecruitmentError) as error:
         raise failure(error) from error
     version = await db.scalar(
         select(ResumeVersion)
@@ -222,8 +248,11 @@ async def review_detail(
 ) -> ApplicationResponse:
     try:
         application = await service.owned_application(db, institution(principal), application_id)
+        require_assigned_review_access(
+            application, actor_user_id=principal.user.id, actor_role=principal.role
+        )
         return await response_for_application(db, application)
-    except service.ExperienceError as error:
+    except (service.ExperienceError, RecruitmentError) as error:
         raise failure(error) from error
 
 

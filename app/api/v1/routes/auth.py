@@ -11,8 +11,10 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentSession,
     Database,
+    permissions_for_role,
     verify_authenticated_csrf,
     verify_public_csrf,
+    workspace_for_role,
 )
 from app.modules.auth.registration import start_student_registration
 from app.modules.auth.schemas import (
@@ -23,6 +25,7 @@ from app.modules.auth.schemas import (
     MfaConfirmResponse,
     MfaDisableRequest,
     MfaSetupResponse,
+    MfaStatusResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
     RegistrationStartResponse,
@@ -47,6 +50,7 @@ from app.modules.auth.service import (
     disable_mfa,
     get_invitation,
     has_prepared_student_registration,
+    is_mfa_enabled,
     issue_password_reset,
     list_sessions,
     revoke_all_sessions,
@@ -88,7 +92,13 @@ def _set_session_cookies(response: Response, token: str, csrf_token: str) -> Non
 
 
 def _user_response(user: User, membership: InstitutionMembership | None = None) -> UserResponse:
-    response = UserResponse.model_validate(user)
+    role = membership.role if membership is not None else user.role
+    response = UserResponse.model_validate(user).model_copy(
+        update={
+            "workspace": workspace_for_role(role),
+            "capabilities": sorted(permissions_for_role(role)),
+        }
+    )
     if membership is None:
         return response
     return response.model_copy(
@@ -171,12 +181,13 @@ async def sign_in(
         "student": frozenset({UserRole.STUDENT.value}),
         "tnp": frozenset(
             {
+                UserRole.TNP_OWNER.value,
                 UserRole.TNP_ADMIN.value,
                 UserRole.TNP_REVIEWER.value,
                 UserRole.TNP_AUDITOR.value,
             }
         ),
-        "admin": frozenset({UserRole.TNP_OWNER.value}),
+        "admin": frozenset({UserRole.PLATFORM_ADMIN.value}),
     }
     try:
         auth_session = await authenticate(
@@ -272,6 +283,7 @@ async def demo_sign_in(
             },
         )
     await enforce_auth_identity_rate_limit(request, str(email))
+    required_role = "student" if payload.role == "student" else UserRole.PLATFORM_ADMIN.value
     try:
         auth_session = await authenticate(
             db,
@@ -279,8 +291,8 @@ async def demo_sign_in(
             password.get_secret_value(),
             settings.session_ttl_hours,
             request.headers.get("User-Agent"),
-            required_role=payload.role,
-            demo_mfa_bypass=(payload.role == "tnp_admin" and settings.demo_admin_mfa_bypass),
+            required_role=required_role,
+            demo_mfa_bypass=(payload.role != "student" and settings.demo_admin_mfa_bypass),
         )
     except InvalidCredentialsError:
         raise HTTPException(
@@ -429,6 +441,12 @@ def _require_admin_session(session: CurrentSession) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required"
         )
+
+
+@router.get("/mfa/status", response_model=MfaStatusResponse)
+async def read_mfa_status(db: Database, session: CurrentSession) -> MfaStatusResponse:
+    _require_admin_session(session)
+    return MfaStatusResponse(enabled=await is_mfa_enabled(db, session.user_id))
 
 
 @router.post(

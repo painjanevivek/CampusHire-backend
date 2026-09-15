@@ -264,6 +264,10 @@ class ApplicationAppealResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     resolved_at: datetime | None
+    assignee_user_id: UUID | None = None
+    due_at: datetime | None = None
+    escalation_state: str = "none"
+    revision: int = 1
 
 
 class ApplicationAppealResolution(BaseModel):
@@ -273,6 +277,10 @@ class ApplicationAppealResolution(BaseModel):
 
 class ApplicationResponse(BaseModel):
     revision: int = 1
+    assignee_user_id: UUID | None = None
+    review_due_at: datetime | None = None
+    assignment_revision: int = 0
+    due_state: Literal["unassigned", "on_track", "due_soon", "overdue", "complete"] = "unassigned"
     next_actor: str = "placement_team"
     next_step: str = "Your placement team will update this application."
     open_requests: int = 0
@@ -320,6 +328,27 @@ class ApplicationStatusUpdate(BaseModel):
     expected_revision: int | None = Field(default=None, ge=1)
     status: ApplicationDecision
     reason: str | None = Field(default=None, max_length=500)
+
+
+class CaseAssignmentRequest(BaseModel):
+    assignee_user_id: UUID | None
+    expected_revision: int = Field(ge=0)
+    reason: str = Field(min_length=10, max_length=500)
+
+
+class CaseClaimRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+
+
+class CaseAssignmentHistoryResponse(BaseModel):
+    id: UUID
+    case_type: str
+    case_id: UUID
+    from_assignee_user_id: UUID | None
+    to_assignee_user_id: UUID | None
+    actor_user_id: UUID
+    reason: str
+    created_at: datetime
 
 
 class BulkApplicationStatusRequest(BaseModel):

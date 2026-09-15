@@ -13,7 +13,14 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import get_db
 from app.main import app
 from app.models import Base
-from app.models.auth import Institution, Session, User, UserRole
+from app.models.auth import (
+    Institution,
+    InstitutionMembership,
+    MembershipStatus,
+    Session,
+    User,
+    UserRole,
+)
 from app.models.communications import ProductEvent
 from app.models.intelligence import PolicyDocument, ReviewStatus
 from app.models.profile import StudentProfile
@@ -62,6 +69,7 @@ from app.modules.recruitment.schemas import (
     ApplicationStatusUpdate,
     ApplicationWithdrawal,
     BulkApplicationStatusRequest,
+    CaseAssignmentRequest,
     CompanyCreate,
     DriveCreate,
     DriveUpdate,
@@ -74,6 +82,9 @@ from app.modules.recruitment.service import (
     _skill_filter,
     application_deadline_calendar,
     apply_bulk_application_status,
+    assign_appeal_case,
+    assign_application_case,
+    claim_application_case,
     create_application,
     create_application_appeal,
     create_company,
@@ -84,6 +95,7 @@ from app.modules.recruitment.service import (
     duplicate_drive,
     get_student_application,
     list_admin_applications,
+    list_case_assignment_history,
     list_opportunities,
     list_roles,
     override_application,
@@ -144,6 +156,16 @@ async def seed_people(db: AsyncSession, suffix: str = "one") -> tuple[Institutio
     )
     db.add_all([admin, student])
     await db.flush()
+    db.add(
+        InstitutionMembership(
+            institution_id=institution.id,
+            user_id=admin.id,
+            role=UserRole.TNP_ADMIN.value,
+            status=MembershipStatus.ACTIVE.value,
+            verified_at=datetime.now(UTC),
+            verified_by_user_id=admin.id,
+        )
+    )
     db.add(
         StudentProfile(
             user_id=student.id,
@@ -365,9 +387,7 @@ async def test_published_drive_edits_activate_only_when_drive_is_saved() -> None
         assert student_view.items[0].eligibility.rule_version == str(original_rules.version)
 
         with pytest.raises(RecruitmentError, match="drive_save_required"):
-            await publish_rule_set(
-                db, institution.id, role.id, replacement_rules.id
-            )
+            await publish_rule_set(db, institution.id, role.id, replacement_rules.id)
 
         saved, activated_role_ids = await save_drive_changes(db, institution.id, drive.id)
 
@@ -393,9 +413,8 @@ async def test_published_drive_edits_activate_only_when_drive_is_saved() -> None
         )
         assert refreshed_student_view.items[0].drive_title == "Updated published drive"
         assert refreshed_student_view.items[0].title == "Updated published role"
-        assert (
-            refreshed_student_view.items[0].eligibility.rule_version
-            == str(replacement_rules.version)
+        assert refreshed_student_view.items[0].eligibility.rule_version == str(
+            replacement_rules.version
         )
 
 
@@ -703,6 +722,17 @@ async def test_student_can_track_withdraw_and_appeal_without_losing_history() ->
         assert not replayed
         assert was_replayed
         assert replay.id == first.id
+        await assign_appeal_case(
+            db,
+            institution_id=institution.id,
+            appeal_id=first.id,
+            actor_user_id=admin.id,
+            payload=CaseAssignmentRequest(
+                assignee_user_id=admin.id,
+                expected_revision=first.revision,
+                reason="Assign the appeal to an independent placement officer.",
+            ),
+        )
         resolved = await resolve_application_appeal(
             db,
             institution.id,
@@ -716,7 +746,6 @@ async def test_student_can_track_withdraw_and_appeal_without_losing_history() ->
             ),
         )
         assert resolved.resolved_by_user_id == admin.id
-
         withdrawn, withdrawal_replayed = await withdraw_application(
             db,
             institution.id,
@@ -751,6 +780,83 @@ async def test_student_can_track_withdraw_and_appeal_without_losing_history() ->
         assert "BEGIN:VCALENDAR\r\n" in calendar
         assert "Software Engineer application deadline" in calendar
         assert "DTSTART:" in calendar
+
+
+@pytest.mark.asyncio
+async def test_application_claim_is_atomic_revision_checked_and_append_only() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "assignment")
+        reviewer = User(
+            institution_id=institution.id,
+            email="reviewer-assignment@example.edu",
+            password_hash=hash_password("a sufficiently long reviewer passphrase"),
+            role=UserRole.TNP_REVIEWER.value,
+        )
+        db.add(reviewer)
+        await db.flush()
+        db.add(
+            InstitutionMembership(
+                institution_id=institution.id,
+                user_id=reviewer.id,
+                role=UserRole.TNP_REVIEWER.value,
+                status=MembershipStatus.ACTIVE.value,
+                verified_at=datetime.now(UTC),
+                verified_by_user_id=admin.id,
+            )
+        )
+        role, _ = await publish_sample_role(
+            db, institution, admin, include_missing_rule=False
+        )
+        resume = await db.scalar(
+            select(ResumeVersion).where(ResumeVersion.user_id == student.id)
+        )
+        assert resume is not None
+        application, _ = await create_application(
+            db,
+            institution.id,
+            student.id,
+            "application-assignment-001",
+            ApplicationCreate(role_id=role.id, resume_version_id=resume.id),
+        )
+
+        claimed = await claim_application_case(
+            db,
+            institution_id=institution.id,
+            application_id=application.id,
+            actor_user_id=reviewer.id,
+            expected_revision=0,
+        )
+        assert claimed.assignee_user_id == reviewer.id
+        assert claimed.assignment_revision == 1
+        with pytest.raises(RecruitmentError, match="application_already_assigned"):
+            await claim_application_case(
+                db,
+                institution_id=institution.id,
+                application_id=application.id,
+                actor_user_id=admin.id,
+                expected_revision=1,
+            )
+        with pytest.raises(RecruitmentError, match="assignment_revision_conflict"):
+            await assign_application_case(
+                db,
+                institution_id=institution.id,
+                application_id=application.id,
+                actor_user_id=admin.id,
+                payload=CaseAssignmentRequest(
+                    assignee_user_id=admin.id,
+                    expected_revision=0,
+                    reason="Reassign for a documented institution staffing need.",
+                ),
+            )
+        history = await list_case_assignment_history(
+            db,
+            institution_id=institution.id,
+            case_type="application",
+            case_id=application.id,
+        )
+        assert [
+            (item.from_assignee_user_id, item.to_assignee_user_id) for item in history
+        ] == [(None, reviewer.id)]
 
 
 @pytest.mark.asyncio

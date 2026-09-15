@@ -28,7 +28,7 @@ student_router = APIRouter(
     prefix="/onboarding", dependencies=[Depends(require_roles(UserRole.STUDENT.value))]
 )
 admin_router = APIRouter(
-    prefix="/admin/onboarding",
+    prefix="/onboarding",
     dependencies=[Depends(require_roles(UserRole.TNP_OWNER.value))],
 )
 

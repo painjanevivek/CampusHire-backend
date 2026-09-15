@@ -2,13 +2,14 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import cast, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.models.auth import Institution, User
+from app.models.auth import Institution, InstitutionMembership, MembershipStatus, User, UserRole
 from app.models.intelligence import PolicyDocument, ReviewStatus, SemanticMatchEvidence
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
@@ -16,6 +17,7 @@ from app.models.recruitment import (
     ApplicationAppeal,
     ApplicationOverride,
     ApplicationStatusEvent,
+    CaseAssignmentHistory,
     Company,
     EligibilityEvaluation,
     EligibilityRuleSet,
@@ -41,6 +43,8 @@ from app.modules.recruitment.schemas import (
     BulkApplicationPreviewItem,
     BulkApplicationPreviewResponse,
     BulkApplicationStatusRequest,
+    CaseAssignmentHistoryResponse,
+    CaseAssignmentRequest,
     CompanyCreate,
     CompanyResponse,
     CompanyUpdate,
@@ -66,6 +70,34 @@ class RecruitmentError(ValueError):
 
 def _utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _working_day_deadline(start: datetime, days: int, timezone: str) -> datetime:
+    try:
+        local = start.astimezone(ZoneInfo(timezone))
+    except ZoneInfoNotFoundError:
+        local = start.astimezone(UTC)
+    added = 0
+    while added < days:
+        local += timedelta(days=1)
+        if local.weekday() < 5:
+            added += 1
+    return local.astimezone(UTC)
+
+
+def _due_state(assignee_user_id: UUID | None, due_at: datetime | None, status: str) -> str:
+    if status in {"offered", "rejected", "withdrawn"}:
+        return "complete"
+    if assignee_user_id is None:
+        return "unassigned"
+    if due_at is None:
+        return "on_track"
+    remaining = _utc(due_at) - datetime.now(UTC)
+    if remaining.total_seconds() < 0:
+        return "overdue"
+    if remaining <= timedelta(hours=24):
+        return "due_soon"
+    return "on_track"
 
 
 def _institution(institution_id: UUID | None) -> UUID:
@@ -1165,6 +1197,12 @@ async def _application_response(db: AsyncSession, application: Application) -> A
     )
     return ApplicationResponse(
         revision=application.revision,
+        assignee_user_id=application.assignee_user_id,
+        review_due_at=application.review_due_at,
+        assignment_revision=application.assignment_revision,
+        due_state=_due_state(
+            application.assignee_user_id, application.review_due_at, application.status
+        ),
         next_actor=next_actor,
         next_step=next_step,
         open_requests=open_requests,
@@ -1214,6 +1252,10 @@ async def _application_response(db: AsyncSession, application: Application) -> A
                 reason=item.reason,
                 supporting_evidence=list(item.supporting_evidence),
                 administrator_response=item.administrator_response,
+                assignee_user_id=item.assignee_user_id,
+                due_at=item.due_at,
+                escalation_state=item.escalation_state,
+                revision=item.revision,
                 created_at=item.created_at,
                 updated_at=item.updated_at,
                 resolved_at=item.resolved_at,
@@ -1332,6 +1374,7 @@ async def create_application(
             "embedding_version": semantic_match.embedding_version,
             "scoring_version": semantic_match.scoring_version,
         }
+    institution_record = await db.get(Institution, institution)
     application = Application(
         institution_id=institution,
         role_id=payload.role_id,
@@ -1339,6 +1382,9 @@ async def create_application(
         resume_version_id=resume.id,
         eligibility_evaluation_id=evaluation.id,
         idempotency_key=idempotency_key,
+        review_due_at=_working_day_deadline(
+            datetime.now(UTC), 3, institution_record.timezone if institution_record else "UTC"
+        ),
         role_snapshot=opportunity.model_dump(mode="json", exclude={"eligibility", "saved"}),
         resume_snapshot={
             "id": str(resume.id),
@@ -1524,6 +1570,13 @@ async def create_application_appeal(
         ApplicationStatus.REJECTED.value,
     }:
         raise RecruitmentError("application_appeal_not_permitted")
+    institution_record = await db.get(Institution, _institution(institution_id))
+    disputed_actor_user_id = await db.scalar(
+        select(ApplicationStatusEvent.actor_user_id)
+        .where(ApplicationStatusEvent.application_id == application.id)
+        .order_by(ApplicationStatusEvent.created_at.desc(), ApplicationStatusEvent.id.desc())
+        .limit(1)
+    )
     appeal = ApplicationAppeal(
         institution_id=_institution(institution_id),
         application_id=application.id,
@@ -1532,6 +1585,10 @@ async def create_application_appeal(
         kind=payload.kind,
         reason=payload.reason,
         supporting_evidence=payload.supporting_evidence,
+        due_at=_working_day_deadline(
+            datetime.now(UTC), 5, institution_record.timezone if institution_record else "UTC"
+        ),
+        disputed_decision_actor_user_id=disputed_actor_user_id,
     )
     db.add(appeal)
     await db.flush()
@@ -1547,6 +1604,10 @@ def application_appeal_response(appeal: ApplicationAppeal) -> ApplicationAppealR
         reason=appeal.reason,
         supporting_evidence=list(appeal.supporting_evidence),
         administrator_response=appeal.administrator_response,
+        assignee_user_id=appeal.assignee_user_id,
+        due_at=appeal.due_at,
+        escalation_state=appeal.escalation_state,
+        revision=appeal.revision,
         created_at=appeal.created_at,
         updated_at=appeal.updated_at,
         resolved_at=appeal.resolved_at,
@@ -1572,13 +1633,170 @@ async def resolve_application_appeal(
         raise RecruitmentError("application_appeal_not_found")
     if appeal.status in {"approved", "declined"}:
         raise RecruitmentError("application_appeal_already_resolved")
+    if appeal.assignee_user_id != actor_user_id:
+        raise RecruitmentError("application_appeal_assignment_required")
+    if appeal.disputed_decision_actor_user_id == actor_user_id:
+        raise RecruitmentError("application_appeal_independence_required")
     appeal.status = payload.status
     appeal.administrator_response = payload.administrator_response
     appeal.resolved_by_user_id = actor_user_id
     appeal.resolved_at = datetime.now(UTC)
+    appeal.revision += 1
     await db.flush()
     await db.refresh(appeal)
     return appeal
+
+
+async def _validate_case_assignee(
+    db: AsyncSession, institution_id: UUID, assignee_user_id: UUID
+) -> None:
+    eligible = await db.scalar(
+        select(InstitutionMembership.id).where(
+            InstitutionMembership.institution_id == institution_id,
+            InstitutionMembership.user_id == assignee_user_id,
+            InstitutionMembership.status == MembershipStatus.ACTIVE.value,
+            InstitutionMembership.role.in_(
+                (
+                    UserRole.TNP_OWNER.value,
+                    UserRole.TNP_ADMIN.value,
+                    UserRole.TNP_REVIEWER.value,
+                )
+            ),
+        )
+    )
+    if eligible is None:
+        raise RecruitmentError("case_assignee_not_eligible")
+
+
+async def assign_application_case(
+    db: AsyncSession,
+    *,
+    institution_id: UUID | None,
+    application_id: UUID,
+    actor_user_id: UUID,
+    payload: CaseAssignmentRequest,
+) -> Application:
+    application = await _owned_application(db, institution_id, application_id)
+    if application.assignment_revision != payload.expected_revision:
+        raise RecruitmentError("assignment_revision_conflict")
+    if payload.assignee_user_id is not None:
+        await _validate_case_assignee(db, application.institution_id, payload.assignee_user_id)
+    previous = application.assignee_user_id
+    application.assignee_user_id = payload.assignee_user_id
+    application.assignment_revision += 1
+    db.add(
+        CaseAssignmentHistory(
+            institution_id=application.institution_id,
+            case_type="application",
+            case_id=application.id,
+            from_assignee_user_id=previous,
+            to_assignee_user_id=payload.assignee_user_id,
+            actor_user_id=actor_user_id,
+            reason=payload.reason,
+        )
+    )
+    await db.flush()
+    await db.refresh(application)
+    return application
+
+
+async def claim_application_case(
+    db: AsyncSession,
+    *,
+    institution_id: UUID | None,
+    application_id: UUID,
+    actor_user_id: UUID,
+    expected_revision: int,
+) -> Application:
+    application = await _owned_application(db, institution_id, application_id)
+    if application.assignee_user_id is not None:
+        raise RecruitmentError("application_already_assigned")
+    return await assign_application_case(
+        db,
+        institution_id=institution_id,
+        application_id=application_id,
+        actor_user_id=actor_user_id,
+        payload=CaseAssignmentRequest(
+            assignee_user_id=actor_user_id,
+            expected_revision=expected_revision,
+            reason="Claimed from the institution review queue",
+        ),
+    )
+
+
+async def assign_appeal_case(
+    db: AsyncSession,
+    *,
+    institution_id: UUID | None,
+    appeal_id: UUID,
+    actor_user_id: UUID,
+    payload: CaseAssignmentRequest,
+) -> ApplicationAppeal:
+    appeal = await db.scalar(
+        select(ApplicationAppeal)
+        .where(
+            ApplicationAppeal.id == appeal_id,
+            ApplicationAppeal.institution_id == _institution(institution_id),
+        )
+        .with_for_update()
+    )
+    if appeal is None:
+        raise RecruitmentError("application_appeal_not_found")
+    if appeal.revision != payload.expected_revision:
+        raise RecruitmentError("assignment_revision_conflict")
+    if payload.assignee_user_id is not None:
+        await _validate_case_assignee(db, appeal.institution_id, payload.assignee_user_id)
+        if payload.assignee_user_id == appeal.disputed_decision_actor_user_id:
+            raise RecruitmentError("application_appeal_independence_required")
+    previous = appeal.assignee_user_id
+    appeal.assignee_user_id = payload.assignee_user_id
+    appeal.status = "under_review" if payload.assignee_user_id is not None else "submitted"
+    appeal.escalation_state = "none" if payload.assignee_user_id is not None else "waiting"
+    appeal.revision += 1
+    db.add(
+        CaseAssignmentHistory(
+            institution_id=appeal.institution_id,
+            case_type="appeal",
+            case_id=appeal.id,
+            from_assignee_user_id=previous,
+            to_assignee_user_id=payload.assignee_user_id,
+            actor_user_id=actor_user_id,
+            reason=payload.reason,
+        )
+    )
+    await db.flush()
+    await db.refresh(appeal)
+    return appeal
+
+
+async def list_case_assignment_history(
+    db: AsyncSession,
+    *,
+    institution_id: UUID | None,
+    case_type: str,
+    case_id: UUID,
+) -> list[CaseAssignmentHistoryResponse]:
+    items = (
+        await db.scalars(
+            select(CaseAssignmentHistory)
+            .where(
+                CaseAssignmentHistory.institution_id == _institution(institution_id),
+                CaseAssignmentHistory.case_type == case_type,
+                CaseAssignmentHistory.case_id == case_id,
+            )
+            .order_by(CaseAssignmentHistory.created_at, CaseAssignmentHistory.id)
+        )
+    ).all()
+    return [
+        CaseAssignmentHistoryResponse.model_validate(item, from_attributes=True) for item in items
+    ]
+
+
+def require_assigned_review_access(
+    application: Application, *, actor_user_id: UUID, actor_role: str
+) -> None:
+    if actor_role == UserRole.TNP_REVIEWER.value and application.assignee_user_id != actor_user_id:
+        raise RecruitmentError("application_assignment_required")
 
 
 async def get_application_deadline_calendar(
@@ -1640,6 +1858,9 @@ async def list_admin_applications(
     *,
     page: int,
     page_size: int,
+    actor_user_id: UUID | None = None,
+    actor_role: str | None = None,
+    work_view: str | None = None,
 ) -> AdminApplicationPage:
     statement = select(Application).where(
         Application.institution_id == _institution(institution_id)
@@ -1648,6 +1869,18 @@ async def list_admin_applications(
         statement = statement.where(Application.role_id == role_id)
     if status:
         statement = statement.where(Application.status == status)
+    if actor_role == UserRole.TNP_REVIEWER.value and actor_user_id is not None:
+        statement = statement.where(Application.assignee_user_id == actor_user_id)
+    elif work_view == "my_work" and actor_user_id is not None:
+        statement = statement.where(Application.assignee_user_id == actor_user_id)
+    elif work_view == "unassigned":
+        statement = statement.where(Application.assignee_user_id.is_(None))
+    elif work_view == "overdue":
+        statement = statement.where(
+            Application.review_due_at.is_not(None),
+            Application.review_due_at < datetime.now(UTC),
+            Application.status.not_in(("offered", "rejected", "withdrawn")),
+        )
     total = (
         await db.scalar(select(func.count()).select_from(statement.order_by(None).subquery())) or 0
     )
@@ -1689,8 +1922,13 @@ async def update_application_status(
     application_id: UUID,
     actor_user_id: UUID,
     payload: ApplicationStatusUpdate,
+    actor_role: str | None = None,
 ) -> Application:
     application = await _owned_application(db, institution_id, application_id)
+    if actor_role is not None:
+        require_assigned_review_access(
+            application, actor_user_id=actor_user_id, actor_role=actor_role
+        )
     if payload.expected_revision is not None and application.revision != payload.expected_revision:
         raise RecruitmentError("revision_conflict")
     try:

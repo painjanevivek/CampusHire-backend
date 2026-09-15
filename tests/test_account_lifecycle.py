@@ -110,11 +110,12 @@ async def test_operator_provisioning_is_keyed_and_audited(
     get_settings.cache_clear()
 
 
-async def test_admin_must_finish_mfa_before_institution_access(client: TestClient) -> None:
+async def test_admin_can_enrol_mfa_from_settings_when_ready(client: TestClient) -> None:
     institution, _ = await _seed_admin()
     signed_in = await _sign_in_admin(client)
-    assert signed_in["next_step"] == "mfa_setup"
-    assert client.get(f"/api/v1/institutions/{institution.id}/memberships").status_code == 403
+    assert signed_in["next_step"] == "complete"
+    assert client.get("/api/v1/auth/mfa/status").json() == {"enabled": False}
+    assert client.get(f"/api/v1/institutions/{institution.id}/memberships").status_code == 200
 
     csrf = client.cookies[get_settings().csrf_cookie_name]
     setup = client.post(
@@ -129,6 +130,20 @@ async def test_admin_must_finish_mfa_before_institution_access(client: TestClien
     )
     assert confirmed.status_code == 200, confirmed.text
     assert len(confirmed.json()["recovery_codes"]) == 10
+    assert client.get("/api/v1/auth/mfa/status").json() == {"enabled": True}
+
+    client.cookies.clear()
+    enrolled_sign_in = await _sign_in_admin(client)
+    assert enrolled_sign_in["next_step"] == "mfa_challenge"
+    assert client.get(f"/api/v1/institutions/{institution.id}/memberships").status_code == 403
+
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    challenge = client.post(
+        "/api/v1/auth/mfa/challenge",
+        headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
+        json={"code": totp_code(secret)},
+    )
+    assert challenge.status_code == 204, challenge.text
     assert client.get(f"/api/v1/institutions/{institution.id}/memberships").status_code == 200
 
 

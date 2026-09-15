@@ -685,10 +685,6 @@ async def dashboard(
         item.eligibility.status == "needs_manual_review" for item in opportunity_page.items
     ):
         state = "manual-review"
-    elif state == "ready" and any(
-        item.status == "unavailable" for item in latest_match_by_role.values()
-    ):
-        state = "ai-unavailable"
 
     from app.models.auth import Institution
     from app.modules.experience.priorities import placement_actions

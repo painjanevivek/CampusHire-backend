@@ -61,12 +61,29 @@ async def review_queue(
     requests: str | None = None,
     q: str | None = None,
     review_pending: bool = False,
+    actor_user_id: UUID | None = None,
+    actor_role: str | None = None,
+    work_view: str | None = None,
 ) -> ApplicationQueuePage:
     filters = application_filters(institution_id, drive_id, start_at, end_at)
     if review_pending:
         filters.append(Application.status.in_(["submitted", "under_review"]))
     if application_status:
         filters.append(Application.status == application_status)
+    if actor_role == "tnp_reviewer" and actor_user_id is not None:
+        filters.append(Application.assignee_user_id == actor_user_id)
+    elif work_view == "my_work" and actor_user_id is not None:
+        filters.append(Application.assignee_user_id == actor_user_id)
+    elif work_view == "unassigned":
+        filters.append(Application.assignee_user_id.is_(None))
+    elif work_view == "overdue":
+        filters.extend(
+            (
+                Application.review_due_at.is_not(None),
+                Application.review_due_at < datetime.now(UTC),
+                Application.status.not_in(("offered", "rejected", "withdrawn")),
+            )
+        )
     if requests:
         request_filter = [
             CorrectionRequest.status
@@ -88,6 +105,9 @@ async def review_queue(
             Application.id,
             Application.status,
             Application.revision,
+            Application.assignee_user_id,
+            Application.review_due_at,
+            Application.assignment_revision,
             Application.created_at,
             Application.role_snapshot,
             User.email,
@@ -105,7 +125,7 @@ async def review_queue(
     total = int(await db.scalar(select(func.count()).select_from(base.subquery())) or 0)
     rows = (
         await db.execute(
-            base.order_by(Application.created_at.desc(), Application.id)
+            base.order_by(Application.created_at.desc(), Application.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -141,6 +161,21 @@ async def review_queue(
                 id=row.id,
                 status=row.status,
                 revision=row.revision,
+                assignee_user_id=row.assignee_user_id,
+                review_due_at=row.review_due_at,
+                assignment_revision=row.assignment_revision,
+                due_state=(
+                    "complete"
+                    if row.status in {"offered", "rejected", "withdrawn"}
+                    else "unassigned"
+                    if row.assignee_user_id is None
+                    else "overdue"
+                    if row.review_due_at is not None and row.review_due_at < datetime.now(UTC)
+                    else "due_soon"
+                    if row.review_due_at is not None
+                    and row.review_due_at - datetime.now(UTC) <= timedelta(hours=24)
+                    else "on_track"
+                ),
                 student_name=row.full_name or row.email,
                 role_title=str(row.role_snapshot.get("title", "Role")),
                 company_name=str(row.role_snapshot.get("company_name", "Company")),

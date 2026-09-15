@@ -3,7 +3,17 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -11,13 +21,14 @@ from app.models.base import Base, TimestampMixin
 
 class UserRole(StrEnum):
     STUDENT = "student"
+    PLATFORM_ADMIN = "platform_admin"
     TNP_OWNER = "tnp_owner"
     TNP_ADMIN = "tnp_admin"
     TNP_REVIEWER = "tnp_reviewer"
     TNP_AUDITOR = "tnp_auditor"
 
 
-ADMIN_ROLE_VALUES = frozenset(
+TNP_ROLE_VALUES = frozenset(
     {
         UserRole.TNP_OWNER.value,
         UserRole.TNP_ADMIN.value,
@@ -25,6 +36,8 @@ ADMIN_ROLE_VALUES = frozenset(
         UserRole.TNP_AUDITOR.value,
     }
 )
+
+ADMIN_ROLE_VALUES = frozenset({UserRole.PLATFORM_ADMIN.value, *TNP_ROLE_VALUES})
 
 
 class MembershipStatus(StrEnum):
@@ -183,6 +196,58 @@ class Session(Base):
     device_summary: Mapped[str | None] = mapped_column(String(200), nullable=True)
     user: Mapped[User] = relationship(back_populates="sessions")
     active_membership: Mapped[InstitutionMembership | None] = relationship()
+
+
+class PlatformAdminAssignment(Base):
+    """Singleton assignment for the one active platform administrator."""
+
+    __tablename__ = "platform_admin_assignment"
+    __table_args__ = (CheckConstraint("singleton_key = 1", name="ck_platform_admin_singleton_key"),)
+
+    singleton_key: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), unique=True, index=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    assigned_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class PlatformAdminTransfer(Base):
+    """Append-only history of platform administrator bootstrap and transfer events."""
+
+    __tablename__ = "platform_admin_transfers"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    previous_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    new_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    transferred_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    reason: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+
+
+class PlatformSetting(Base, TimestampMixin):
+    """Non-secret platform configuration; credentials remain environment-only."""
+
+    __tablename__ = "platform_settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
 
 class MembershipInvitation(Base, TimestampMixin):
