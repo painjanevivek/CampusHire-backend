@@ -62,6 +62,7 @@ from app.models.privacy import DataDeletionRequest
 from app.models.profile import ProfilePhoto, StudentProfile
 from app.models.recruitment import (
     Application,
+    ApplicationAcknowledgment,
     ApplicationAppeal,
     ApplicationDisclosure,
     ApplicationDisclosureDraft,
@@ -71,6 +72,7 @@ from app.models.recruitment import (
     Company,
     EligibilityEvaluation,
     EligibilityRuleSet,
+    MaterialTermsVersion,
     PlacementDrive,
     PlacementRole,
     RoleApplicationForm,
@@ -98,6 +100,7 @@ __all__ = [
     "AiMessage",
     "AiToolRun",
     "Application",
+    "ApplicationAcknowledgment",
     "ApplicationAppeal",
     "ApplicationDisclosure",
     "ApplicationDisclosureDraft",
@@ -119,6 +122,7 @@ __all__ = [
     "DrivePreparationArtifact",
     "EligibilityEvaluation",
     "EligibilityRuleSet",
+    "MaterialTermsVersion",
     "Institution",
     "GenerationUsage",
     "InstitutionDomain",

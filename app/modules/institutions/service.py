@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +14,7 @@ from app.models.auth import (
     UserRole,
 )
 from app.modules.audit.service import record_audit_event
+from app.modules.auth.security import hash_password_async, normalize_username
 
 
 class MembershipUserNotFoundError(Exception):
@@ -21,6 +23,80 @@ class MembershipUserNotFoundError(Exception):
 
 class MembershipPermissionError(Exception):
     pass
+
+
+class StaffAccountConflictError(Exception):
+    pass
+
+
+async def create_staff_account(
+    db: AsyncSession,
+    *,
+    institution_id: UUID,
+    username: str,
+    password: str,
+    role: str,
+    reason: str,
+    actor_user_id: UUID,
+    actor_role: str,
+    correlation_id: str | None,
+) -> tuple[User, InstitutionMembership]:
+    if actor_role != UserRole.TNP_OWNER.value:
+        raise MembershipPermissionError("Only an institution owner can create T&P accounts")
+    if role not in {
+        UserRole.TNP_ADMIN.value,
+        UserRole.TNP_REVIEWER.value,
+        UserRole.TNP_AUDITOR.value,
+    }:
+        raise MembershipPermissionError("The requested T&P role cannot be provisioned")
+
+    normalized_username = normalize_username(username)
+    if await db.scalar(select(User.id).where(User.username == normalized_username)) is not None:
+        raise StaffAccountConflictError
+
+    now = datetime.now(UTC)
+    user_id = uuid4()
+    user = User(
+        id=user_id,
+        institution_id=institution_id,
+        email=f"{user_id.hex}@staff.example.com",
+        username=normalized_username,
+        password_hash=await hash_password_async(password),
+        role=role,
+        requires_terms_acceptance=True,
+    )
+    db.add(user)
+    try:
+        await db.flush()
+    except IntegrityError as error:
+        await db.rollback()
+        raise StaffAccountConflictError from error
+
+    membership = InstitutionMembership(
+        institution_id=institution_id,
+        user_id=user.id,
+        role=role,
+        status=MembershipStatus.ACTIVE.value,
+        verified_at=now,
+        verified_by_user_id=actor_user_id,
+    )
+    db.add(membership)
+    await db.flush()
+    record_audit_event(
+        db,
+        actor_user_id=actor_user_id,
+        institution_id=institution_id,
+        event_type="staff_account.created",
+        resource_type="institution_membership",
+        resource_id=str(membership.id),
+        reason=reason,
+        correlation_id=correlation_id,
+        details={"member_user_id": str(user.id), "role": role, "username": normalized_username},
+    )
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(membership)
+    return user, membership
 
 
 async def list_memberships(
@@ -61,6 +137,7 @@ async def paginate_memberships(
         statement = statement.where(
             or_(
                 User.email.ilike(needle),
+                User.username.ilike(needle),
                 cast(InstitutionMembership.user_id, String).ilike(needle),
             )
         )

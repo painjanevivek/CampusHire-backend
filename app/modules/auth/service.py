@@ -1,8 +1,9 @@
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -31,6 +32,7 @@ from app.modules.auth.security import (
     new_secret,
     new_totp_secret,
     normalize_email,
+    normalize_username,
     verify_password_async,
     verify_totp,
 )
@@ -92,11 +94,12 @@ async def create_student(db: AsyncSession, email: str, password: str) -> User:
 
 async def authenticate(
     db: AsyncSession,
-    email: str,
+    identifier: str,
     password: str,
     ttl_hours: int,
     device_summary: str | None,
     required_role: str | None = None,
+    required_roles: Collection[str] | None = None,
     demo_mfa_bypass: bool = False,
 ) -> AuthenticatedSession:
     settings = get_settings()
@@ -104,8 +107,14 @@ async def authenticate(
         not settings.is_development or not settings.demo_login_enabled
     ):
         raise ValueError("Demo MFA bypass is unavailable outside an enabled local demo")
-    normalized = normalize_email(email)
-    user = await db.scalar(select(User).where(User.email == normalized, User.is_active.is_(True)))
+    normalized_email = normalize_email(identifier)
+    normalized_username = normalize_username(identifier)
+    user = await db.scalar(
+        select(User).where(
+            or_(User.email == normalized_email, User.username == normalized_username),
+            User.is_active.is_(True),
+        )
+    )
     now = datetime.now(UTC)
     if user is None:
         raise InvalidCredentialsError
@@ -160,6 +169,8 @@ async def authenticate(
     effective_role = membership.role if membership is not None else user.role
     if required_role is not None and effective_role != required_role:
         raise InvalidCredentialsError
+    if required_roles is not None and effective_role not in required_roles:
+        raise InvalidCredentialsError
     requires_mfa = effective_role in ADMIN_ROLE_VALUES
     bypasses_mfa = requires_mfa and demo_mfa_bypass
     enrollment = await db.scalar(
@@ -169,8 +180,8 @@ async def authenticate(
             MfaEnrollment.disabled_at.is_(None),
         )
     )
-    next_step = "complete"
-    if requires_mfa and not bypasses_mfa:
+    next_step = "terms_acceptance" if user.requires_terms_acceptance else "complete"
+    if requires_mfa and not bypasses_mfa and not user.requires_terms_acceptance:
         next_step = "mfa_challenge" if enrollment is not None else "mfa_setup"
     session = Session(
         user_id=user.id,
@@ -334,6 +345,68 @@ async def accept_invitation(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def accept_staff_terms(
+    db: AsyncSession,
+    *,
+    session: Session,
+    terms_version: str,
+    privacy_version: str,
+    correlation_id: str | None,
+) -> str:
+    user = session.user
+    existing = set(
+        (
+            await db.execute(
+                select(TermsAcceptance.document_type, TermsAcceptance.version).where(
+                    TermsAcceptance.user_id == user.id
+                )
+            )
+        ).all()
+    )
+    records = []
+    if ("terms", terms_version) not in existing:
+        records.append(
+            TermsAcceptance(
+                user_id=user.id,
+                document_type="terms",
+                version=terms_version,
+            )
+        )
+    if ("privacy", privacy_version) not in existing:
+        records.append(
+            TermsAcceptance(
+                user_id=user.id,
+                document_type="privacy",
+                version=privacy_version,
+            )
+        )
+    db.add_all(records)
+    user.requires_terms_acceptance = False
+    record_audit_event(
+        db,
+        actor_user_id=user.id,
+        institution_id=(
+            session.active_membership.institution_id
+            if session.active_membership is not None
+            else user.institution_id
+        ),
+        event_type="auth.staff_terms_accepted",
+        resource_type="user",
+        resource_id=str(user.id),
+        correlation_id=correlation_id,
+        details={"terms_version": terms_version, "privacy_version": privacy_version},
+    )
+    enrollment = await db.scalar(
+        select(MfaEnrollment).where(
+            MfaEnrollment.user_id == user.id,
+            MfaEnrollment.enrolled_at.is_not(None),
+            MfaEnrollment.disabled_at.is_(None),
+        )
+    )
+    await db.commit()
+    return "mfa_challenge" if enrollment is not None else "mfa_setup"
 
 
 async def get_invitation(db: AsyncSession, raw_token: str) -> MembershipInvitation:

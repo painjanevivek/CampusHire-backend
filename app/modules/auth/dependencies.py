@@ -158,6 +158,14 @@ class TenantContext:
 async def get_current_principal(
     session: CurrentSession, request: Request, db: Database
 ) -> AuthenticatedPrincipal:
+    if session.user.requires_terms_acceptance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "terms_acceptance_required",
+                "message": "Accept the current Terms and Privacy Notice before continuing.",
+            },
+        )
     membership = session.active_membership
     if membership is not None and membership.status != MembershipStatus.ACTIVE.value:
         raise HTTPException(

@@ -271,6 +271,35 @@
         "title": "AgentRunResponse",
         "type": "object"
       },
+      "ApplicationAcknowledgmentInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "const": "I ACKNOWLEDGE THESE MATERIAL TERMS",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "content_digest": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Digest",
+            "type": "string"
+          },
+          "material_terms_version_id": {
+            "format": "uuid",
+            "title": "Material Terms Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_terms_version_id",
+          "content_digest",
+          "confirmation"
+        ],
+        "title": "ApplicationAcknowledgmentInput",
+        "type": "object"
+      },
       "ApplicationAppealCreate": {
         "properties": {
           "confirmation": {
@@ -536,6 +565,16 @@
             "title": "Last Saved At",
             "type": "string"
           },
+          "material_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaterialTermsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "profile_revision": {
             "anyOf": [
               {
@@ -596,6 +635,7 @@
           "profile_revision",
           "resume",
           "form",
+          "material_terms",
           "disclosure_answers",
           "disclosure_completed",
           "submitted_application_id"
@@ -850,6 +890,11 @@
       },
       "ApplicationResponse": {
         "properties": {
+          "acknowledgment_snapshot": {
+            "additionalProperties": true,
+            "title": "Acknowledgment Snapshot",
+            "type": "object"
+          },
           "allowed_actions": {
             "items": {
               "type": "string"
@@ -897,6 +942,10 @@
             "title": "Eligibility Snapshot",
             "type": "object"
           },
+          "evidence_provenance": {
+            "title": "Evidence Provenance",
+            "type": "string"
+          },
           "facts_snapshot": {
             "additionalProperties": true,
             "title": "Facts Snapshot",
@@ -917,6 +966,11 @@
           "institution_timezone": {
             "title": "Institution Timezone",
             "type": "string"
+          },
+          "material_terms_snapshot": {
+            "additionalProperties": true,
+            "title": "Material Terms Snapshot",
+            "type": "object"
           },
           "next_actor": {
             "default": "placement_team",
@@ -939,6 +993,17 @@
             },
             "title": "Overrides",
             "type": "array"
+          },
+          "packet_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packet Digest"
           },
           "profile_snapshot": {
             "additionalProperties": true,
@@ -1037,6 +1102,10 @@
           "decision_snapshot",
           "profile_snapshot",
           "application_form_snapshot",
+          "material_terms_snapshot",
+          "acknowledgment_snapshot",
+          "packet_digest",
+          "evidence_provenance",
           "disclosure_status",
           "institution_timezone",
           "created_at",
@@ -1907,6 +1976,71 @@
         "title": "Citation",
         "type": "object"
       },
+      "CommitmentTerms": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "maxLength": 3,
+                "minLength": 3,
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "duration_months": {
+            "anyOf": [
+              {
+                "maximum": 120.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Months"
+          },
+          "penalty_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Penalty Amount"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "required"
+        ],
+        "title": "CommitmentTerms",
+        "type": "object"
+      },
       "CommunicationPreferencesResponse": {
         "properties": {
           "account_emails": {
@@ -2097,6 +2231,64 @@
           }
         },
         "title": "CompanyUpdate",
+        "type": "object"
+      },
+      "CompensationTerms": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "maxLength": 3,
+            "minLength": 3,
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "maximum_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Amount"
+          },
+          "minimum_amount": {
+            "minimum": 0.0,
+            "title": "Minimum Amount",
+            "type": "integer"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "period": {
+            "enum": [
+              "hourly",
+              "monthly",
+              "annual",
+              "one_time"
+            ],
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "period",
+          "minimum_amount"
+        ],
+        "title": "CompensationTerms",
         "type": "object"
       },
       "ConversationCreate": {
@@ -2756,6 +2948,21 @@
         "title": "DraftDisclosureUpdate",
         "type": "object"
       },
+      "DraftMaterialTermsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "DraftMaterialTermsUpdate",
+        "type": "object"
+      },
       "DraftProfileConfirmation": {
         "additionalProperties": false,
         "properties": {
@@ -2850,6 +3057,16 @@
       "DraftSubmitRequest": {
         "additionalProperties": false,
         "properties": {
+          "acknowledgment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicationAcknowledgmentInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "confirmation": {
             "const": "I CONFIRM THIS APPLICATION IS ACCURATE",
             "title": "Confirmation",
@@ -4865,6 +5082,265 @@
         "title": "LinksUpdate",
         "type": "object"
       },
+      "MaterialTermChange": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "before",
+          "after"
+        ],
+        "title": "MaterialTermChange",
+        "type": "object"
+      },
+      "MaterialTermsComparisonResponse": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialTermChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "from_version": {
+            "title": "From Version",
+            "type": "integer"
+          },
+          "role_id": {
+            "format": "uuid",
+            "title": "Role Id",
+            "type": "string"
+          },
+          "to_version": {
+            "title": "To Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "role_id",
+          "from_version",
+          "to_version",
+          "changes"
+        ],
+        "title": "MaterialTermsComparisonResponse",
+        "type": "object"
+      },
+      "MaterialTermsResponse": {
+        "properties": {
+          "approved_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By User Id"
+          },
+          "content_digest": {
+            "title": "Content Digest",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "format": "uuid",
+            "title": "Created By User Id",
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "role_id": {
+            "format": "uuid",
+            "title": "Role Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/MaterialTermsUpdate"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "role_id",
+          "version",
+          "status",
+          "terms",
+          "content_digest",
+          "created_by_user_id",
+          "approved_by_user_id",
+          "effective_at",
+          "published_at",
+          "superseded_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MaterialTermsResponse",
+        "type": "object"
+      },
+      "MaterialTermsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "additional_terms": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Terms"
+          },
+          "application_deadline": {
+            "format": "date-time",
+            "title": "Application Deadline",
+            "type": "string"
+          },
+          "bond": {
+            "$ref": "#/components/schemas/CommitmentTerms"
+          },
+          "compensation": {
+            "$ref": "#/components/schemas/CompensationTerms"
+          },
+          "placement_restrictions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Placement Restrictions",
+            "type": "array"
+          },
+          "probation": {
+            "$ref": "#/components/schemas/CommitmentTerms"
+          },
+          "required_documents": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Required Documents",
+            "type": "array"
+          },
+          "selection_stages": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Selection Stages",
+            "type": "array"
+          },
+          "training": {
+            "$ref": "#/components/schemas/CommitmentTerms"
+          },
+          "work_location": {
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Work Location",
+            "type": "string"
+          },
+          "work_mode": {
+            "enum": [
+              "on-site",
+              "hybrid",
+              "remote"
+            ],
+            "title": "Work Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "compensation",
+          "work_location",
+          "work_mode",
+          "bond",
+          "probation",
+          "training",
+          "application_deadline"
+        ],
+        "title": "MaterialTermsUpdate",
+        "type": "object"
+      },
       "MembershipCreate": {
         "properties": {
           "reason": {
@@ -4957,6 +5433,17 @@
             "format": "uuid",
             "title": "User Id",
             "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
           }
         },
         "required": [
@@ -9395,9 +9882,10 @@
       },
       "SignInRequest": {
         "properties": {
-          "email": {
-            "format": "email",
-            "title": "Email",
+          "identifier": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Identifier",
             "type": "string"
           },
           "password": {
@@ -9405,10 +9893,26 @@
             "minLength": 1,
             "title": "Password",
             "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "enum": [
+                  "student",
+                  "tnp",
+                  "admin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
           }
         },
         "required": [
-          "email",
+          "identifier",
           "password"
         ],
         "title": "SignInRequest",
@@ -9716,6 +10220,108 @@
           "active"
         ],
         "title": "SourceVersionResponse",
+        "type": "object"
+      },
+      "StaffAccountCreate": {
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "tnp_admin",
+              "tnp_reviewer",
+              "tnp_auditor"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "username": {
+            "pattern": "^[A-Za-z][A-Za-z0-9._-]{2,63}$",
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "role",
+          "reason"
+        ],
+        "title": "StaffAccountCreate",
+        "type": "object"
+      },
+      "StaffAccountResponse": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "institution_id": {
+            "format": "uuid",
+            "title": "Institution Id",
+            "type": "string"
+          },
+          "requires_terms_acceptance": {
+            "title": "Requires Terms Acceptance",
+            "type": "boolean"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "id",
+          "institution_id",
+          "user_id",
+          "role",
+          "status",
+          "requires_terms_acceptance"
+        ],
+        "title": "StaffAccountResponse",
         "type": "object"
       },
       "StatusEventResponse": {
@@ -10327,6 +10933,28 @@
         "title": "TailoredResumeRequest",
         "type": "object"
       },
+      "TermsAcceptanceRequest": {
+        "properties": {
+          "privacy_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Privacy Version",
+            "type": "string"
+          },
+          "terms_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Terms Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "terms_version",
+          "privacy_version"
+        ],
+        "title": "TermsAcceptanceRequest",
+        "type": "object"
+      },
       "TnpMessageCreate": {
         "properties": {
           "intent": {
@@ -10448,6 +11076,17 @@
           "role": {
             "title": "Role",
             "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
           }
         },
         "required": [
@@ -14170,6 +14809,286 @@
         ]
       }
     },
+    "/api/v1/admin/recruitment/roles/{role_id}/material-terms": {
+      "get": {
+        "operationId": "read_role_material_terms_api_v1_admin_recruitment_roles__role_id__material_terms_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MaterialTermsResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Read Role Material Terms Api V1 Admin Recruitment Roles  Role Id  Material Terms Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Role Material Terms",
+        "tags": [
+          "placement administration"
+        ]
+      },
+      "put": {
+        "operationId": "save_role_material_terms_api_v1_admin_recruitment_roles__role_id__material_terms_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialTermsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialTermsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Role Material Terms",
+        "tags": [
+          "placement administration"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/roles/{role_id}/material-terms/compare": {
+      "get": {
+        "operationId": "read_material_terms_comparison_api_v1_admin_recruitment_roles__role_id__material_terms_compare_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_version",
+            "required": true,
+            "schema": {
+              "title": "From Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_version",
+            "required": true,
+            "schema": {
+              "title": "To Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialTermsComparisonResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Material Terms Comparison",
+        "tags": [
+          "placement administration"
+        ]
+      }
+    },
+    "/api/v1/admin/recruitment/roles/{role_id}/material-terms/{terms_id}/publish": {
+      "post": {
+        "operationId": "publish_role_material_terms_api_v1_admin_recruitment_roles__role_id__material_terms__terms_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "terms_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Terms Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialTermsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Role Material Terms",
+        "tags": [
+          "placement administration"
+        ]
+      }
+    },
     "/api/v1/admin/recruitment/roles/{role_id}/publish": {
       "post": {
         "operationId": "publish_admin_role_api_v1_admin_recruitment_roles__role_id__publish_post",
@@ -17486,6 +18405,75 @@
         ]
       }
     },
+    "/api/v1/application-drafts/{draft_id}/material-terms": {
+      "put": {
+        "operationId": "update_application_material_terms_api_v1_application_drafts__draft_id__material_terms_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftMaterialTermsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Application Material Terms",
+        "tags": [
+          "application packets"
+        ]
+      }
+    },
     "/api/v1/application-drafts/{draft_id}/profile-confirmation": {
       "put": {
         "operationId": "update_application_profile_api_v1_application_drafts__draft_id__profile_confirmation_put",
@@ -17816,6 +18804,7 @@
         ]
       },
       "post": {
+        "deprecated": true,
         "operationId": "submit_application_api_v1_applications_post",
         "parameters": [
           {
@@ -19203,6 +20192,65 @@
         ]
       }
     },
+    "/api/v1/auth/terms/accept": {
+      "post": {
+        "operationId": "accept_current_staff_terms_api_v1_auth_terms_accept_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TermsAcceptanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Current Staff Terms",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
     "/api/v1/communications/preferences": {
       "get": {
         "operationId": "read_preferences_api_v1_communications_preferences_get",
@@ -20301,6 +21349,75 @@
           }
         },
         "summary": "Commit Roster Import",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/staff-accounts": {
+      "post": {
+        "operationId": "provision_staff_account_api_v1_institutions__institution_id__staff_accounts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffAccountCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffAccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Provision Staff Account",
         "tags": [
           "institution memberships"
         ]

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.auth import UserRole
 
@@ -24,6 +24,7 @@ class MembershipResponse(BaseModel):
     role: str
     status: str
     email: EmailStr | None = None
+    username: str | None = None
 
 
 class MembershipPage(BaseModel):
@@ -31,6 +32,29 @@ class MembershipPage(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class StaffAccountCreate(BaseModel):
+    username: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9._-]{2,63}$")
+    password: str = Field(min_length=12, max_length=128)
+    role: Literal["tnp_admin", "tnp_reviewer", "tnp_auditor"]
+    reason: str = Field(min_length=10, max_length=500)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.strip().casefold()
+
+    @field_validator("password")
+    @classmethod
+    def reject_control_characters(cls, value: str) -> str:
+        if any(ord(character) < 32 for character in value):
+            raise ValueError("Password cannot contain control characters")
+        return value
+
+
+class StaffAccountResponse(MembershipResponse):
+    requires_terms_acceptance: bool
 
 
 class InstitutionProvisionRequest(BaseModel):

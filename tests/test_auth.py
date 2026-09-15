@@ -255,7 +255,7 @@ async def test_invalid_credentials_use_generic_error(client: TestClient) -> None
         json={"email": "student@example.edu", "password": "wrong"},
     )
     assert response.status_code == 401
-    assert response.json()["error"]["message"] == "Invalid email or password"
+    assert response.json()["error"]["message"] == "Invalid username, email, or password"
 
 
 async def test_demo_login_is_hidden_when_disabled(client: TestClient) -> None:
@@ -729,6 +729,144 @@ async def test_reviewer_cannot_apply_bulk_or_override_decisions(client: TestClie
     )
     assert bulk.status_code == 403
     assert bulk.json()["error"]["code"] == "permission_denied"
+
+
+async def seed_institution_owner() -> tuple[Institution, User]:
+    async with TestSession() as db:
+        institution = Institution(code="owner-campus", name="Owner Campus")
+        owner = User(
+            institution_id=institution.id,
+            email="owner@owner-campus.edu",
+            username="owner.admin",
+            password_hash=hash_password("a secure owner passphrase"),
+            role=UserRole.TNP_OWNER.value,
+        )
+        db.add_all([institution, owner])
+        await db.flush()
+        db.add(
+            InstitutionMembership(
+                institution_id=institution.id,
+                user_id=owner.id,
+                role=UserRole.TNP_OWNER.value,
+                status=MembershipStatus.ACTIVE.value,
+                verified_at=datetime.now(UTC),
+                verified_by_user_id=owner.id,
+            )
+        )
+        await db.commit()
+        return institution, owner
+
+
+@pytest.mark.asyncio
+async def test_owner_provisions_staff_credentials_with_first_sign_in_gates(
+    client: TestClient,
+) -> None:
+    institution, _ = await seed_institution_owner()
+    sign_in(client, "owner.admin", "a secure owner passphrase")
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+
+    created = client.post(
+        f"/api/v1/institutions/{institution.id}/staff-accounts",
+        headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
+        json={
+            "username": "placement.reviewer",
+            "password": "a secure officer passphrase",
+            "role": "tnp_reviewer",
+            "reason": "Assigned to review placement applications.",
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["role"] == "tnp_reviewer"
+    assert created.json()["username"] == "placement.reviewer"
+    assert created.json()["requires_terms_acceptance"] is True
+    assert "password" not in created.json()
+
+    client.cookies.clear()
+    wrong_workspace = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "identifier": "placement.reviewer",
+            "password": "a secure officer passphrase",
+            "workspace": "admin",
+        },
+    )
+    assert wrong_workspace.status_code == 401
+
+    client.cookies.clear()
+    staff_sign_in = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "identifier": "placement.reviewer",
+            "password": "a secure officer passphrase",
+            "workspace": "tnp",
+        },
+    )
+    assert staff_sign_in.status_code == 200, staff_sign_in.text
+    assert staff_sign_in.json()["next_step"] == "terms_acceptance"
+    assert client.get("/api/v1/auth/me").status_code == 403
+
+    accepted = client.post(
+        "/api/v1/auth/terms/accept",
+        headers=csrf_headers(client),
+        json={"terms_version": "2026-08-28", "privacy_version": "2026-08-28"},
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["next_step"] == "mfa_setup"
+
+    headers = csrf_headers(client)
+    setup = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    assert setup.status_code == 200, setup.text
+    confirmed = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(setup.json()["secret"])},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert client.get("/api/v1/auth/me").json()["role"] == "tnp_reviewer"
+
+    async with TestSession() as db:
+        user = await db.scalar(select(User).where(User.username == "placement.reviewer"))
+        assert user is not None
+        assert user.requires_terms_acceptance is False
+        assert user.password_hash.startswith("$argon2id$")
+        acceptances = list(
+            (
+                await db.scalars(
+                    select(TermsAcceptance).where(TermsAcceptance.user_id == user.id)
+                )
+            ).all()
+        )
+        assert {item.document_type for item in acceptances} == {"terms", "privacy"}
+        assert await db.scalar(
+            select(AuditEvent.id).where(AuditEvent.event_type == "staff_account.created")
+        )
+        assert await db.scalar(
+            select(AuditEvent.id).where(AuditEvent.event_type == "auth.staff_terms_accepted")
+        )
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_provision_tnp_accounts(client: TestClient) -> None:
+    institution, _, _, _ = await seed_institution_memberships()
+    sign_in(client, "admin@campus-a.edu", "a secure administrator passphrase")
+
+    response = client.post(
+        f"/api/v1/institutions/{institution.id}/staff-accounts",
+        headers=csrf_headers(client),
+        json={
+            "username": "blocked.auditor",
+            "password": "a secure blocked passphrase",
+            "role": "tnp_auditor",
+            "reason": "Attempted administrator-only account provisioning.",
+        },
+    )
+
+    assert response.status_code == 403
+    async with TestSession() as db:
+        assert await db.scalar(select(User.id).where(User.username == "blocked.auditor")) is None
 
 
 async def test_audit_export_does_not_silently_truncate_after_one_hundred_rows(

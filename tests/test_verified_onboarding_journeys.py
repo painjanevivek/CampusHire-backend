@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,13 +16,12 @@ from app.models.auth import (
     Institution,
     InstitutionDomain,
     InstitutionRegistrationRequest,
-    MembershipInvitation,
     StudentRegistrationRequest,
     UserRole,
 )
 from app.models.profile import StudentProfile
 from app.modules.auth import registration as registration_service
-from app.modules.auth.security import hash_secret, totp_code
+from app.modules.auth.security import totp_code
 from app.modules.institutions import lifecycle as institution_lifecycle
 
 engine = create_async_engine(
@@ -78,28 +77,18 @@ def save_step(
     return response.json()
 
 
-async def test_student_signup_activation_and_onboarding_journey(client: TestClient) -> None:
-    activation_token = "student-activation-token"  # noqa: S105
+async def test_student_direct_signup_and_onboarding_journey(client: TestClient) -> None:
     async with TestSession() as db:
         institution = Institution(code="student-campus", name="Student Campus", is_active=True)
         db.add(institution)
         await db.flush()
-        db.add_all(
-            [
-                InstitutionDomain(
-                    institution_id=institution.id,
-                    domain="student-campus.edu",
-                    verification_status="verified",
-                    verified_at=datetime.now(UTC),
-                ),
-                MembershipInvitation(
-                    institution_id=institution.id,
-                    email="student@student-campus.edu",
-                    role=UserRole.STUDENT.value,
-                    token_hash=hash_secret(activation_token),
-                    expires_at=datetime.now(UTC) + timedelta(hours=1),
-                ),
-            ]
+        db.add(
+            InstitutionDomain(
+                institution_id=institution.id,
+                domain="student-campus.edu",
+                verification_status="verified",
+                verified_at=datetime.now(UTC),
+            )
         )
         await db.commit()
 
@@ -113,38 +102,13 @@ async def test_student_signup_activation_and_onboarding_journey(client: TestClie
             "email": "student@student-campus.edu",
             "password": "a secure student passphrase",
             "re_enter_password": "a secure student passphrase",
-            "invitation_code": activation_token,
-        },
-    )
-    assert started.status_code == 202, started.text
-    assert started.json()["next_path"] == f"/activate/{activation_token}"
-
-    invitation_state = client.get(f"/api/v1/auth/invitations/{activation_token}")
-    assert invitation_state.status_code == 200
-    assert invitation_state.json()["student_signup_ready"] is True
-
-    mismatched_password = client.post(
-        f"/api/v1/auth/invitations/{activation_token}/accept",
-        headers=csrf_headers(client),
-        json={
-            "password": "a different student passphrase",
             "terms_version": "2026-08-28",
             "privacy_version": "2026-08-28",
         },
     )
-    assert mismatched_password.status_code == 422
-
-    activated = client.post(
-        f"/api/v1/auth/invitations/{activation_token}/accept",
-        headers=csrf_headers(client),
-        json={
-            "password": "a secure student passphrase",
-            "terms_version": "2026-08-28",
-            "privacy_version": "2026-08-28",
-        },
-    )
-    assert activated.status_code == 201, activated.text
-    assert activated.json()["role"] == UserRole.STUDENT.value
+    assert started.status_code == 201, started.text
+    assert started.json()["status"] == "registered"
+    assert started.json()["next_path"] == "/onboarding"
 
     async with TestSession() as db:
         registration = await db.scalar(select(StudentRegistrationRequest))

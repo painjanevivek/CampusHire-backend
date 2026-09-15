@@ -18,24 +18,34 @@ from app.models.communications import ProductEvent
 from app.models.intelligence import PolicyDocument, ReviewStatus
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
+    ApplicationAcknowledgment,
     ApplicationDisclosureDraft,
+    MaterialTermsVersion,
     PlacementDrive,
     PlacementRole,
     RuleSetStatus,
 )
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
-from app.modules.application_packets.schemas import ApplicationFormUpdate
+from app.modules.application_packets.schemas import (
+    ApplicationAcknowledgmentInput,
+    ApplicationFormUpdate,
+    MaterialTermsUpdate,
+)
 from app.modules.application_packets.service import (
     ApplicationPacketError,
+    compare_material_terms,
     confirm_draft_profile,
     create_or_resume_draft,
     get_draft,
+    pin_latest_material_terms,
     publish_application_form,
+    publish_material_terms,
     review_draft,
     save_draft_disclosures,
     select_draft_resume,
     submit_draft,
     upsert_application_form,
+    upsert_material_terms,
 )
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
@@ -1265,3 +1275,149 @@ async def test_application_packet_is_pinned_encrypted_idempotent_and_tenant_scop
         assert response.profile_snapshot["city"] == "Pune"
         assert response.application_form_snapshot["version"] == 1
         assert "prefer_not_to_answer" not in response.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_material_terms_are_versioned_acknowledged_and_packet_digest_is_immutable() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "material-terms")
+        profile = await db.scalar(
+            select(StudentProfile).where(StudentProfile.user_id == student.id)
+        )
+        resume = await db.scalar(select(ResumeVersion).where(ResumeVersion.user_id == student.id))
+        assert profile is not None
+        assert resume is not None
+        profile.phone = "+91 90000 00000"
+        profile.academic_year = "Final year"
+        profile.city = "Pune"
+        profile.country_code = "IN"
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
+
+        first_terms = await upsert_material_terms(
+            db,
+            institution.id,
+            role.id,
+            admin.id,
+            MaterialTermsUpdate(
+                compensation={
+                    "currency": "INR",
+                    "period": "annual",
+                    "minimum_amount": 900000,
+                    "maximum_amount": 1200000,
+                },
+                work_location="Pune",
+                work_mode="hybrid",
+                bond={"required": False},
+                probation={"required": True, "duration_months": 6},
+                training={"required": False},
+                application_deadline=datetime.now(UTC) + timedelta(days=7),
+                required_documents=["Resume"],
+                selection_stages=["Online assessment", "Technical interview"],
+                placement_restrictions=["Institution placement policy applies"],
+            ),
+        )
+        await publish_material_terms(db, institution.id, role.id, first_terms.id)
+        draft = await create_or_resume_draft(db, institution.id, student.id, role.id)
+        assert draft.material_terms_version_id == first_terms.id
+        draft_response = await get_draft(db, institution.id, student.id, draft.id)
+        assert draft_response.material_terms is not None
+        assert draft_response.material_terms.content_digest == first_terms.content_digest
+
+        draft = await select_draft_resume(
+            db, institution.id, student.id, draft.id, resume.id, draft.revision
+        )
+        draft = await confirm_draft_profile(
+            db,
+            institution.id,
+            student.id,
+            draft.id,
+            profile.revision,
+            draft.revision,
+        )
+
+        second_terms = await upsert_material_terms(
+            db,
+            institution.id,
+            role.id,
+            admin.id,
+            MaterialTermsUpdate(
+                compensation={
+                    "currency": "INR",
+                    "period": "annual",
+                    "minimum_amount": 1000000,
+                    "maximum_amount": 1300000,
+                },
+                work_location="Bengaluru",
+                work_mode="on-site",
+                bond={"required": False},
+                probation={"required": True, "duration_months": 6},
+                training={"required": False},
+                application_deadline=datetime.now(UTC) + timedelta(days=7),
+                required_documents=["Resume"],
+                selection_stages=["Online assessment", "Technical interview"],
+                placement_restrictions=["Institution placement policy applies"],
+            ),
+        )
+        await publish_material_terms(db, institution.id, role.id, second_terms.id)
+        comparison = await compare_material_terms(
+            db, institution.id, role.id, first_terms.version, second_terms.version
+        )
+        changed_paths = {change.path for change in comparison.changes}
+        assert {"compensation.minimum_amount", "work_location", "work_mode"} <= changed_paths
+        with pytest.raises(ApplicationPacketError, match="application_material_terms_changed"):
+            await submit_draft(
+                db,
+                institution.id,
+                student.id,
+                draft.id,
+                draft.revision,
+                "terms-submit-001",
+                ApplicationAcknowledgmentInput(
+                    material_terms_version_id=first_terms.id,
+                    content_digest=first_terms.content_digest,
+                    confirmation="I ACKNOWLEDGE THESE MATERIAL TERMS",
+                ),
+            )
+
+        draft = await pin_latest_material_terms(
+            db, institution.id, student.id, draft.id, draft.revision
+        )
+        application, replayed = await submit_draft(
+            db,
+            institution.id,
+            student.id,
+            draft.id,
+            draft.revision,
+            "terms-submit-001",
+            ApplicationAcknowledgmentInput(
+                material_terms_version_id=second_terms.id,
+                content_digest=second_terms.content_digest,
+                confirmation="I ACKNOWLEDGE THESE MATERIAL TERMS",
+            ),
+        )
+        await db.commit()
+        assert not replayed
+        assert application.material_terms_snapshot["version"] == 2
+        assert application.acknowledgment_snapshot["content_digest"] == second_terms.content_digest
+        assert application.evidence_provenance == "canonical_packet"
+        assert len(application.packet_digest) == 64
+        acknowledgment = await db.scalar(
+            select(ApplicationAcknowledgment).where(
+                ApplicationAcknowledgment.application_id == application.id
+            )
+        )
+        assert acknowledgment is not None
+        assert acknowledgment.material_terms_version_id == second_terms.id
+
+        original_digest = application.packet_digest
+        application_id = application.id
+        terms_id = second_terms.id
+        application.material_terms_snapshot = {"version": 999}
+        with pytest.raises(ValueError, match="submitted_application_snapshot_immutable"):
+            await db.flush()
+        await db.rollback()
+        stored_terms = await db.get(MaterialTermsVersion, terms_id)
+        stored_application = await db.get(type(application), application_id)
+        assert stored_terms is not None
+        assert stored_application is not None
+        assert stored_application.packet_digest == original_digest

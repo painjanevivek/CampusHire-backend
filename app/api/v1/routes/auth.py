@@ -30,6 +30,7 @@ from app.modules.auth.schemas import (
     SignInRequest,
     SignInResponse,
     SignupRequest,
+    TermsAcceptanceRequest,
     UserResponse,
 )
 from app.modules.auth.service import (
@@ -38,6 +39,7 @@ from app.modules.auth.service import (
     InvalidMfaCodeError,
     MfaReauthenticationRequiredError,
     accept_invitation,
+    accept_staff_terms,
     authenticate,
     begin_mfa_setup,
     confirm_mfa_setup,
@@ -164,24 +166,76 @@ async def sign_in(
     _: Annotated[None, Depends(verify_public_csrf)],
     __: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> SignInResponse:
-    await enforce_auth_identity_rate_limit(request, str(payload.email))
+    await enforce_auth_identity_rate_limit(request, payload.identifier)
+    workspace_roles = {
+        "student": frozenset({UserRole.STUDENT.value}),
+        "tnp": frozenset(
+            {
+                UserRole.TNP_ADMIN.value,
+                UserRole.TNP_REVIEWER.value,
+                UserRole.TNP_AUDITOR.value,
+            }
+        ),
+        "admin": frozenset({UserRole.TNP_OWNER.value}),
+    }
     try:
         auth_session = await authenticate(
             db,
-            str(payload.email),
+            payload.identifier,
             payload.password,
             get_settings().session_ttl_hours,
             request.headers.get("User-Agent"),
+            required_roles=workspace_roles.get(payload.workspace) if payload.workspace else None,
         )
     except InvalidCredentialsError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "invalid_credentials", "message": "Invalid email or password"},
+            detail={
+                "code": "invalid_credentials",
+                "message": "Invalid username, email, or password",
+            },
         ) from None
     _set_session_cookies(response, auth_session.token, auth_session.csrf_token)
     return SignInResponse(
         user=_user_response(auth_session.user, auth_session.membership),
         next_step=auth_session.next_step,
+    )
+
+
+@router.post(
+    "/terms/accept",
+    response_model=SignInResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def accept_current_staff_terms(
+    payload: TermsAcceptanceRequest,
+    request: Request,
+    db: Database,
+    session: CurrentSession,
+) -> SignInResponse:
+    role = (
+        session.active_membership.role
+        if session.active_membership is not None
+        else session.user.role
+    )
+    if role not in ADMIN_ROLE_VALUES or not session.user.requires_terms_acceptance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "terms_acceptance_unavailable",
+                "message": "This session does not require staff terms acceptance.",
+            },
+        )
+    next_step = await accept_staff_terms(
+        db,
+        session=session,
+        terms_version=payload.terms_version,
+        privacy_version=payload.privacy_version,
+        correlation_id=request.state.correlation_id,
+    )
+    return SignInResponse(
+        user=_user_response(session.user, session.active_membership),
+        next_step=next_step,
     )
 
 
@@ -353,6 +407,14 @@ async def reset_password(
 
 
 def _require_admin_session(session: CurrentSession) -> None:
+    if session.user.requires_terms_acceptance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "terms_acceptance_required",
+                "message": "Accept the current Terms and Privacy Notice before continuing.",
+            },
+        )
     if session.active_membership is not None and session.active_membership.status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

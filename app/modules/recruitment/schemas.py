@@ -293,6 +293,10 @@ class ApplicationResponse(BaseModel):
     decision_snapshot: dict[str, object]
     profile_snapshot: dict[str, object]
     application_form_snapshot: dict[str, object]
+    material_terms_snapshot: dict[str, object]
+    acknowledgment_snapshot: dict[str, object]
+    packet_digest: str | None
+    evidence_provenance: str
     disclosure_status: str
     institution_timezone: str
     created_at: datetime

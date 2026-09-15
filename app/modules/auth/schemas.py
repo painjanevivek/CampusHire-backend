@@ -2,7 +2,15 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 def _reject_password_control_characters(value: str) -> str:
@@ -102,8 +110,13 @@ class InstitutionRegistrationDecision(BaseModel):
 
 
 class SignInRequest(BaseModel):
-    email: EmailStr
+    identifier: str = Field(
+        min_length=3,
+        max_length=320,
+        validation_alias=AliasChoices("identifier", "email"),
+    )
     password: str = Field(min_length=1, max_length=128)
+    workspace: Literal["student", "tnp", "admin"] | None = None
 
 
 class DemoSignInRequest(BaseModel):
@@ -115,6 +128,7 @@ class UserResponse(BaseModel):
 
     id: UUID
     email: EmailStr
+    username: str | None = None
     role: str
     institution_id: UUID | None = None
     membership_id: UUID | None = None
@@ -124,6 +138,11 @@ class UserResponse(BaseModel):
 class SignInResponse(BaseModel):
     user: UserResponse
     next_step: str = "complete"
+
+
+class TermsAcceptanceRequest(BaseModel):
+    terms_version: str = Field(min_length=1, max_length=64)
+    privacy_version: str = Field(min_length=1, max_length=64)
 
 
 class InvitationResponse(BaseModel):

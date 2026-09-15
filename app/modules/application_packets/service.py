@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -9,10 +11,12 @@ from app.models.auth import User
 from app.models.profile import StudentProfile
 from app.models.recruitment import (
     Application,
+    ApplicationAcknowledgment,
     ApplicationDisclosure,
     ApplicationDisclosureDraft,
     ApplicationDraft,
     Company,
+    MaterialTermsVersion,
     PlacementDrive,
     PlacementRole,
     PublicationStatus,
@@ -20,6 +24,7 @@ from app.models.recruitment import (
 )
 from app.models.resume import ResumeStatus, ResumeVersion, ScanStatus
 from app.modules.application_packets.schemas import (
+    ApplicationAcknowledgmentInput,
     ApplicationDisclosureResponse,
     ApplicationDraftResponse,
     ApplicationFormResponse,
@@ -28,6 +33,10 @@ from app.modules.application_packets.schemas import (
     DisclosureAnswer,
     DisclosureQuestion,
     DraftResumeSummary,
+    MaterialTermChange,
+    MaterialTermsComparisonResponse,
+    MaterialTermsResponse,
+    MaterialTermsUpdate,
 )
 from app.modules.auth.security import decrypt_sensitive_payload, encrypt_sensitive_payload
 from app.modules.recruitment.schemas import ApplicationCreate
@@ -64,6 +73,30 @@ def form_response(form: RoleApplicationForm) -> ApplicationFormResponse:
         published_at=form.published_at,
         created_at=form.created_at,
         updated_at=form.updated_at,
+    )
+
+
+def _canonical_digest(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def material_terms_response(terms: MaterialTermsVersion) -> MaterialTermsResponse:
+    return MaterialTermsResponse(
+        id=terms.id,
+        role_id=terms.role_id,
+        version=terms.version,
+        status=terms.status,
+        terms=MaterialTermsUpdate.model_validate(terms.terms),
+        content_digest=terms.content_digest,
+        created_by_user_id=terms.created_by_user_id,
+        approved_by_user_id=terms.approved_by_user_id,
+        effective_at=terms.effective_at,
+        published_at=terms.published_at,
+        superseded_at=terms.superseded_at,
+        created_at=terms.created_at,
+        updated_at=terms.updated_at,
     )
 
 
@@ -175,6 +208,167 @@ async def publish_pending_form_for_role(
     return form
 
 
+async def get_material_terms(
+    db: AsyncSession, institution_id: UUID | None, role_id: UUID
+) -> MaterialTermsResponse | None:
+    await _owned_role(db, institution_id, role_id)
+    terms = await db.scalar(
+        select(MaterialTermsVersion)
+        .where(MaterialTermsVersion.role_id == role_id)
+        .order_by(MaterialTermsVersion.version.desc())
+    )
+    return material_terms_response(terms) if terms else None
+
+
+async def upsert_material_terms(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    role_id: UUID,
+    actor_user_id: UUID,
+    payload: MaterialTermsUpdate,
+) -> MaterialTermsVersion:
+    institution = _institution(institution_id)
+    role = await _owned_role(db, institution, role_id)
+    if role.status in {PublicationStatus.CLOSED.value, PublicationStatus.ARCHIVED.value}:
+        raise ApplicationPacketError("material_terms_locked")
+    terms_json = payload.model_dump(mode="json")
+    digest = _canonical_digest(terms_json)
+    terms = await db.scalar(
+        select(MaterialTermsVersion).where(
+            MaterialTermsVersion.role_id == role.id,
+            MaterialTermsVersion.status == "draft",
+        )
+    )
+    if terms is None:
+        version = (
+            await db.scalar(
+                select(func.max(MaterialTermsVersion.version)).where(
+                    MaterialTermsVersion.role_id == role.id
+                )
+            )
+            or 0
+        ) + 1
+        terms = MaterialTermsVersion(
+            institution_id=institution,
+            role_id=role.id,
+            version=version,
+            status="draft",
+            terms=terms_json,
+            content_digest=digest,
+            created_by_user_id=actor_user_id,
+        )
+        db.add(terms)
+    else:
+        terms.terms = terms_json
+        terms.content_digest = digest
+    await db.flush()
+    await db.refresh(terms)
+    return terms
+
+
+def _material_term_changes(
+    before: object, after: object, path: str = ""
+) -> list[MaterialTermChange]:
+    if isinstance(before, dict) and isinstance(after, dict):
+        changes: list[MaterialTermChange] = []
+        for key in sorted(set(before) | set(after)):
+            child_path = f"{path}.{key}" if path else key
+            changes.extend(_material_term_changes(before.get(key), after.get(key), child_path))
+        return changes
+    if before != after:
+        return [MaterialTermChange(path=path, before=before, after=after)]
+    return []
+
+
+async def compare_material_terms(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    role_id: UUID,
+    from_version: int,
+    to_version: int,
+) -> MaterialTermsComparisonResponse:
+    institution = _institution(institution_id)
+    await _owned_role(db, institution, role_id)
+    versions = (
+        await db.scalars(
+            select(MaterialTermsVersion).where(
+                MaterialTermsVersion.institution_id == institution,
+                MaterialTermsVersion.role_id == role_id,
+                MaterialTermsVersion.version.in_([from_version, to_version]),
+            )
+        )
+    ).all()
+    by_version = {item.version: item for item in versions}
+    if from_version not in by_version or to_version not in by_version:
+        raise ApplicationPacketError("material_terms_version_not_found")
+    return MaterialTermsComparisonResponse(
+        role_id=role_id,
+        from_version=from_version,
+        to_version=to_version,
+        changes=_material_term_changes(
+            by_version[from_version].terms,
+            by_version[to_version].terms,
+        ),
+    )
+
+
+async def publish_material_terms(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    role_id: UUID,
+    terms_id: UUID,
+    approved_by_user_id: UUID | None = None,
+) -> MaterialTermsVersion:
+    institution = _institution(institution_id)
+    await _owned_role(db, institution, role_id)
+    terms = await db.scalar(
+        select(MaterialTermsVersion)
+        .where(
+            MaterialTermsVersion.id == terms_id,
+            MaterialTermsVersion.role_id == role_id,
+            MaterialTermsVersion.institution_id == institution,
+            MaterialTermsVersion.status == "draft",
+        )
+        .with_for_update()
+    )
+    if terms is None:
+        raise ApplicationPacketError("material_terms_draft_not_found")
+    now = datetime.now(UTC)
+    current = await db.scalar(
+        select(MaterialTermsVersion)
+        .where(
+            MaterialTermsVersion.role_id == role_id,
+            MaterialTermsVersion.status == "published",
+        )
+        .with_for_update()
+    )
+    if current is not None:
+        current.status = "superseded"
+        current.superseded_at = now
+    terms.status = "published"
+    terms.approved_by_user_id = approved_by_user_id
+    terms.effective_at = now
+    terms.published_at = now
+    await db.flush()
+    await db.refresh(terms)
+    return terms
+
+
+async def _latest_published_material_terms(
+    db: AsyncSession, institution_id: UUID, role_id: UUID
+) -> MaterialTermsVersion | None:
+    terms = await db.scalar(
+        select(MaterialTermsVersion)
+        .where(
+            MaterialTermsVersion.institution_id == institution_id,
+            MaterialTermsVersion.role_id == role_id,
+            MaterialTermsVersion.status == "published",
+        )
+        .order_by(MaterialTermsVersion.version.desc())
+    )
+    return terms
+
+
 async def _owned_draft(
     db: AsyncSession,
     institution_id: UUID | None,
@@ -199,6 +393,28 @@ async def _owned_draft(
 def _check_revision(draft: ApplicationDraft, expected_revision: int) -> None:
     if draft.revision != expected_revision:
         raise ApplicationPacketError("application_draft_revision_conflict")
+
+
+async def pin_latest_material_terms(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    student_user_id: UUID,
+    draft_id: UUID,
+    expected_revision: int,
+) -> ApplicationDraft:
+    institution = _institution(institution_id)
+    draft = await _owned_draft(db, institution, student_user_id, draft_id, lock=True)
+    _check_revision(draft, expected_revision)
+    terms = await _latest_published_material_terms(db, institution, draft.role_id)
+    if terms is None:
+        raise ApplicationPacketError("published_material_terms_not_found")
+    if draft.material_terms_version_id != terms.id:
+        draft.material_terms_version_id = terms.id
+        draft.revision += 1
+        draft.last_saved_at = datetime.now(UTC)
+        await db.flush()
+        await db.refresh(draft)
+    return draft
 
 
 async def create_or_resume_draft(
@@ -251,11 +467,13 @@ async def create_or_resume_draft(
         )
         .order_by(RoleApplicationForm.version.desc())
     )
+    material_terms = await _latest_published_material_terms(db, institution, role.id)
     draft = ApplicationDraft(
         institution_id=institution,
         student_user_id=student_user_id,
         role_id=role.id,
         form_version_id=form.id if form else None,
+        material_terms_version_id=material_terms.id if material_terms else None,
         current_step="resume",
         revision=1,
         expires_at=drive.deadline_at + timedelta(days=30),
@@ -285,6 +503,11 @@ async def draft_response(db: AsyncSession, draft: ApplicationDraft) -> Applicati
     role, drive, company = await _draft_context(db, draft)
     form = (
         await db.get(RoleApplicationForm, draft.form_version_id) if draft.form_version_id else None
+    )
+    material_terms = (
+        await db.get(MaterialTermsVersion, draft.material_terms_version_id)
+        if draft.material_terms_version_id
+        else None
     )
     resume = (
         await db.get(ResumeVersion, draft.resume_version_id) if draft.resume_version_id else None
@@ -325,6 +548,7 @@ async def draft_response(db: AsyncSession, draft: ApplicationDraft) -> Applicati
             else None
         ),
         form=form_response(form) if form else None,
+        material_terms=material_terms_response(material_terms) if material_terms else None,
         disclosure_answers=answers,
         disclosure_completed=disclosure is not None or form is None,
         submitted_application_id=draft.submitted_application_id,
@@ -546,6 +770,7 @@ async def submit_draft(
     draft_id: UUID,
     expected_revision: int,
     idempotency_key: str,
+    acknowledgment: ApplicationAcknowledgmentInput | None = None,
 ) -> tuple[Application, bool]:
     institution = _institution(institution_id)
     draft = await _owned_draft(db, institution, student_user_id, draft_id, lock=True)
@@ -557,6 +782,22 @@ async def submit_draft(
     _check_revision(draft, expected_revision)
     if draft.resume_version_id is None:
         raise ApplicationPacketError("application_resume_required")
+    latest_terms = await _latest_published_material_terms(db, institution, draft.role_id)
+    if latest_terms is not None and draft.material_terms_version_id != latest_terms.id:
+        raise ApplicationPacketError("application_material_terms_changed")
+    material_terms = (
+        await db.get(MaterialTermsVersion, draft.material_terms_version_id)
+        if draft.material_terms_version_id
+        else None
+    )
+    if material_terms is not None:
+        if acknowledgment is None:
+            raise ApplicationPacketError("application_material_terms_acknowledgment_required")
+        if (
+            acknowledgment.material_terms_version_id != material_terms.id
+            or acknowledgment.content_digest != material_terms.content_digest
+        ):
+            raise ApplicationPacketError("application_material_terms_acknowledgment_mismatch")
     _, profile_snapshot = await _profile_snapshot(db, draft)
     form = (
         await db.get(RoleApplicationForm, draft.form_version_id) if draft.form_version_id else None
@@ -582,6 +823,21 @@ async def submit_draft(
     application.application_form_snapshot = (
         form_response(form).model_dump(mode="json") if form else {}
     )
+    acknowledged_at = datetime.now(UTC)
+    application.material_terms_snapshot = (
+        material_terms_response(material_terms).model_dump(mode="json") if material_terms else {}
+    )
+    application.acknowledgment_snapshot = (
+        {
+            **acknowledgment.model_dump(mode="json"),
+            "acknowledged_at": acknowledged_at.isoformat(),
+        }
+        if acknowledgment and material_terms
+        else {}
+    )
+    application.evidence_provenance = (
+        "canonical_packet" if material_terms else "legacy_role_terms_missing"
+    )
     application.disclosure_status = "not_configured"
     if form is not None and disclosure_draft is not None:
         decoded = decrypt_sensitive_payload(
@@ -603,6 +859,39 @@ async def submit_draft(
             )
         )
         await db.delete(disclosure_draft)
+    if acknowledgment is not None and material_terms is not None:
+        db.add(
+            ApplicationAcknowledgment(
+                institution_id=institution,
+                application_id=application.id,
+                student_user_id=student_user_id,
+                material_terms_version_id=material_terms.id,
+                content_digest=material_terms.content_digest,
+                confirmation=acknowledgment.confirmation,
+                acknowledged_at=acknowledged_at,
+            )
+        )
+    application.packet_digest = _canonical_digest(
+        {
+            "application_id": str(application.id),
+            "institution_id": str(application.institution_id),
+            "role_id": str(application.role_id),
+            "student_user_id": str(application.student_user_id),
+            "resume_version_id": str(application.resume_version_id),
+            "role_snapshot": application.role_snapshot,
+            "resume_snapshot": application.resume_snapshot,
+            "facts_snapshot": application.facts_snapshot,
+            "rule_snapshot": application.rule_snapshot,
+            "eligibility_snapshot": application.eligibility_snapshot,
+            "decision_snapshot": application.decision_snapshot,
+            "profile_snapshot": application.profile_snapshot,
+            "application_form_snapshot": application.application_form_snapshot,
+            "material_terms_snapshot": application.material_terms_snapshot,
+            "acknowledgment_snapshot": application.acknowledgment_snapshot,
+            "disclosure_status": application.disclosure_status,
+            "evidence_provenance": application.evidence_provenance,
+        }
+    )
     draft.submitted_application_id = application.id
     draft.current_step = "submitted"
     draft.revision += 1

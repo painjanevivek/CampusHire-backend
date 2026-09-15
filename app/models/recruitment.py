@@ -3,7 +3,20 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    event,
+)
+from sqlalchemy import (
+    inspect as sqlalchemy_inspect,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -158,6 +171,34 @@ class RoleApplicationForm(Base, TimestampMixin):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class MaterialTermsVersion(Base, TimestampMixin):
+    __tablename__ = "material_terms_versions"
+    __table_args__ = (
+        UniqueConstraint("role_id", "version", name="uq_material_terms_role_version"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), index=True
+    )
+    role_id: Mapped[UUID] = mapped_column(
+        ForeignKey("placement_roles.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    terms: Mapped[dict[str, Any]] = mapped_column(JSON)
+    content_digest: Mapped[str] = mapped_column(String(64), index=True)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ApplicationDraft(Base, TimestampMixin):
     __tablename__ = "application_drafts"
     __table_args__ = (
@@ -178,6 +219,9 @@ class ApplicationDraft(Base, TimestampMixin):
     )
     form_version_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("role_application_forms.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    material_terms_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("material_terms_versions.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     resume_version_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("resume_versions.id", ondelete="RESTRICT"), nullable=True, index=True
@@ -242,9 +286,64 @@ class Application(Base, TimestampMixin):
     decision_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     profile_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     application_form_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    material_terms_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    acknowledgment_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    packet_digest: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    evidence_provenance: Mapped[str] = mapped_column(String(32), default="legacy_import")
     disclosure_status: Mapped[str] = mapped_column(String(32), default="not_configured")
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     withdrawal_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class ApplicationAcknowledgment(Base):
+    __tablename__ = "application_acknowledgments"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    institution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), index=True
+    )
+    application_id: Mapped[UUID] = mapped_column(
+        ForeignKey("applications.id", ondelete="RESTRICT"), unique=True, index=True
+    )
+    student_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    material_terms_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("material_terms_versions.id", ondelete="RESTRICT"), index=True
+    )
+    content_digest: Mapped[str] = mapped_column(String(64))
+    confirmation: Mapped[str] = mapped_column(String(120))
+    acknowledged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+_IMMUTABLE_APPLICATION_SNAPSHOT_FIELDS = (
+    "role_snapshot",
+    "resume_snapshot",
+    "facts_snapshot",
+    "rule_snapshot",
+    "eligibility_snapshot",
+    "decision_snapshot",
+    "profile_snapshot",
+    "application_form_snapshot",
+    "material_terms_snapshot",
+    "acknowledgment_snapshot",
+    "packet_digest",
+    "evidence_provenance",
+)
+
+
+@event.listens_for(Application, "before_update")
+def prevent_submitted_snapshot_replacement(
+    _mapper: object, _connection: object, target: Application
+) -> None:
+    state = sqlalchemy_inspect(target)
+    packet_history = state.attrs.packet_digest.history
+    if packet_history.added and all(value is None for value in packet_history.deleted):
+        return
+    for field_name in _IMMUTABLE_APPLICATION_SNAPSHOT_FIELDS:
+        history = state.attrs[field_name].history
+        if history.has_changes() and any(value not in (None, {}, []) for value in history.deleted):
+            raise ValueError("submitted_application_snapshot_immutable")
 
 
 class ApplicationDisclosure(Base):

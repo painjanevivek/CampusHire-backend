@@ -55,10 +55,14 @@ from app.modules.institutions.schemas import (
     RosterImportResponse,
     RosterImportSummary,
     RosterRowResponse,
+    StaffAccountCreate,
+    StaffAccountResponse,
 )
 from app.modules.institutions.service import (
     MembershipPermissionError,
     MembershipUserNotFoundError,
+    StaffAccountConflictError,
+    create_staff_account,
     list_memberships,
     paginate_memberships,
     update_membership_status,
@@ -69,6 +73,9 @@ router = APIRouter(prefix="/institutions/{institution_id}")
 operator_router = APIRouter(prefix="/operator")
 InstitutionAdmin = Annotated[
     AuthenticatedPrincipal, Depends(require_permissions("institution.manage"))
+]
+InstitutionOwner = Annotated[
+    AuthenticatedPrincipal, Depends(require_permissions("institution.roles.manage"))
 ]
 
 
@@ -103,7 +110,9 @@ async def read_memberships(
         page_size=page_size,
     )
     items = [
-        MembershipResponse.model_validate(item).model_copy(update={"email": item.user.email})
+        MembershipResponse.model_validate(item).model_copy(
+            update={"email": item.user.email, "username": item.user.username}
+        )
         for item in memberships
     ]
     return MembershipPage(items=items, page=page, page_size=page_size, total=total)
@@ -193,6 +202,60 @@ async def read_invitations(
         )
         for item in invitations
     ]
+
+
+@router.post(
+    "/staff-accounts",
+    response_model=StaffAccountResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
+)
+async def provision_staff_account(
+    institution_id: UUID,
+    payload: StaffAccountCreate,
+    request: Request,
+    db: Database,
+    principal: InstitutionOwner,
+) -> StaffAccountResponse:
+    require_institution(principal, institution_id)
+    try:
+        user, membership = await create_staff_account(
+            db,
+            institution_id=institution_id,
+            username=payload.username,
+            password=payload.password,
+            role=payload.role,
+            reason=payload.reason,
+            actor_user_id=principal.user.id,
+            actor_role=principal.role,
+            correlation_id=request.state.correlation_id,
+        )
+    except StaffAccountConflictError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "staff_account_conflict",
+                "message": "An account already exists for that username.",
+            },
+        ) from None
+    except MembershipPermissionError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "membership_permission_denied", "message": str(error)},
+        ) from error
+    return StaffAccountResponse(
+        id=membership.id,
+        institution_id=membership.institution_id,
+        user_id=membership.user_id,
+        email=user.email,
+        username=user.username,
+        role=membership.role,
+        status=membership.status,
+        requires_terms_acceptance=user.requires_terms_acceptance,
+    )
 
 
 @router.post(

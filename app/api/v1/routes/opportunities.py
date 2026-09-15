@@ -253,6 +253,7 @@ async def download_application_deadline(
     "/applications",
     response_model=ApplicationResponse,
     status_code=status.HTTP_201_CREATED,
+    deprecated=True,
     dependencies=[Depends(verify_authenticated_csrf)],
 )
 async def submit_application(

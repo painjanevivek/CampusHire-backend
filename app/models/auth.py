@@ -126,9 +126,11 @@ class User(Base, TimestampMixin):
         ForeignKey("institutions.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(512))
     role: Mapped[str] = mapped_column(String(32), default=UserRole.STUDENT.value, index=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+    requires_terms_acceptance: Mapped[bool] = mapped_column(default=False)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

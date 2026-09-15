@@ -12,12 +12,17 @@ from app.modules.application_packets.schemas import (
     ApplicationFormUpdate,
     ApplicationReviewResponse,
     DraftDisclosureUpdate,
+    DraftMaterialTermsUpdate,
     DraftProfileConfirmation,
     DraftResumeUpdate,
     DraftSubmitRequest,
+    MaterialTermsComparisonResponse,
+    MaterialTermsResponse,
+    MaterialTermsUpdate,
 )
 from app.modules.application_packets.service import (
     ApplicationPacketError,
+    compare_material_terms,
     confirm_draft_profile,
     create_or_resume_draft,
     delete_draft,
@@ -25,7 +30,11 @@ from app.modules.application_packets.service import (
     form_response,
     get_application_form,
     get_draft,
+    get_material_terms,
+    material_terms_response,
+    pin_latest_material_terms,
     publish_application_form,
+    publish_material_terms,
     read_compliance_disclosure,
     read_student_disclosure,
     review_draft,
@@ -33,6 +42,7 @@ from app.modules.application_packets.service import (
     select_draft_resume,
     submit_draft,
     upsert_application_form,
+    upsert_material_terms,
 )
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
@@ -67,6 +77,7 @@ def _http_error(error: ApplicationPacketError) -> HTTPException:
         "application_draft_revision_conflict",
         "profile_revision_conflict",
         "submitted_application_draft_immutable",
+        "application_material_terms_changed",
     }:
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=code)
     if code == "application_draft_expired":
@@ -192,6 +203,32 @@ async def update_application_disclosures(
     return response
 
 
+@student_router.put(
+    "/application-drafts/{draft_id}/material-terms",
+    response_model=ApplicationDraftResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def update_application_material_terms(
+    draft_id: UUID,
+    payload: DraftMaterialTermsUpdate,
+    db: Database,
+    tenant: CurrentTenant,
+) -> ApplicationDraftResponse:
+    try:
+        draft = await pin_latest_material_terms(
+            db,
+            tenant.institution_id,
+            tenant.user_id,
+            draft_id,
+            payload.expected_revision,
+        )
+        response = await draft_response(db, draft)
+    except ApplicationPacketError as error:
+        raise _http_error(error) from error
+    await db.commit()
+    return response
+
+
 @student_router.get(
     "/application-drafts/{draft_id}/review", response_model=ApplicationReviewResponse
 )
@@ -226,6 +263,7 @@ async def submit_application_draft(
             draft_id,
             payload.expected_revision,
             idempotency_key,
+            payload.acknowledgment,
         )
         response = await response_for_application(db, application)
     except ApplicationPacketError as error:
@@ -257,6 +295,120 @@ async def submit_application_draft(
     if replayed:
         return JSONResponse(response.model_dump(mode="json"), status_code=status.HTTP_200_OK)
     return response
+
+
+@admin_router.get(
+    "/roles/{role_id}/material-terms",
+    response_model=MaterialTermsResponse | None,
+)
+async def read_role_material_terms(
+    role_id: UUID, db: Database, principal: CurrentPrincipal
+) -> MaterialTermsResponse | None:
+    try:
+        return await get_material_terms(db, principal.institution_id, role_id)
+    except ApplicationPacketError as error:
+        raise _http_error(error) from error
+
+
+@admin_router.get(
+    "/roles/{role_id}/material-terms/compare",
+    response_model=MaterialTermsComparisonResponse,
+)
+async def read_material_terms_comparison(
+    role_id: UUID,
+    from_version: int,
+    to_version: int,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> MaterialTermsComparisonResponse:
+    try:
+        return await compare_material_terms(
+            db,
+            principal.institution_id,
+            role_id,
+            from_version,
+            to_version,
+        )
+    except ApplicationPacketError as error:
+        raise _http_error(error) from error
+
+
+@admin_router.put(
+    "/roles/{role_id}/material-terms",
+    response_model=MaterialTermsResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
+)
+async def save_role_material_terms(
+    request: Request,
+    role_id: UUID,
+    payload: MaterialTermsUpdate,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> MaterialTermsResponse:
+    try:
+        terms = await upsert_material_terms(
+            db, principal.institution_id, role_id, principal.user.id, payload
+        )
+    except ApplicationPacketError as error:
+        raise _http_error(error) from error
+    record_audit_event(
+        db,
+        event_type="material_terms.saved",
+        actor_user_id=principal.user.id,
+        institution_id=principal.institution_id,
+        resource_type="material_terms_version",
+        resource_id=str(terms.id),
+        correlation_id=request.state.correlation_id,
+        details={"role_id": str(role_id), "version": terms.version},
+    )
+    await db.commit()
+    return material_terms_response(terms)
+
+
+@admin_router.post(
+    "/roles/{role_id}/material-terms/{terms_id}/publish",
+    response_model=MaterialTermsResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("recruitment.manage")),
+    ],
+)
+async def publish_role_material_terms(
+    request: Request,
+    role_id: UUID,
+    terms_id: UUID,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> MaterialTermsResponse:
+    try:
+        terms = await publish_material_terms(
+            db,
+            principal.institution_id,
+            role_id,
+            terms_id,
+            principal.user.id,
+        )
+    except ApplicationPacketError as error:
+        raise _http_error(error) from error
+    record_audit_event(
+        db,
+        event_type="material_terms.published",
+        actor_user_id=principal.user.id,
+        institution_id=principal.institution_id,
+        resource_type="material_terms_version",
+        resource_id=str(terms.id),
+        correlation_id=request.state.correlation_id,
+        details={
+            "role_id": str(role_id),
+            "version": terms.version,
+            "content_digest": terms.content_digest,
+        },
+    )
+    await db.commit()
+    return material_terms_response(terms)
 
 
 @student_router.delete(
