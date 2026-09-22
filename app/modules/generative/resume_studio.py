@@ -67,7 +67,7 @@ async def materialize_resume_version(
         portfolio_url=profile.external_links.get("portfolio"),
         summary=summary,
         skills=[claim.text for claim in draft.skills],
-        projects=[claim.text for claim in draft.project_bullets + draft.experience_bullets],
+        projects=[claim.text for claim in draft.project_bullets],
         education=[claim.text for claim in draft.education]
         or [
             (
@@ -76,6 +76,7 @@ async def materialize_resume_version(
             )
             for item in education
         ],
+        experience=[claim.text for claim in draft.experience_bullets],
     )
     return await create_generated_version(
         db,
