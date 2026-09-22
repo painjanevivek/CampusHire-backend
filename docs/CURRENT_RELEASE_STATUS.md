@@ -1,18 +1,18 @@
 # Current Release Status
 
-## Working-tree implementation update — 2026-09-22
+## Phase 0 baseline update — 2026-09-22
 
 Decision: **NO-GO for real student data and production. Synthetic qualification only.**
-This update describes uncommitted working trees, not a frozen or approved release candidate.
-The pre-existing résumé and other unrelated edits were retained; the Git heads below do not
-identify the complete code under test.
+This update describes the committed `phase/00-baseline` source pair. It is a reproducible
+synthetic baseline, not a frozen or approved production release candidate. The pre-existing
+résumé, identity, workspace, and content work was retained and separated into domain commits.
 
 | Baseline item | Current observation |
 | --- | --- |
-| Backend HEAD | `91573cb1d6fc4f9e701a6c3eb7661b42b416bfb` |
-| Frontend HEAD | `3067020c1babab8e7e5e30c40dbed4b5fb0daf8c` |
+| Backend functional source | `9286af6ba737b3936d4e6b2a00a3d8d2c28ad88f` |
+| Frontend functional source | `b837679eae8390710a2e07278897823a6a567851` |
 | Alembic head | `20260915_0033` (one head; no new migration in this work) |
-| Reviewed OpenAPI snapshot | Backend and Frontend SHA-256 `59435FC1EE3DB405D92DB7F258D1A7EC22F9ECD1A3B71CD45DDA101292B6CCA4` |
+| Reviewed OpenAPI snapshot | Backend and Frontend SHA-256 `8916A3B064C8AFB5CF676D27A148834F7A1EA5442D9DF93B83B35FBF881DB540` |
 
 The first identity/delivery tranche is implemented in these working trees: student signup and
 activation now require an invitation tied to a committed roster row and verified institution
@@ -23,11 +23,8 @@ sender suppresses delivery rather than reporting mail as sent. Deployment valida
 manual-handoff mode. The institution must still approve an actual authenticated handoff and
 identity-check procedure; a configuration reference is not that approval.
 
-Local verification on these changing working trees: Backend `240 passed, 1 skipped`, Ruff and
-strict MyPy pass; Frontend `240 passed`, lint, typecheck, and production build pass. These checks
-include a narrow headless Chromium smoke of the production build's public sign-up and recovery
-entry points, including the one-time-code navigation; they do not establish authenticated UAT.
-These checks
+Local verification for this source pair: Backend `242 passed, 1 skipped`, Ruff and strict MyPy
+pass; Frontend `245 passed`, lint, typecheck, and production build pass. These checks
 do **not** include a frozen paired commit/image, PostgreSQL concurrency rehearsal, migration
 replay/restore, current security review, complete browser/accessibility UAT, real alert/backup
 restore, provider/privacy approval, or the institutional sign-offs required below. The remaining
