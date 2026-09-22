@@ -20,6 +20,7 @@ def valid_environment() -> dict[str, str]:
         "DATABASE_URL": "postgresql+asyncpg://campushire:secret@postgres:5432/campushire",
         "REDIS_URL": "redis://:secret@redis:6379/0",
         "BACKUP_AGE_RECIPIENT": "age1productionrecipient",
+        "EMAIL_DELIVERY_MODE": "smtp",
         "EMAIL_SMTP_HOST": "smtp.email.ap-mumbai-1.oci.oraclecloud.com",
         "EMAIL_SMTP_USERNAME": "ocid1.user.oc1..smtp",
         "EMAIL_SMTP_PASSWORD": "s" * 32,
@@ -73,3 +74,23 @@ def test_production_environment_enforces_bounded_oci_services() -> None:
     assert any("14 GB guard" in error for error in errors)
     assert any("OCI Email Delivery" in error for error in errors)
     assert any("EMAIL_SMTP_PASSWORD" in error for error in errors)
+
+
+def test_production_environment_allows_explicit_approved_manual_handoff_without_smtp() -> None:
+    values = valid_environment()
+    values["EMAIL_DELIVERY_MODE"] = "manual"
+    values["MANUAL_HANDOFF_APPROVAL_REFERENCE"] = "institution-signed-procedure-2026-09"
+    for name in (
+        "EMAIL_SMTP_HOST",
+        "EMAIL_SMTP_USERNAME",
+        "EMAIL_SMTP_PASSWORD",
+        "EMAIL_DELIVERY_WEBHOOK_KEY",
+    ):
+        values.pop(name)
+    assert validate_production_environment(values) == []
+
+    values.pop("MANUAL_HANDOFF_APPROVAL_REFERENCE")
+    assert any(
+        "MANUAL_HANDOFF_APPROVAL_REFERENCE" in error
+        for error in validate_production_environment(values)
+    )

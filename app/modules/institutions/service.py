@@ -186,6 +186,8 @@ async def verify_membership(
     user = await db.scalar(select(User).where(User.id == user_id, User.is_active.is_(True)))
     if user is None:
         raise MembershipUserNotFoundError
+    if role in TNP_ROLE_VALUES and user.role not in TNP_ROLE_VALUES:
+        raise MembershipPermissionError("Only existing T&P accounts can receive staff assignments")
 
     membership = await db.scalar(
         select(InstitutionMembership).where(
@@ -256,9 +258,6 @@ async def update_membership_status(
     membership.status = status
     if role is not None:
         membership.role = role
-        user = await db.get(User, membership.user_id)
-        if user is not None:
-            user.role = role
     if previous_status != status or previous_role != membership.role:
         await db.execute(delete(Session).where(Session.user_id == membership.user_id))
     record_audit_event(

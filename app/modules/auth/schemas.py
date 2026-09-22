@@ -51,7 +51,7 @@ class SignupRequest(BaseModel):
 
 
 class RegistrationStartResponse(BaseModel):
-    status: Literal["registered", "registration_unavailable"]
+    status: Literal["registered", "approval_pending", "registration_unavailable"]
     message: str
     next_path: str | None = None
 
@@ -135,6 +135,28 @@ class UserResponse(BaseModel):
     membership_status: str | None = None
     workspace: Literal["admin", "tnp", "student"] = "student"
     capabilities: list[str] = Field(default_factory=list)
+
+
+class MembershipChoice(BaseModel):
+    id: UUID
+    institution_id: UUID
+    institution_name: str
+    role: str
+
+
+class ActiveMembershipRequest(BaseModel):
+    membership_id: UUID
+
+
+class ManualRecoveryRequest(BaseModel):
+    identity_check_method: str = Field(min_length=5, max_length=100)
+    identity_check_reference: str = Field(min_length=5, max_length=120)
+    reason: str = Field(min_length=10, max_length=500)
+
+
+class ManualRecoveryHandoff(BaseModel):
+    reset_code: str
+    expires_in_minutes: int
 
 
 class SignInResponse(BaseModel):

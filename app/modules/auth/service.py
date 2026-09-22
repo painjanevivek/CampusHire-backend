@@ -24,6 +24,7 @@ from app.models.auth import (
 )
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
+from app.modules.auth.invitation_scope import is_approved_student_invitation
 from app.modules.auth.security import (
     decrypt_totp_secret,
     encrypt_totp_secret,
@@ -247,7 +248,7 @@ async def accept_invitation(
     invitation = await db.scalar(
         select(MembershipInvitation).where(
             MembershipInvitation.token_hash == hash_secret(raw_token)
-        )
+        ).with_for_update()
     )
     if (
         invitation is None
@@ -257,6 +258,10 @@ async def accept_invitation(
         raise ExpiredOrUsedTokenError
     expires_at = invitation.expires_at
     if (expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=UTC)) <= now:
+        raise ExpiredOrUsedTokenError
+    if invitation.role == UserRole.STUDENT.value and not await is_approved_student_invitation(
+        db, invitation
+    ):
         raise ExpiredOrUsedTokenError
     normalized = normalize_email(invitation.email)
     existing = await db.scalar(select(User).where(User.email == normalized))
@@ -430,6 +435,10 @@ async def get_invitation(db: AsyncSession, raw_token: str) -> MembershipInvitati
     expires_at = invitation.expires_at
     if (expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=UTC)) <= datetime.now(UTC):
         raise ExpiredOrUsedTokenError
+    if invitation.role == UserRole.STUDENT.value and not await is_approved_student_invitation(
+        db, invitation
+    ):
+        raise ExpiredOrUsedTokenError
     return invitation
 
 
@@ -450,7 +459,11 @@ async def has_prepared_student_registration(
 
 
 async def issue_password_reset(
-    db: AsyncSession, email: str, correlation_id: str | None
+    db: AsyncSession,
+    email: str,
+    correlation_id: str | None,
+    *,
+    actor_user_id: UUID | None = None,
 ) -> str | None:
     user = await db.scalar(
         select(User).where(User.email == normalize_email(email), User.is_active.is_(True))
@@ -476,17 +489,18 @@ async def issue_password_reset(
         recipient_email=user.email,
         category="account",
         template_key="password_reset",
-        variables={"reset_url": f"{frontend}/reset-password?token={token}"},
+        variables={"reset_url": f"{frontend}/reset-password/{token}"},
         dedupe_key=f"password-reset:{record.id}",
     )
     record_audit_event(
         db,
-        actor_user_id=user.id,
+        actor_user_id=actor_user_id,
         institution_id=user.institution_id,
         event_type="auth.password_reset_requested",
         resource_type="password_reset_token",
         resource_id=str(record.id),
         correlation_id=correlation_id,
+        details={"subject_user_id": str(user.id)},
     )
     await db.commit()
     return token
@@ -497,7 +511,9 @@ async def confirm_password_reset(
 ) -> None:
     now = datetime.now(UTC)
     record = await db.scalar(
-        select(PasswordResetToken).where(PasswordResetToken.token_hash == hash_secret(raw_token))
+        select(PasswordResetToken)
+        .where(PasswordResetToken.token_hash == hash_secret(raw_token))
+        .with_for_update()
     )
     if record is None or record.used_at is not None or record.revoked_at is not None:
         raise ExpiredOrUsedTokenError

@@ -3,10 +3,20 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.rate_limit import enforce_auth_identity_rate_limit, enforce_auth_rate_limit
-from app.models.auth import ADMIN_ROLE_VALUES, InstitutionMembership, User, UserRole
+from app.models.auth import (
+    ADMIN_ROLE_VALUES,
+    TNP_ROLE_VALUES,
+    Institution,
+    InstitutionMembership,
+    MembershipStatus,
+    User,
+    UserRole,
+)
+from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentSession,
@@ -18,9 +28,11 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.registration import start_student_registration
 from app.modules.auth.schemas import (
+    ActiveMembershipRequest,
     DemoSignInRequest,
     InvitationAcceptRequest,
     InvitationResponse,
+    MembershipChoice,
     MfaCodeRequest,
     MfaConfirmResponse,
     MfaDisableRequest,
@@ -59,6 +71,7 @@ from app.modules.auth.service import (
     rotate_session_csrf,
     verify_mfa,
 )
+from app.modules.communications.service import email_delivery_configured
 
 router = APIRouter(prefix="/auth")
 
@@ -147,8 +160,19 @@ async def signup(
         return RegistrationStartResponse(
             status=result.status,
             message=(
-                "This account could not be created. Use a verified college email or sign in "
-                "if the account already exists."
+                "We could not verify this college email for sign-up. Use an email on your "
+                "college's verified domain. If you have a code, use the invited email address; "
+                "otherwise, contact your placement office."
+            ),
+        )
+    if result.status == "approval_pending":
+        response.status_code = status.HTTP_202_ACCEPTED
+        return RegistrationStartResponse(
+            status=result.status,
+            message=(
+                "Your request was recorded for placement-office review. Your account is not "
+                "active yet. Ask your office to verify your identity and provide a one-time "
+                "invitation code."
             ),
         )
     auth_session = await authenticate(
@@ -211,6 +235,89 @@ async def sign_in(
         user=_user_response(auth_session.user, auth_session.membership),
         next_step=auth_session.next_step,
     )
+
+
+def _require_tnp_context_session(session: CurrentSession) -> None:
+    if session.user.role not in TNP_ROLE_VALUES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="T&P access required")
+    if session.user.requires_terms_acceptance or session.mfa_verified_at is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Complete sign-in first")
+
+
+@router.get("/memberships", response_model=list[MembershipChoice])
+async def read_active_memberships(
+    db: Database, session: CurrentSession
+) -> list[MembershipChoice]:
+    _require_tnp_context_session(session)
+    rows = (
+        await db.execute(
+            select(InstitutionMembership, Institution.name)
+            .join(Institution, Institution.id == InstitutionMembership.institution_id)
+            .where(
+                InstitutionMembership.user_id == session.user_id,
+                InstitutionMembership.status == MembershipStatus.ACTIVE.value,
+                InstitutionMembership.role.in_(TNP_ROLE_VALUES),
+                Institution.is_active.is_(True),
+            )
+            .order_by(Institution.name, InstitutionMembership.id)
+        )
+    ).all()
+    return [
+        MembershipChoice(
+            id=membership.id,
+            institution_id=membership.institution_id,
+            institution_name=name,
+            role=membership.role,
+        )
+        for membership, name in rows
+    ]
+
+
+@router.post(
+    "/active-membership",
+    response_model=UserResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def select_active_membership(
+    payload: ActiveMembershipRequest,
+    request: Request,
+    db: Database,
+    session: CurrentSession,
+) -> UserResponse:
+    _require_tnp_context_session(session)
+    membership = await db.scalar(
+        select(InstitutionMembership)
+        .join(Institution, Institution.id == InstitutionMembership.institution_id)
+        .where(
+            InstitutionMembership.id == payload.membership_id,
+            InstitutionMembership.user_id == session.user_id,
+            InstitutionMembership.role.in_(TNP_ROLE_VALUES),
+            InstitutionMembership.status == MembershipStatus.ACTIVE.value,
+            Institution.is_active.is_(True),
+        )
+        .with_for_update()
+    )
+    if membership is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment unavailable")
+    previous_institution_id = (
+        session.active_membership.institution_id
+        if session.active_membership is not None
+        else None
+    )
+    session.active_membership = membership
+    session.active_membership_id = membership.id
+    record_audit_event(
+        db,
+        actor_user_id=session.user_id,
+        institution_id=membership.institution_id,
+        event_type="auth.institution_context_changed",
+        resource_type="session",
+        resource_id=str(session.id),
+        correlation_id=request.state.correlation_id,
+        details={"previous_institution_id": str(previous_institution_id)},
+    )
+    await db.commit()
+    return _user_response(session.user, membership)
 
 
 @router.post(
@@ -390,8 +497,15 @@ async def request_password_reset(
     __: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> dict[str, str]:
     await enforce_auth_identity_rate_limit(request, str(payload.email))
-    await issue_password_reset(db, str(payload.email), request.state.correlation_id)
-    return {"message": "If the account exists, password reset instructions will be sent."}
+    if email_delivery_configured():
+        await issue_password_reset(db, str(payload.email), request.state.correlation_id)
+        return {"message": "If the account exists, password reset instructions will be sent."}
+    return {
+        "message": (
+            "CampusHire email delivery is not configured. Contact your placement office "
+            "for identity-checked account recovery; no reset email was sent."
+        )
+    }
 
 
 @router.post(

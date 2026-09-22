@@ -21,8 +21,13 @@ from app.models.auth import (
     UserRole,
 )
 from app.modules.audit.service import record_audit_event
+from app.modules.auth.invitation_scope import is_approved_student_invitation
 from app.modules.auth.security import hash_secret, new_secret, normalize_email
-from app.modules.communications.service import enqueue_email, record_product_event
+from app.modules.communications.service import (
+    email_delivery_configured,
+    enqueue_email,
+    record_product_event,
+)
 
 email_adapter = TypeAdapter(EmailStr)
 
@@ -40,6 +45,13 @@ class ProvisionedInstitution:
     institution: Institution
     invitation: MembershipInvitation
     raw_token: str
+
+
+@dataclass(frozen=True)
+class IssuedInvitation:
+    email: str
+    activation_code: str
+    expires_at: datetime
 
 
 async def provision_institution(
@@ -250,18 +262,18 @@ async def commit_roster(
     roster_import_id: UUID,
     actor_user_id: UUID,
     correlation_id: str | None,
-) -> tuple[RosterImport | None, dict[UUID, str]]:
+) -> tuple[RosterImport | None, list[IssuedInvitation]]:
     institution = await db.scalar(
         select(Institution).where(Institution.id == institution_id).with_for_update()
     )
     if institution is None:
-        return None, {}
+        return None, []
     roster, rows = await get_roster_import(db, institution_id, roster_import_id, for_update=True)
     if roster is None:
-        return None, {}
+        return None, []
     if roster.status == "committed":
-        return roster, {}
-    tokens: dict[UUID, str] = {}
+        return roster, []
+    handoffs: list[IssuedInvitation] = []
     institution_name = institution.name
     frontend = str(get_settings().frontend_origins[0]).rstrip("/")
     for row in rows:
@@ -297,7 +309,14 @@ async def commit_roster(
         await db.flush()
         row.status = "invited"
         row.invitation_id = invitation.id
-        tokens[row.id] = raw_token
+        if not email_delivery_configured():
+            handoffs.append(
+                IssuedInvitation(
+                    email=row.email,
+                    activation_code=raw_token,
+                    expires_at=invitation.expires_at,
+                )
+            )
         await enqueue_email(
             db,
             institution_id=institution_id,
@@ -321,7 +340,10 @@ async def commit_roster(
         resource_type="roster_import",
         resource_id=str(roster.id),
         correlation_id=correlation_id,
-        details={"invited_rows": roster.invited_rows},
+        details={
+            "invited_rows": roster.invited_rows,
+            "delivery_mode": "manual" if handoffs else "email",
+        },
     )
     await record_product_event(
         db,
@@ -331,7 +353,7 @@ async def commit_roster(
         dedupe_key=f"roster-import:{roster.id}",
     )
     await db.commit()
-    return roster, tokens
+    return roster, handoffs
 
 
 def invitation_status(
@@ -381,6 +403,10 @@ async def resend_invitation(
         .with_for_update()
     )
     if invitation is None:
+        return None, None
+    if invitation.role == UserRole.STUDENT.value and not await is_approved_student_invitation(
+        db, invitation
+    ):
         return None, None
     raw_token = new_secret()
     invitation.token_hash = hash_secret(raw_token)

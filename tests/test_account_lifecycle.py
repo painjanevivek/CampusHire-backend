@@ -10,19 +10,28 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.models.auth import (
     Institution,
+    InstitutionDomain,
     InstitutionMembership,
     MembershipInvitation,
     MembershipStatus,
     MfaEnrollment,
+    RegistrationStatus,
     RosterImport,
     Session,
+    StudentRegistrationRequest,
     TermsAcceptance,
     User,
     UserRole,
 )
 from app.modules.auth.security import hash_password, hash_secret, totp_code
 from app.modules.auth.service import issue_password_reset
-from tests.test_auth import TestSession, client, csrf_headers, database  # noqa: F401
+from tests.test_auth import (  # noqa: F401
+    TestSession,
+    add_approved_student_invitation,
+    client,
+    csrf_headers,
+    database,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -77,6 +86,44 @@ async def _activate_admin_mfa(client: TestClient) -> str:
     )
     assert confirmed.status_code == 200, confirmed.text
     return secret
+
+
+async def test_student_access_requests_are_visible_only_to_the_assigned_institution(
+    client: TestClient,
+) -> None:
+    institution, _ = await _seed_admin()
+    async with TestSession() as db:
+        other = Institution(code="other-request-campus", name="Other Request Campus")
+        db.add(other)
+        await db.flush()
+        db.add_all([
+            StudentRegistrationRequest(
+                email="pending@lifecycle.edu",
+                institution_id=institution.id,
+                status=RegistrationStatus.PENDING_APPROVAL.value,
+            ),
+            StudentRegistrationRequest(
+                email="hidden@other.edu",
+                institution_id=other.id,
+                status=RegistrationStatus.PENDING_APPROVAL.value,
+            ),
+        ])
+        await db.commit()
+
+    assert client.get(
+        f"/api/v1/institutions/{institution.id}/student-access-requests"
+    ).status_code == 401
+    await _sign_in_admin(client)
+    await _activate_admin_mfa(client)
+
+    listed = client.get(f"/api/v1/institutions/{institution.id}/student-access-requests")
+    assert listed.status_code == 200, listed.text
+    assert listed.headers["Cache-Control"] == "no-store"
+    assert [request["email"] for request in listed.json()] == ["pending@lifecycle.edu"]
+    assert "password" not in str(listed.json()).lower()
+    assert client.get(
+        f"/api/v1/institutions/{other.id}/student-access-requests"
+    ).status_code == 403
 
 
 async def test_operator_provisioning_is_keyed_and_audited(
@@ -189,6 +236,22 @@ async def test_roster_preview_rejects_formula_injection_and_commit_is_idempotent
     assert first.status_code == second.status_code == 200
     assert first.json()["invited_rows"] == second.json()["invited_rows"] == 1
     assert all("activation_token" not in row for row in first.json()["rows"])
+    assert first.headers["Cache-Control"] == "no-store"
+    assert len(first.json()["handoffs"]) == 1
+    handoff = first.json()["handoffs"][0]
+    assert handoff["email"] == "student@example.edu"
+    async with TestSession() as db:
+        db.add(
+            InstitutionDomain(
+                institution_id=institution.id,
+                domain="example.edu",
+                verification_status="verified",
+                verified_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+    assert client.get(f"/api/v1/auth/invitations/{handoff['activation_code']}").status_code == 200
+    assert second.json()["handoffs"] == []
     async with TestSession() as db:
         stored = await db.scalar(select(RosterImport).where(RosterImport.id == UUID(body["id"])))
         assert stored is not None and stored.status == "committed"
@@ -248,7 +311,7 @@ async def test_roster_commit_rejects_enrollment_reused_by_a_later_import(
     ]
 
 
-async def test_invitation_management_is_tenant_scoped_and_never_returns_tokens(
+async def test_invitation_management_only_returns_a_code_on_deliberate_reissue(
     client: TestClient,
 ) -> None:
     institution, admin = await _seed_admin()
@@ -257,16 +320,12 @@ async def test_invitation_management_is_tenant_scoped_and_never_returns_tokens(
         other = Institution(code="other-campus", name="Other Campus")
         db.add(other)
         await db.flush()
-        invitation = MembershipInvitation(
-            institution_id=institution.id,
-            email="pending@example.edu",
-            enrollment_id="ENR-PENDING",
-            full_name="Pending Student",
-            role=UserRole.STUDENT.value,
-            token_hash=hash_secret(token),
-            expires_at=datetime.now(UTC) + timedelta(hours=1),
-            created_by_user_id=admin.id,
+        invitation = await add_approved_student_invitation(
+            db, institution, "pending@example.edu", token
         )
+        invitation.enrollment_id = "ENR-PENDING"
+        invitation.full_name = "Pending Student"
+        invitation.created_by_user_id = admin.id
         hidden = MembershipInvitation(
             institution_id=other.id,
             email="hidden@example.edu",
@@ -276,7 +335,7 @@ async def test_invitation_management_is_tenant_scoped_and_never_returns_tokens(
             token_hash=hash_secret("other-tenant-invitation"),
             expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
-        db.add_all([invitation, hidden])
+        db.add(hidden)
         await db.commit()
         invitation_id = invitation.id
 
@@ -297,7 +356,12 @@ async def test_invitation_management_is_tenant_scoped_and_never_returns_tokens(
     )
     assert resent.status_code == 200, resent.text
     assert resent.json()["status"] == "pending"
-    assert "token" not in str(resent.json()).lower()
+    assert resent.headers["Cache-Control"] == "no-store"
+    assert resent.json()["activation_code"] != token
+    assert client.get(f"/api/v1/auth/invitations/{token}").status_code == 410
+    assert client.get(
+        f"/api/v1/auth/invitations/{resent.json()['activation_code']}"
+    ).status_code == 200
 
     revoked = client.post(
         f"/api/v1/institutions/{institution.id}/invitations/{invitation_id}/revoke",
@@ -615,14 +679,8 @@ async def test_invitation_acceptance_records_policy_versions(client: TestClient)
         institution = Institution(code="policy-campus", name="Policy Campus")
         db.add(institution)
         await db.flush()
-        db.add(
-            MembershipInvitation(
-                institution_id=institution.id,
-                email="policy.student@example.edu",
-                role=UserRole.STUDENT.value,
-                token_hash=hash_secret(token),
-                expires_at=datetime.now(UTC) + timedelta(hours=1),
-            )
+        await add_approved_student_invitation(
+            db, institution, "policy.student@example.edu", token
         )
         await db.commit()
 

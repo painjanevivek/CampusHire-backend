@@ -24,6 +24,7 @@ from app.models.auth import (
 )
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
+from app.modules.auth.invitation_scope import is_approved_student_invitation
 from app.modules.auth.security import hash_password_async, hash_secret, new_secret, normalize_email
 from app.modules.communications.service import enqueue_email
 from app.modules.institutions.lifecycle import ProvisionConflictError, provision_institution
@@ -39,7 +40,7 @@ class RegistrationTokenError(Exception):
 
 @dataclass(frozen=True)
 class StudentRegistrationResult:
-    status: Literal["registered", "registration_unavailable"]
+    status: Literal["registered", "approval_pending", "registration_unavailable"]
     next_path: str | None = None
 
 
@@ -75,28 +76,28 @@ async def start_student_registration(
                 MembershipInvitation.role == UserRole.STUDENT.value,
                 MembershipInvitation.accepted_at.is_(None),
                 MembershipInvitation.revoked_at.is_(None),
-            )
+            ).with_for_update()
         )
         if invitation is not None and _expired(invitation.expires_at):
             invitation = None
 
-    email_domain = normalized_email.rpartition("@")[2]
-    domain_record = await db.scalar(
-        select(InstitutionDomain)
-        .join(Institution, Institution.id == InstitutionDomain.institution_id)
-        .where(
-            InstitutionDomain.domain == email_domain,
-            InstitutionDomain.verification_status == "verified",
-            Institution.is_active.is_(True),
-        )
-    )
     institution_id = (
         invitation.institution_id
-        if invitation is not None
-        else domain_record.institution_id
-        if domain_record is not None
+        if invitation is not None and await is_approved_student_invitation(db, invitation)
         else None
     )
+    if not invitation_code and institution_id is None:
+        email_domain = normalized_email.rpartition("@")[2]
+        domain_record = await db.scalar(
+            select(InstitutionDomain)
+            .join(Institution, Institution.id == InstitutionDomain.institution_id)
+            .where(
+                InstitutionDomain.domain == email_domain,
+                InstitutionDomain.verification_status == "verified",
+                Institution.is_active.is_(True),
+            )
+        )
+        institution_id = domain_record.institution_id if domain_record is not None else None
     attempt = StudentRegistrationRequest(
         email=normalized_email,
         institution_id=institution_id,
@@ -106,6 +107,20 @@ async def start_student_registration(
     db.add(attempt)
     await db.flush()
     existing_user = await db.scalar(select(User.id).where(User.email == normalized_email))
+    if not invitation_code and institution_id is not None and existing_user is None:
+        attempt.status = RegistrationStatus.PENDING_APPROVAL.value
+        record_audit_event(
+            db,
+            institution_id=institution_id,
+            event_type="registration.student.review_requested",
+            resource_type="student_registration_request",
+            resource_id=str(attempt.id),
+            outcome="pending",
+            reason="college_identity_not_yet_verified",
+            correlation_id=correlation_id,
+        )
+        await db.commit()
+        return StudentRegistrationResult(status="approval_pending")
     if institution_id is None or existing_user is not None:
         record_audit_event(
             db,
@@ -142,11 +157,7 @@ async def start_student_registration(
                 status=MembershipStatus.ACTIVE.value,
                 verified_at=now,
                 verified_by_user_id=(
-                    invitation.created_by_user_id
-                    if invitation is not None
-                    else domain_record.verified_by_user_id
-                    if domain_record is not None
-                    else None
+                    invitation.created_by_user_id if invitation is not None else None
                 ),
             ),
             StudentProfile(
@@ -170,6 +181,18 @@ async def start_student_registration(
         ]
     )
     attempt.status = RegistrationStatus.ACTIVATED.value
+
+    prior_requests = (
+        await db.scalars(
+            select(StudentRegistrationRequest).where(
+                StudentRegistrationRequest.email == normalized_email,
+                StudentRegistrationRequest.institution_id == institution_id,
+                StudentRegistrationRequest.status == RegistrationStatus.PENDING_APPROVAL.value,
+            )
+        )
+    ).all()
+    for request in prior_requests:
+        request.status = RegistrationStatus.ACTIVATED.value
     if invitation is not None:
         invitation.accepted_at = now
     record_audit_event(
@@ -180,7 +203,7 @@ async def start_student_registration(
         resource_type="student_registration_request",
         resource_id=str(attempt.id),
         correlation_id=correlation_id,
-        details={"identity_source": "invitation" if invitation is not None else "verified_domain"},
+        details={"identity_source": "invitation"},
     )
     await db.commit()
     return StudentRegistrationResult(status="registered", next_path="/onboarding")

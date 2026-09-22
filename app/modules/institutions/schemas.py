@@ -34,6 +34,14 @@ class MembershipPage(BaseModel):
     total: int
 
 
+class StudentAccessRequestSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: EmailStr
+    created_at: datetime
+
+
 class StaffAccountCreate(BaseModel):
     username: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9._-]{2,63}$")
     password: str = Field(min_length=12, max_length=128)
@@ -95,6 +103,16 @@ class RosterImportResponse(BaseModel):
     rows: list[RosterRowResponse]
 
 
+class InvitationHandoffResponse(BaseModel):
+    email: EmailStr
+    activation_code: str
+    expires_at: datetime
+
+
+class RosterCommitResponse(RosterImportResponse):
+    handoffs: list[InvitationHandoffResponse]
+
+
 class RosterImportSummary(BaseModel):
     id: UUID
     filename: str
@@ -124,6 +142,7 @@ class InvitationActionResponse(BaseModel):
     status: InvitationStatus
     expires_at: datetime
     message: str
+    activation_code: str | None = None
 
 
 class InvitationRevocationRequest(BaseModel):

@@ -104,6 +104,15 @@ class OciSmtpEmailProvider:
         return message["Message-ID"] or f"smtp-{datetime.now(UTC).timestamp():.0f}"
 
 
+def email_delivery_configured(settings: Settings | None = None) -> bool:
+    configured = settings or get_settings()
+    return bool(
+        configured.email_smtp_host
+        and configured.email_smtp_username
+        and configured.email_smtp_password
+    )
+
+
 def render_email(template_key: str, variables: dict[str, Any]) -> tuple[str, str]:
     template = _TEMPLATES.get(template_key)
     if template is None:
@@ -151,11 +160,14 @@ async def enqueue_email(
         suppress_optional = suppress_optional or sent_this_month >= int(
             settings.email_monthly_quota * settings.email_optional_suppression_ratio
         )
+    provider_unconfigured = not email_delivery_configured(settings)
     stored_variables: dict[str, Any] = variables
     if template_key in {"invitation", "password_reset"}:
         stored_variables = {
             "encrypted": encrypt_sensitive_payload(variables, f"campushire-email:{template_key}")
         }
+    if suppress_optional or provider_unconfigured:
+        stored_variables = {}
     item = EmailDelivery(
         institution_id=institution_id,
         recipient_email=recipient_email.strip().casefold(),
@@ -164,9 +176,13 @@ async def enqueue_email(
         template_variables=stored_variables,
         dedupe_key=dedupe_key,
         priority=_priority(category),
-        status="suppressed" if suppress_optional else "queued",
+        status="suppressed" if suppress_optional or provider_unconfigured else "queued",
         max_attempts=settings.email_delivery_max_attempts,
-        safe_error_code="optional_email_suppressed" if suppress_optional else None,
+        safe_error_code=(
+            "email_provider_unconfigured"
+            if provider_unconfigured
+            else "optional_email_suppressed" if suppress_optional else None
+        ),
     )
     try:
         async with db.begin_nested():
@@ -195,6 +211,12 @@ async def process_next_email(db: AsyncSession, provider: EmailProvider) -> UUID 
     )
     if item is None:
         return None
+    if not email_delivery_configured():
+        item.status = "suppressed"
+        item.safe_error_code = "email_provider_unconfigured"
+        item.template_variables = {}
+        await db.commit()
+        return item.id
     item.status = "sending"
     item.attempts += 1
     await db.flush()

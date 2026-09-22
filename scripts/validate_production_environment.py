@@ -23,11 +23,7 @@ REQUIRED = (
     "DATABASE_URL",
     "REDIS_URL",
     "BACKUP_AGE_RECIPIENT",
-    "EMAIL_SMTP_HOST",
-    "EMAIL_SMTP_USERNAME",
-    "EMAIL_SMTP_PASSWORD",
-    "EMAIL_FROM_ADDRESS",
-    "EMAIL_DELIVERY_WEBHOOK_KEY",
+    "EMAIL_DELIVERY_MODE",
     "OPERATOR_BOOTSTRAP_KEY",
     "MFA_ENCRYPTION_KEY",
 )
@@ -85,10 +81,33 @@ def validate_production_environment(values: dict[str, str]) -> list[str]:
         if value and len(value) < 32:
             errors.append(f"{variable} must contain at least 32 characters")
     smtp_host = values.get("EMAIL_SMTP_HOST", "")
-    if smtp_host and not re.fullmatch(
-        r"smtp\.email\.[a-z0-9-]+\.oci\.oraclecloud\.com", smtp_host
-    ):
-        errors.append("EMAIL_SMTP_HOST must be a regional OCI Email Delivery endpoint")
+    delivery_mode = values.get("EMAIL_DELIVERY_MODE", "")
+    if delivery_mode == "smtp":
+        smtp_missing = [
+            name for name in (
+                "EMAIL_SMTP_HOST",
+                "EMAIL_SMTP_USERNAME",
+                "EMAIL_SMTP_PASSWORD",
+                "EMAIL_FROM_ADDRESS",
+                "EMAIL_DELIVERY_WEBHOOK_KEY",
+            ) if not values.get(name)
+        ]
+        if smtp_missing:
+            errors.append(f"SMTP delivery requires: {', '.join(smtp_missing)}")
+        if smtp_host and not re.fullmatch(
+            r"smtp\.email\.[a-z0-9-]+\.oci\.oraclecloud\.com", smtp_host
+        ):
+            errors.append("EMAIL_SMTP_HOST must be a regional OCI Email Delivery endpoint")
+    elif delivery_mode == "manual":
+        if any(
+            values.get(name)
+            for name in ("EMAIL_SMTP_HOST", "EMAIL_SMTP_USERNAME", "EMAIL_SMTP_PASSWORD")
+        ):
+            errors.append("Manual delivery must not configure SMTP credentials")
+        if not values.get("MANUAL_HANDOFF_APPROVAL_REFERENCE"):
+            errors.append("Manual delivery requires MANUAL_HANDOFF_APPROVAL_REFERENCE")
+    elif delivery_mode:
+        errors.append("EMAIL_DELIVERY_MODE must be smtp or manual")
     quota = values.get("OCI_OBJECT_QUOTA_BYTES", "")
     if not quota.isdigit() or not 1_000_000_000 <= int(quota) <= 14_000_000_000:
         errors.append("OCI_OBJECT_QUOTA_BYTES must be between 1 GB and the 14 GB guard")

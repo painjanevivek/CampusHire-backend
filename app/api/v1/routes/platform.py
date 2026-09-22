@@ -1,16 +1,20 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.models.auth import (
+    TNP_ROLE_VALUES,
+    Institution,
     InstitutionRegistrationRequest,
     PlatformAdminAssignment,
     RegistrationStatus,
+    User,
 )
 from app.modules.audit.schemas import AuditEventPage
-from app.modules.audit.service import list_audit_events
+from app.modules.audit.service import list_audit_events, record_audit_event
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
     Database,
@@ -23,12 +27,19 @@ from app.modules.auth.registration import RegistrationConflictError, decide_inst
 from app.modules.auth.schemas import (
     InstitutionRegistrationDecision,
     InstitutionRegistrationResponse,
+    ManualRecoveryHandoff,
+    ManualRecoveryRequest,
 )
+from app.modules.auth.security import normalize_username
+from app.modules.auth.service import issue_password_reset
+from app.modules.communications.service import email_delivery_configured
 from app.modules.institutions.service import (
     MembershipPermissionError,
+    MembershipUserNotFoundError,
     StaffAccountConflictError,
     create_staff_account,
     update_membership_status,
+    verify_membership,
 )
 from app.modules.platform_admin.schemas import (
     InstitutionStatusChange,
@@ -43,6 +54,7 @@ from app.modules.platform_admin.schemas import (
     PlatformSettingsUpdate,
     PlatformStaffAccount,
     PlatformStaffAccountCreate,
+    PlatformStaffAssignmentCreate,
     PlatformStaffStatusChange,
 )
 from app.modules.platform_admin.service import (
@@ -239,6 +251,114 @@ async def provision_platform_staff_account(
         role=membership.role,
         status=membership.status,
         requires_terms_acceptance=user.requires_terms_acceptance,
+    )
+
+
+@router.post(
+    "/institutions/{institution_id}/staff-assignments",
+    response_model=PlatformStaffAccount,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(require_permissions("platform.staff.manage")),
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
+)
+async def assign_existing_platform_staff(
+    institution_id: UUID,
+    payload: PlatformStaffAssignmentCreate,
+    request: Request,
+    db: Database,
+    principal: PlatformAdmin,
+) -> PlatformStaffAccount:
+    if await db.get(Institution, institution_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found")
+    user_id = payload.user_id
+    if payload.username is not None:
+        user_id = await db.scalar(
+            select(User.id).where(User.username == normalize_username(payload.username))
+        )
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="T&P account not found")
+    try:
+        membership = await verify_membership(
+            db,
+            institution_id=institution_id,
+            user_id=user_id,
+            role=payload.role,
+            reason=payload.reason,
+            actor_user_id=principal.user.id,
+            actor_role=principal.role,
+            correlation_id=request.state.correlation_id,
+        )
+    except MembershipUserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="T&P account not found"
+        ) from None
+    except MembershipPermissionError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "staff_assignment_denied", "message": str(error)},
+        ) from None
+    items = await list_platform_staff_accounts(db, institution_id)
+    item = next(record for record in items if record["id"] == membership.id)
+    return PlatformStaffAccount.model_validate(item)
+
+
+@router.post(
+    "/staff-accounts/{user_id}/manual-recovery",
+    response_model=ManualRecoveryHandoff,
+    dependencies=[
+        Depends(require_permissions("platform.staff.manage")),
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
+)
+async def issue_staff_manual_recovery(
+    user_id: UUID,
+    payload: ManualRecoveryRequest,
+    request: Request,
+    response: Response,
+    db: Database,
+    principal: PlatformAdmin,
+) -> ManualRecoveryHandoff:
+    if email_delivery_configured():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email recovery is active")
+    staff = await db.scalar(
+        select(User).where(
+            User.id == user_id,
+            User.role.in_(TNP_ROLE_VALUES),
+            User.is_active.is_(True),
+        )
+    )
+    if staff is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="T&P account not found")
+    token = await issue_password_reset(
+        db,
+        staff.email,
+        request.state.correlation_id,
+        actor_user_id=principal.user.id,
+    )
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="T&P account not found")
+    record_audit_event(
+        db,
+        actor_user_id=principal.user.id,
+        event_type="auth.manual_recovery_issued",
+        resource_type="user",
+        resource_id=str(staff.id),
+        reason=payload.reason,
+        correlation_id=request.state.correlation_id,
+        details={
+            "identity_check_method": payload.identity_check_method,
+            "identity_check_reference": payload.identity_check_reference,
+        },
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "no-store"
+    return ManualRecoveryHandoff(
+        reset_code=token,
+        expires_in_minutes=get_settings().password_reset_ttl_minutes,
     )
 
 

@@ -20,7 +20,16 @@ from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.models.auth import RosterImport, RosterImportRow, UserRole
+from app.models.auth import (
+    InstitutionMembership,
+    MembershipStatus,
+    RegistrationStatus,
+    RosterImport,
+    RosterImportRow,
+    StudentRegistrationRequest,
+    User,
+    UserRole,
+)
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
@@ -30,6 +39,9 @@ from app.modules.auth.dependencies import (
     require_recent_reauthentication,
     verify_authenticated_csrf,
 )
+from app.modules.auth.schemas import ManualRecoveryHandoff, ManualRecoveryRequest
+from app.modules.auth.service import issue_password_reset
+from app.modules.communications.service import email_delivery_configured
 from app.modules.institutions.lifecycle import (
     InvalidRosterError,
     ProvisionConflictError,
@@ -46,17 +58,20 @@ from app.modules.institutions.schemas import (
     InstitutionProvisionRequest,
     InstitutionProvisionResponse,
     InvitationActionResponse,
+    InvitationHandoffResponse,
     InvitationRevocationRequest,
     InvitationSummary,
     MembershipCreate,
     MembershipPage,
     MembershipResponse,
     MembershipStatusUpdate,
+    RosterCommitResponse,
     RosterImportResponse,
     RosterImportSummary,
     RosterRowResponse,
     StaffAccountCreate,
     StaffAccountResponse,
+    StudentAccessRequestSummary,
 )
 from app.modules.institutions.service import (
     MembershipPermissionError,
@@ -77,6 +92,67 @@ InstitutionAdmin = Annotated[
 InstitutionOwner = Annotated[
     AuthenticatedPrincipal, Depends(require_permissions("institution.roles.manage"))
 ]
+
+
+@router.post(
+    "/students/{student_id}/manual-recovery",
+    response_model=ManualRecoveryHandoff,
+    dependencies=[Depends(verify_authenticated_csrf), Depends(require_recent_reauthentication)],
+)
+async def issue_student_manual_recovery(
+    institution_id: UUID,
+    student_id: UUID,
+    payload: ManualRecoveryRequest,
+    request: Request,
+    response: Response,
+    db: Database,
+    principal: InstitutionAdmin,
+) -> ManualRecoveryHandoff:
+    require_institution(principal, institution_id)
+    if email_delivery_configured():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email recovery is active")
+    student = await db.scalar(
+        select(User)
+        .join(InstitutionMembership, InstitutionMembership.user_id == User.id)
+        .where(
+            User.id == student_id,
+            User.role == UserRole.STUDENT.value,
+            User.is_active.is_(True),
+            InstitutionMembership.institution_id == institution_id,
+            InstitutionMembership.role == UserRole.STUDENT.value,
+            InstitutionMembership.status == MembershipStatus.ACTIVE.value,
+        )
+    )
+    if student is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+    token = await issue_password_reset(
+        db,
+        student.email,
+        request.state.correlation_id,
+        actor_user_id=principal.user.id,
+    )
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+    record_audit_event(
+        db,
+        actor_user_id=principal.user.id,
+        institution_id=institution_id,
+        event_type="auth.manual_recovery_issued",
+        resource_type="user",
+        resource_id=str(student.id),
+        reason=payload.reason,
+        correlation_id=request.state.correlation_id,
+        details={
+            "identity_check_method": payload.identity_check_method,
+            "identity_check_reference": payload.identity_check_reference,
+        },
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "no-store"
+    return ManualRecoveryHandoff(
+        reset_code=token,
+        expires_in_minutes=get_settings().password_reset_ttl_minutes,
+    )
 
 
 def _csv_cell(value: object | None) -> str:
@@ -160,6 +236,29 @@ async def export_memberships(
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.get("/student-access-requests", response_model=list[StudentAccessRequestSummary])
+async def read_student_access_requests(
+    institution_id: UUID,
+    response: Response,
+    db: Database,
+    principal: InstitutionAdmin,
+) -> list[StudentAccessRequestSummary]:
+    require_institution(principal, institution_id)
+    response.headers["Cache-Control"] = "no-store"
+    requests = (
+        await db.scalars(
+            select(StudentRegistrationRequest)
+            .where(
+                StudentRegistrationRequest.institution_id == institution_id,
+                StudentRegistrationRequest.status == RegistrationStatus.PENDING_APPROVAL.value,
+            )
+            .order_by(StudentRegistrationRequest.created_at.desc())
+            .limit(50)
+        )
+    ).all()
+    return [StudentAccessRequestSummary.model_validate(item) for item in requests]
 
 
 @router.get("/roster-imports", response_model=list[RosterImportSummary])
@@ -424,7 +523,7 @@ async def read_roster_import(
 
 @router.post(
     "/roster-imports/{roster_import_id}/commit",
-    response_model=RosterImportResponse,
+    response_model=RosterCommitResponse,
     dependencies=[
         Depends(verify_authenticated_csrf),
         Depends(require_recent_reauthentication),
@@ -434,11 +533,12 @@ async def commit_roster_import(
     institution_id: UUID,
     roster_import_id: UUID,
     request: Request,
+    response: Response,
     db: Database,
     principal: InstitutionAdmin,
-) -> RosterImportResponse:
+) -> RosterCommitResponse:
     require_institution(principal, institution_id)
-    roster, _ = await commit_roster(
+    roster, handoffs = await commit_roster(
         db,
         institution_id=institution_id,
         roster_import_id=roster_import_id,
@@ -450,7 +550,18 @@ async def commit_roster_import(
             status_code=status.HTTP_404_NOT_FOUND, detail="Roster import was not found"
         )
     _, rows = await get_roster_import(db, institution_id, roster.id)
-    return _roster_response(roster, rows)
+    response.headers["Cache-Control"] = "no-store"
+    return RosterCommitResponse(
+        **_roster_response(roster, rows).model_dump(),
+        handoffs=[
+            InvitationHandoffResponse(
+                email=item.email,
+                activation_code=item.activation_code,
+                expires_at=item.expires_at,
+            )
+            for item in handoffs
+        ],
+    )
 
 
 @router.post(
@@ -462,6 +573,7 @@ async def resend_membership_invitation(
     institution_id: UUID,
     invitation_id: UUID,
     request: Request,
+    response: Response,
     db: Database,
     principal: InstitutionAdmin,
 ) -> InvitationActionResponse:
@@ -477,11 +589,18 @@ async def resend_membership_invitation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invitation was not found"
         )
+    response.headers["Cache-Control"] = "no-store"
+    manual_handoff = not email_delivery_configured()
     return InvitationActionResponse(
         id=invitation.id,
         status=invitation_status(invitation),
         expires_at=invitation.expires_at,
-        message="A replacement invitation was queued for delivery.",
+        message=(
+            "A replacement code was issued for secure handoff. It was not emailed."
+            if manual_handoff
+            else "A replacement invitation was queued for delivery."
+        ),
+        activation_code=token if manual_handoff else None,
     )
 
 

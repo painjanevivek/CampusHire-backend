@@ -22,6 +22,9 @@ from app.models.auth import (
     MembershipInvitation,
     MembershipStatus,
     PlatformAdminAssignment,
+    RegistrationStatus,
+    RosterImport,
+    RosterImportRow,
     Session,
     StudentRegistrationRequest,
     TermsAcceptance,
@@ -79,15 +82,7 @@ async def signup(client: TestClient) -> dict[str, str]:
         institution = Institution(code="student-campus", name="Student Campus")
         db.add(institution)
         await db.flush()
-        db.add(
-            MembershipInvitation(
-                institution_id=institution.id,
-                email="student@example.edu",
-                role=UserRole.STUDENT.value,
-                token_hash=hash_secret(token),
-                expires_at=datetime.now(UTC) + timedelta(hours=1),
-            )
-        )
+        await add_approved_student_invitation(db, institution, "student@example.edu", token)
         await db.commit()
     response = client.post(
         f"/api/v1/auth/invitations/{token}/accept",
@@ -100,6 +95,66 @@ async def signup(client: TestClient) -> dict[str, str]:
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+async def add_approved_student_invitation(
+    db: AsyncSession, institution: Institution, email: str, token: str
+) -> MembershipInvitation:
+    domain = email.rpartition("@")[2]
+    known_domain = await db.scalar(
+        select(InstitutionDomain.id).where(
+            InstitutionDomain.institution_id == institution.id,
+            InstitutionDomain.domain == domain,
+        )
+    )
+    if known_domain is None:
+        db.add(
+            InstitutionDomain(
+                institution_id=institution.id,
+                domain=domain,
+                verification_status="verified",
+                verified_at=datetime.now(UTC),
+            )
+        )
+    actor = User(
+        email=f"roster-{uuid4()}@example.edu",
+        password_hash=hash_password("a test officer passphrase"),
+        role=UserRole.TNP_ADMIN.value,
+    )
+    db.add(actor)
+    await db.flush()
+    roster = RosterImport(
+        institution_id=institution.id,
+        created_by_user_id=actor.id,
+        filename="approved.csv",
+        content_sha256=hash_secret(token),
+        status="committed",
+        total_rows=1,
+        valid_rows=1,
+        invited_rows=1,
+        committed_at=datetime.now(UTC),
+    )
+    invitation = MembershipInvitation(
+        institution_id=institution.id,
+        email=email,
+        role=UserRole.STUDENT.value,
+        token_hash=hash_secret(token),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_by_user_id=actor.id,
+    )
+    db.add_all([roster, invitation])
+    await db.flush()
+    db.add(
+        RosterImportRow(
+            roster_import_id=roster.id,
+            row_number=1,
+            email=email,
+            status="invited",
+            invitation_id=invitation.id,
+        )
+    )
+    await db.flush()
+    return invitation
 
 
 async def test_signup_fails_without_a_verified_college_identity(
@@ -123,8 +178,9 @@ async def test_signup_fails_without_a_verified_college_identity(
     assert response.json() == {
         "status": "registration_unavailable",
         "message": (
-            "This account could not be created. Use a verified college email or sign in "
-            "if the account already exists."
+            "We could not verify this college email for sign-up. Use an email on your "
+            "college's verified domain. If you have a code, use the invited email address; "
+            "otherwise, contact your placement office."
         ),
         "next_path": None,
     }
@@ -137,27 +193,20 @@ async def test_signup_fails_without_a_verified_college_identity(
         assert registration.date_of_birth is None
 
 
-async def test_signup_creates_a_verified_student_session_without_activation(
+async def test_signup_requires_a_roster_invitation_even_for_a_verified_domain(
     client: TestClient,
 ) -> None:
+    invitation_code = "approved-roster-invitation-code"  # noqa: S105
     async with TestSession() as db:
         institution = Institution(code="direct-campus", name="Direct Campus")
         db.add(institution)
         await db.flush()
-        db.add(
-            InstitutionDomain(
-                institution_id=institution.id,
-                domain="direct-campus.edu",
-                verification_status="verified",
-                verified_at=datetime.now(UTC),
-            )
+        await add_approved_student_invitation(
+            db, institution, "asha@direct-campus.edu", invitation_code
         )
         await db.commit()
 
-    response = client.post(
-        "/api/v1/auth/signup",
-        headers=csrf_headers(client),
-        json={
+    payload = {
             "name": "Asha",
             "surname": "Patil",
             "dob": "2004-05-16",
@@ -166,7 +215,28 @@ async def test_signup_creates_a_verified_student_session_without_activation(
             "re_enter_password": "a secure campus passphrase",
             "terms_version": "2026-08-28",
             "privacy_version": "2026-08-28",
-        },
+    }
+    pending = client.post("/api/v1/auth/signup", headers=csrf_headers(client), json=payload)
+    assert pending.status_code == 202
+    assert pending.json()["status"] == "approval_pending"
+    assert pending.json()["next_path"] is None
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+    async with TestSession() as db:
+        request = await db.scalar(
+            select(StudentRegistrationRequest).where(
+                StudentRegistrationRequest.email == "asha@direct-campus.edu",
+                StudentRegistrationRequest.status == RegistrationStatus.PENDING_APPROVAL.value,
+            )
+        )
+        assert request is not None
+        assert request.institution_id == institution.id
+        assert request.password_hash is None
+
+    response = client.post(
+        "/api/v1/auth/signup",
+        headers=csrf_headers(client),
+        json={**payload, "invitation_code": invitation_code},
     )
 
     assert response.status_code == 201, response.text
@@ -179,6 +249,14 @@ async def test_signup_creates_a_verified_student_session_without_activation(
     async with TestSession() as db:
         user = await db.scalar(select(User).where(User.email == "asha@direct-campus.edu"))
         assert user is not None
+        pending_request = await db.scalar(
+            select(StudentRegistrationRequest).where(
+                StudentRegistrationRequest.email == "asha@direct-campus.edu",
+                StudentRegistrationRequest.invitation_id.is_(None),
+            )
+        )
+        assert pending_request is not None
+        assert pending_request.status == RegistrationStatus.ACTIVATED.value
         membership = await db.scalar(
             select(InstitutionMembership).where(InstitutionMembership.user_id == user.id)
         )
@@ -193,8 +271,49 @@ async def test_signup_creates_a_verified_student_session_without_activation(
         assert profile is not None
         assert profile.full_name == "Asha Patil"
         assert {item.document_type for item in acceptances} == {"terms", "privacy"}
-        assert await db.scalar(select(MembershipInvitation.id)) is None
+        invitation = await db.scalar(select(MembershipInvitation))
+        assert invitation is not None and invitation.accepted_at is not None
         assert await db.scalar(select(EmailDelivery.id)) is None
+
+
+async def test_unlinked_student_invitation_cannot_activate_an_account(
+    client: TestClient,
+) -> None:
+    token = "unlinked-student-invitation-code"  # noqa: S105
+    async with TestSession() as db:
+        institution = Institution(code="unlinked-campus", name="Unlinked Campus")
+        db.add(institution)
+        await db.flush()
+        db.add_all(
+            [
+                InstitutionDomain(
+                    institution_id=institution.id,
+                    domain="unlinked.edu",
+                    verification_status="verified",
+                    verified_at=datetime.now(UTC),
+                ),
+                MembershipInvitation(
+                    institution_id=institution.id,
+                    email="student@unlinked.edu",
+                    role=UserRole.STUDENT.value,
+                    token_hash=hash_secret(token),
+                    expires_at=datetime.now(UTC) + timedelta(hours=1),
+                ),
+            ]
+        )
+        await db.commit()
+    assert client.get(f"/api/v1/auth/invitations/{token}").status_code == 410
+    activated = client.post(
+        f"/api/v1/auth/invitations/{token}/accept",
+        headers=csrf_headers(client),
+        json={
+            "password": "a synthetic student passphrase",
+            "terms_version": "2026-08-28",
+            "privacy_version": "2026-08-28",
+        },
+    )
+    assert activated.status_code == 410
+    assert client.get("/api/v1/auth/me").status_code == 401
 
 
 async def test_institution_registration_flags_similar_existing_name_without_granting_access(
@@ -819,6 +938,195 @@ async def test_singleton_platform_admin_receives_only_platform_capabilities(
     assert "applications.review" not in user["capabilities"]
     assert client.get("/api/v1/platform/dashboard").status_code == 200
     assert client.get("/api/v1/admin/recruitment/applications").status_code == 403
+
+
+async def test_platform_assignment_and_tnp_context_switch_are_tenant_scoped(
+    client: TestClient,
+) -> None:
+    first, officer = await seed_institution_owner()
+    async with TestSession() as db:
+        second = Institution(code="second-campus", name="Second Campus")
+        unassigned = Institution(code="unassigned-campus", name="Unassigned Campus")
+        db.add_all([second, unassigned])
+        await db.commit()
+        second_id = second.id
+        unassigned_id = unassigned.id
+    await seed_platform_admin()
+    sign_in(client, "platform-admin", "a secure platform passphrase")
+    assigned = client.post(
+        f"/api/v1/platform/institutions/{second_id}/staff-assignments",
+        headers=csrf_headers(client),
+        json={
+            "username": officer.username,
+            "role": "tnp_admin",
+            "reason": "Officer is covering the second institution.",
+        },
+    )
+    assert assigned.status_code == 201, assigned.text
+    assert assigned.json()["institution_id"] == str(second_id)
+    changed = client.patch(
+        f"/api/v1/platform/institutions/{second_id}/staff-accounts/{assigned.json()['id']}",
+        headers=csrf_headers(client),
+        json={
+            "status": "active",
+            "role": "tnp_reviewer",
+            "reason": "Second campus only needs assigned reviews.",
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    async with TestSession() as db:
+        stored = await db.get(User, officer.id)
+        assert stored is not None and stored.role == officer.role
+
+    client.cookies.clear()
+    signed_in = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "identifier": officer.username,
+            "password": "a secure owner passphrase",
+            "workspace": "tnp",
+        },
+    )
+    assert signed_in.status_code == 200, signed_in.text
+    assert signed_in.json()["user"]["institution_id"] in {str(first.id), str(second_id)}
+    memberships = client.get("/api/v1/auth/memberships")
+    assert memberships.status_code == 200, memberships.text
+    assert {item["institution_id"] for item in memberships.json()} == {
+        str(first.id), str(second_id)
+    }
+    first_choice = next(
+        item for item in memberships.json() if item["institution_id"] == str(first.id)
+    )
+
+    switched = client.post(
+        "/api/v1/auth/active-membership",
+        headers=csrf_headers(client),
+        json={"membership_id": assigned.json()["id"]},
+    )
+    assert switched.status_code == 200, switched.text
+    assert switched.json()["institution_id"] == str(second_id)
+    assert switched.json()["role"] == "tnp_reviewer"
+    assert client.get("/api/v1/auth/me").json()["institution_id"] == str(second_id)
+    assert client.get(f"/api/v1/institutions/{first.id}/memberships").status_code == 403
+    assert client.get(f"/api/v1/institutions/{second_id}/memberships").status_code == 403
+    restored = client.post(
+        "/api/v1/auth/active-membership",
+        headers=csrf_headers(client),
+        json={"membership_id": first_choice["id"]},
+    )
+    assert restored.status_code == 200
+    assert restored.json()["role"] == "tnp_owner"
+    assert client.get(f"/api/v1/institutions/{first.id}/memberships").status_code == 200
+
+    denied = client.post(
+        "/api/v1/auth/active-membership",
+        headers=csrf_headers(client),
+        json={"membership_id": str(uuid4())},
+    )
+    assert denied.status_code == 404
+    assert client.get(f"/api/v1/institutions/{unassigned_id}/memberships").status_code == 403
+
+
+async def test_manual_student_recovery_is_scoped_audited_and_single_use(
+    client: TestClient,
+) -> None:
+    institution, officer = await seed_institution_owner()
+    async with TestSession() as db:
+        student = User(
+            email="recovery@student-campus.edu",
+            password_hash=hash_password("original student passphrase"),
+            role=UserRole.STUDENT.value,
+            institution_id=institution.id,
+        )
+        db.add(student)
+        await db.flush()
+        db.add(
+            InstitutionMembership(
+                institution_id=institution.id,
+                user_id=student.id,
+                role=UserRole.STUDENT.value,
+                status=MembershipStatus.ACTIVE.value,
+            )
+        )
+        await db.commit()
+        student_id = student.id
+    sign_in(client, officer.username, "a secure owner passphrase")
+    issued = client.post(
+        f"/api/v1/institutions/{institution.id}/students/{student_id}/manual-recovery",
+        headers=csrf_headers(client),
+        json={
+            "identity_check_method": "in-person student ID check",
+            "identity_check_reference": "synthetic-helpdesk-123",
+            "reason": "Student lost access to the original passphrase.",
+        },
+    )
+    assert issued.status_code == 200, issued.text
+    assert issued.headers["cache-control"] == "no-store"
+    code = issued.json()["reset_code"]
+    assert len(code) >= 20
+    async with TestSession() as db:
+        audit = await db.scalar(
+            select(AuditEvent).where(AuditEvent.event_type == "auth.manual_recovery_issued")
+        )
+        assert audit is not None and audit.actor_user_id == officer.id
+    wrong_tenant = client.post(
+        f"/api/v1/institutions/{uuid4()}/students/{student_id}/manual-recovery",
+        headers=csrf_headers(client),
+        json={
+            "identity_check_method": "in-person student ID check",
+            "identity_check_reference": "synthetic-helpdesk-123",
+            "reason": "Student lost access to the original passphrase.",
+        },
+    )
+    assert wrong_tenant.status_code == 403
+    client.cookies.clear()
+    confirmed = client.post(
+        f"/api/v1/auth/password-reset/{code}/confirm",
+        headers=csrf_headers(client),
+        json={"password": "replacement student passphrase"},
+    )
+    replay = client.post(
+        f"/api/v1/auth/password-reset/{code}/confirm",
+        headers=csrf_headers(client),
+        json={"password": "another student passphrase"},
+    )
+    assert confirmed.status_code == 204
+    assert replay.status_code == 410
+
+
+async def test_only_platform_admin_can_issue_staff_manual_recovery(client: TestClient) -> None:
+    _, officer = await seed_institution_owner()
+    await seed_platform_admin()
+    payload = {
+        "identity_check_method": "verified helpdesk callback",
+        "identity_check_reference": "synthetic-helpdesk-456",
+        "reason": "Officer lost access to the account.",
+    }
+    sign_in(client, officer.username, "a secure owner passphrase")
+    denied = client.post(
+        f"/api/v1/platform/staff-accounts/{officer.id}/manual-recovery",
+        headers=csrf_headers(client),
+        json=payload,
+    )
+    assert denied.status_code == 403
+
+    client.cookies.clear()
+    sign_in(client, "platform-admin", "a secure platform passphrase")
+    issued = client.post(
+        f"/api/v1/platform/staff-accounts/{officer.id}/manual-recovery",
+        headers=csrf_headers(client),
+        json=payload,
+    )
+    assert issued.status_code == 200, issued.text
+    assert issued.headers["cache-control"] == "no-store"
+    assert len(issued.json()["reset_code"]) >= 20
+    cannot_reset_admin = client.post(
+        f"/api/v1/platform/staff-accounts/{client.get('/api/v1/auth/me').json()['id']}/manual-recovery",
+        headers=csrf_headers(client),
+        json=payload,
+    )
+    assert cannot_reset_admin.status_code == 404
 
 
 @pytest.mark.asyncio

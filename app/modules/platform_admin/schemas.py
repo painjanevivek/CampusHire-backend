@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PlatformDashboardSummary(BaseModel):
@@ -49,6 +49,19 @@ class PlatformStaffAccountCreate(BaseModel):
     password: str = Field(min_length=12, max_length=128)
     role: Literal["tnp_admin", "tnp_reviewer", "tnp_auditor"]
     reason: str = Field(min_length=10, max_length=500)
+
+
+class PlatformStaffAssignmentCreate(BaseModel):
+    user_id: UUID | None = None
+    username: str | None = Field(default=None, pattern=r"^[A-Za-z][A-Za-z0-9._-]{2,63}$")
+    role: Literal["tnp_admin", "tnp_reviewer", "tnp_auditor"]
+    reason: str = Field(min_length=10, max_length=500)
+
+    @model_validator(mode="after")
+    def require_one_identity(self) -> "PlatformStaffAssignmentCreate":
+        if (self.user_id is None) == (self.username is None):
+            raise ValueError("Provide exactly one staff user ID or username")
+        return self
 
 
 class PlatformStaffAccount(BaseModel):

@@ -25,7 +25,12 @@ Keep `/opt/campushire/config/production.env` mode `0600` and outside the checkou
   `PARSER_CLIENT_CERT_DIR` outside the checkout
 - `OCI_OBJECT_NAMESPACE`, `OCI_OBJECT_BUCKET`, `OCI_OBJECT_QUOTA_BYTES=14000000000`, and `OCI_OBJECT_UPLOADS_ENABLED=true`
 - `BACKUP_AGE_RECIPIENT`; keep `BACKUP_AGE_IDENTITY_FILE` off-host and use it only during rehearsal
-- regional OCI SMTP endpoint, workload SMTP credential, approved from-address, and bounce webhook key
+- `EMAIL_DELIVERY_MODE=smtp` with a regional OCI SMTP endpoint, workload credential, approved
+  from-address, and bounce webhook key; **or** `EMAIL_DELIVERY_MODE=manual` with no SMTP
+  credentials and `MANUAL_HANDOFF_APPROVAL_REFERENCE` pointing to the institution-signed
+  identity-check and secure handoff procedure. The reference is a deployment check, not approval
+  by itself. CampusHire does not deliver emails in manual mode; Officers/Admins must hand off
+  one-time codes through the approved channel and rehearse lost-code and recovery cases.
 - independent operator bootstrap and MFA encryption keys
 - `PRODUCTION_CADDYFILE_PATH=/opt/campushire/current/deploy/production/Caddyfile`
 

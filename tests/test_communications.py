@@ -29,6 +29,7 @@ from app.models.recruitment import (
 )
 from app.modules.auth.security import hash_secret
 from app.modules.auth.service import confirm_password_reset
+from app.modules.communications import service as communications_service
 from app.modules.communications.reminders import enqueue_upcoming_deadline_reminders
 from app.modules.communications.schemas import SupportRequestCreate
 from app.modules.communications.service import (
@@ -56,6 +57,16 @@ async def database() -> AsyncIterator[None]:
         await connection.run_sync(Base.metadata.drop_all)
 
 
+@pytest.fixture(autouse=True)
+def configured_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(
+        email_smtp_host="smtp.example.test",
+        email_smtp_username="synthetic-user",
+        email_smtp_password="synthetic-password",  # noqa: S106
+    )
+    monkeypatch.setattr(communications_service, "get_settings", lambda: settings)
+
+
 class RecordingProvider:
     def __init__(self, fail: bool = False) -> None:
         self.fail = fail
@@ -68,6 +79,53 @@ class RecordingProvider:
         self.subjects.append(subject)
         self.bodies.append(text_body)
         return f"provider-{len(self.subjects)}"
+
+
+async def test_unconfigured_email_is_suppressed_not_queued(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(communications_service, "get_settings", Settings)
+    async with Session() as db:
+        item = await enqueue_email(
+            db,
+            institution_id=None,
+            recipient_email="student@example.edu",
+            category="account",
+            template_key="password_reset",
+            variables={"reset_url": "https://example.test/reset"},
+            dedupe_key="offline-reset",
+        )
+        await db.commit()
+        assert item.status == "suppressed"
+        assert item.safe_error_code == "email_provider_unconfigured"
+        assert item.template_variables == {}
+        assert await process_next_email(db, RecordingProvider()) is None
+
+
+async def test_queued_email_is_suppressed_if_delivery_is_disabled_before_send(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with Session() as db:
+        item = await enqueue_email(
+            db,
+            institution_id=None,
+            recipient_email="student@example.edu",
+            category="account",
+            template_key="password_reset",
+            variables={"reset_url": "https://example.test/reset"},
+            dedupe_key="previously-queued-reset",
+        )
+        await db.commit()
+        assert item.status == "queued"
+        assert item.template_variables != {}
+        monkeypatch.setattr(communications_service, "get_settings", Settings)
+        provider = RecordingProvider()
+        assert await process_next_email(db, provider) == item.id
+        assert provider.bodies == []
+        await db.refresh(item)
+        assert item.status == "suppressed"
+        assert item.safe_error_code == "email_provider_unconfigured"
+        assert item.template_variables == {}
 
 
 async def test_queue_deduplicates_prioritizes_and_suppresses_optional_email() -> None:
