@@ -44,6 +44,7 @@ from app.modules.auth.schemas import (
     SessionResponse,
     SignInRequest,
     SignInResponse,
+    SignupInstitution,
     SignupRequest,
     TermsAcceptanceRequest,
     UserResponse,
@@ -131,6 +132,19 @@ async def csrf(request: Request, response: Response, db: Database) -> None:
     _set_csrf_cookie(response, token)
 
 
+@router.get("/signup/institutions", response_model=list[SignupInstitution])
+async def signup_institutions(response: Response, db: Database) -> list[SignupInstitution]:
+    response.headers["Cache-Control"] = "public, max-age=300"
+    institutions = (
+        await db.scalars(
+            select(Institution)
+            .where(Institution.is_active.is_(True))
+            .order_by(Institution.name, Institution.id)
+        )
+    ).all()
+    return [SignupInstitution(id=item.id, name=item.name) for item in institutions]
+
+
 @router.post(
     "/signup", response_model=RegistrationStartResponse, status_code=status.HTTP_201_CREATED
 )
@@ -153,6 +167,7 @@ async def signup(
         terms_version=payload.terms_version,
         privacy_version=payload.privacy_version,
         invitation_code=payload.invitation_code,
+        requested_institution_id=payload.institution_id,
         correlation_id=request.state.correlation_id,
     )
     if result.status == "registration_unavailable":
@@ -160,9 +175,8 @@ async def signup(
         return RegistrationStartResponse(
             status=result.status,
             message=(
-                "We could not verify this college email for sign-up. Use an email on your "
-                "college's verified domain. If you have a code, use the invited email address; "
-                "otherwise, contact your placement office."
+                "We could not match this request. Check your college selection and, if you "
+                "entered an invitation code, confirm it was issued for this email address."
             ),
         )
     if result.status == "approval_pending":

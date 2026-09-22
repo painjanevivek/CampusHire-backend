@@ -12302,6 +12302,25 @@
         "title": "SignInResponse",
         "type": "object"
       },
+      "SignupInstitution": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SignupInstitution",
+        "type": "object"
+      },
       "SignupRequest": {
         "properties": {
           "dob": {
@@ -12313,6 +12332,18 @@
             "format": "email",
             "title": "Email",
             "type": "string"
+          },
+          "institution_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Id"
           },
           "invitation_code": {
             "anyOf": [
@@ -20454,6 +20485,31 @@
           }
         },
         "summary": "Signup",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/signup/institutions": {
+      "get": {
+        "operationId": "signup_institutions_api_v1_auth_signup_institutions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SignupInstitution"
+                  },
+                  "title": "Response Signup Institutions Api V1 Auth Signup Institutions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Signup Institutions",
         "tags": [
           "authentication"
         ]

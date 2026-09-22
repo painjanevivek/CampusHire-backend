@@ -24,6 +24,7 @@ class SignupRequest(BaseModel):
     surname: str = Field(min_length=1, max_length=100)
     dob: date
     email: EmailStr
+    institution_id: UUID | None = None
     password: str = Field(min_length=12, max_length=128)
     re_enter_password: str = Field(min_length=12, max_length=128)
     terms_version: str = Field(min_length=1, max_length=64)
@@ -54,6 +55,11 @@ class RegistrationStartResponse(BaseModel):
     status: Literal["registered", "approval_pending", "registration_unavailable"]
     message: str
     next_path: str | None = None
+
+
+class SignupInstitution(BaseModel):
+    id: UUID
+    name: str
 
 
 class InstitutionRegistrationRequestCreate(BaseModel):

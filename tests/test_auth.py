@@ -186,9 +186,8 @@ async def test_signup_fails_without_a_verified_college_identity(
     assert response.json() == {
         "status": "registration_unavailable",
         "message": (
-            "We could not verify this college email for sign-up. Use an email on your "
-            "college's verified domain. If you have a code, use the invited email address; "
-            "otherwise, contact your placement office."
+            "We could not match this request. Check your college selection and, if you "
+            "entered an invitation code, confirm it was issued for this email address."
         ),
         "next_path": None,
     }

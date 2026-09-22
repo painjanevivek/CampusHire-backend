@@ -64,6 +64,7 @@ async def start_student_registration(
     terms_version: str,
     privacy_version: str,
     invitation_code: str | None,
+    requested_institution_id: UUID | None,
     correlation_id: str | None,
 ) -> StudentRegistrationResult:
     normalized_email = normalize_email(email)
@@ -86,7 +87,21 @@ async def start_student_registration(
         if invitation is not None and await is_approved_student_invitation(db, invitation)
         else None
     )
-    if not invitation_code and institution_id is None:
+    if (
+        invitation_code
+        and requested_institution_id is not None
+        and institution_id != requested_institution_id
+    ):
+        institution_id = None
+    if not invitation_code and requested_institution_id is not None:
+        selected_institution = await db.scalar(
+            select(Institution).where(
+                Institution.id == requested_institution_id,
+                Institution.is_active.is_(True),
+            )
+        )
+        institution_id = selected_institution.id if selected_institution is not None else None
+    if not invitation_code and institution_id is None and requested_institution_id is None:
         email_domain = normalized_email.rpartition("@")[2]
         domain_record = await db.scalar(
             select(InstitutionDomain)
@@ -116,7 +131,7 @@ async def start_student_registration(
             resource_type="student_registration_request",
             resource_id=str(attempt.id),
             outcome="pending",
-            reason="college_identity_not_yet_verified",
+            reason="student_requested_access_without_invitation",
             correlation_id=correlation_id,
         )
         await db.commit()
