@@ -30,7 +30,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
-        title="CampusHire AI API",
+        title="CampusHire API",
         version="0.1.0",
         docs_url="/docs" if settings.is_development else None,
         redoc_url=None,

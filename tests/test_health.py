@@ -16,6 +16,10 @@ def test_liveness() -> None:
     assert response.headers["X-Request-ID"]
 
 
+def test_openapi_uses_campushire_product_name() -> None:
+    assert app.openapi()["info"]["title"] == "CampusHire API"
+
+
 def test_valid_request_id_is_propagated() -> None:
     with TestClient(app) as client:
         response = client.get(

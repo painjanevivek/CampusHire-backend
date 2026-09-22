@@ -1,4 +1,4 @@
-# CampusHire AI Product and Authority Boundaries
+# CampusHire — AI Product and Authority Boundaries
 
 Status: implementation baseline; formal approval pending.
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "campushire-backend"
 version = "0.1.0"
-description = "CampusHire AI backend API"
+description = "CampusHire backend API"
 requires-python = ">=3.11"
 dependencies = [
   "alembic==1.19.1",

@@ -1,4 +1,4 @@
-<h1 align="center">CampusHire AI · Backend</h1>
+<h1 align="center">CampusHire · Backend</h1>
 
 <p align="center">
   The rules, evidence, and intelligence layer for accountable campus recruitment.<br />

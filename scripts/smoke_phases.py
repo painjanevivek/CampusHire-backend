@@ -30,7 +30,7 @@ def main() -> None:
     passed(0, "scope and governance documents")
     from app.main import app
 
-    assert app.title == "CampusHire AI API"
+    assert app.title == "CampusHire API"
     passed(1, "API foundation and health contract")
     password_hash = hash_password("a long campus passphrase")
     assert verify_password(password_hash, "a long campus passphrase")
