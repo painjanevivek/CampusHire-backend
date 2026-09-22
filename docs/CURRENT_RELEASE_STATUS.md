@@ -1,5 +1,40 @@
 # Current Release Status
 
+## Working-tree implementation update — 2026-09-22
+
+Decision: **NO-GO for real student data and production. Synthetic qualification only.**
+This update describes uncommitted working trees, not a frozen or approved release candidate.
+The pre-existing résumé and other unrelated edits were retained; the Git heads below do not
+identify the complete code under test.
+
+| Baseline item | Current observation |
+| --- | --- |
+| Backend HEAD | `91573cb1d6fc4f9e701a6c3eb7661b42b416bfb` |
+| Frontend HEAD | `3067020c1babab8e7e5e30c40dbed4b5fb0daf8c` |
+| Alembic head | `20260915_0033` (one head; no new migration in this work) |
+| Reviewed OpenAPI snapshot | Backend and Frontend SHA-256 `59435FC1EE3DB405D92DB7F258D1A7EC22F9ECD1A3B71CD45DDA101292B6CCA4` |
+
+The first identity/delivery tranche is implemented in these working trees: student signup and
+activation now require an invitation tied to a committed roster row and verified institution
+domain; platform-assigned T&P staff can select among only their active institution memberships;
+invitation and reset redemption lock the token row; and email-disabled roster/recovery workflows
+issue one-time codes through an audited, no-store officer or platform Admin response. An unconfigured
+sender suppresses delivery rather than reporting mail as sent. Deployment validation has an explicit
+manual-handoff mode. The institution must still approve an actual authenticated handoff and
+identity-check procedure; a configuration reference is not that approval.
+
+Local verification on these changing working trees: Backend `240 passed, 1 skipped`, Ruff and
+strict MyPy pass; Frontend `240 passed`, lint, typecheck, and production build pass. These checks
+include a narrow headless Chromium smoke of the production build's public sign-up and recovery
+entry points, including the one-time-code navigation; they do not establish authenticated UAT.
+These checks
+do **not** include a frozen paired commit/image, PostgreSQL concurrency rehearsal, migration
+replay/restore, current security review, complete browser/accessibility UAT, real alert/backup
+restore, provider/privacy approval, or the institutional sign-offs required below. The remaining
+application-packet consolidation, agentic qualification, outcome/reporting semantics, deployed
+privacy and recourse checks, and release gates remain open. Older evidence in this document is
+historical and cannot qualify the present working trees.
+
 Recorded: 2026-09-05 (Asia/Calcutta)
 
 Decision: **Product-experience working trees implemented; continued synthetic qualification only;

@@ -54,6 +54,20 @@
         "title": "ActivationStage",
         "type": "object"
       },
+      "ActiveMembershipRequest": {
+        "properties": {
+          "membership_id": {
+            "format": "uuid",
+            "title": "Membership Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "membership_id"
+        ],
+        "title": "ActiveMembershipRequest",
+        "type": "object"
+      },
       "AdminApplicationPage": {
         "properties": {
           "items": {
@@ -5128,6 +5142,17 @@
       },
       "InvitationActionResponse": {
         "properties": {
+          "activation_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activation Code"
+          },
           "expires_at": {
             "format": "date-time",
             "title": "Expires At",
@@ -5160,6 +5185,31 @@
           "message"
         ],
         "title": "InvitationActionResponse",
+        "type": "object"
+      },
+      "InvitationHandoffResponse": {
+        "properties": {
+          "activation_code": {
+            "title": "Activation Code",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "activation_code",
+          "expires_at"
+        ],
+        "title": "InvitationHandoffResponse",
         "type": "object"
       },
       "InvitationResponse": {
@@ -5513,6 +5563,53 @@
         "title": "LinksUpdate",
         "type": "object"
       },
+      "ManualRecoveryHandoff": {
+        "properties": {
+          "expires_in_minutes": {
+            "title": "Expires In Minutes",
+            "type": "integer"
+          },
+          "reset_code": {
+            "title": "Reset Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reset_code",
+          "expires_in_minutes"
+        ],
+        "title": "ManualRecoveryHandoff",
+        "type": "object"
+      },
+      "ManualRecoveryRequest": {
+        "properties": {
+          "identity_check_method": {
+            "maxLength": 100,
+            "minLength": 5,
+            "title": "Identity Check Method",
+            "type": "string"
+          },
+          "identity_check_reference": {
+            "maxLength": 120,
+            "minLength": 5,
+            "title": "Identity Check Reference",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity_check_method",
+          "identity_check_reference",
+          "reason"
+        ],
+        "title": "ManualRecoveryRequest",
+        "type": "object"
+      },
       "MaterialTermChange": {
         "properties": {
           "after": {
@@ -5770,6 +5867,36 @@
           "application_deadline"
         ],
         "title": "MaterialTermsUpdate",
+        "type": "object"
+      },
+      "MembershipChoice": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "institution_id": {
+            "format": "uuid",
+            "title": "Institution Id",
+            "type": "string"
+          },
+          "institution_name": {
+            "title": "Institution Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "institution_id",
+          "institution_name",
+          "role"
+        ],
+        "title": "MembershipChoice",
         "type": "object"
       },
       "MembershipCreate": {
@@ -7249,6 +7376,55 @@
           "reason"
         ],
         "title": "PlatformStaffAccountCreate",
+        "type": "object"
+      },
+      "PlatformStaffAssignmentCreate": {
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "tnp_admin",
+              "tnp_reviewer",
+              "tnp_auditor"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9._-]{2,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "role",
+          "reason"
+        ],
+        "title": "PlatformStaffAssignmentCreate",
         "type": "object"
       },
       "PlatformStaffStatusChange": {
@@ -8862,6 +9038,7 @@
           "status": {
             "enum": [
               "registered",
+              "approval_pending",
               "registration_unavailable"
             ],
             "title": "Status",
@@ -9019,6 +9196,26 @@
       },
       "ResumeContent": {
         "properties": {
+          "achievements": {
+            "items": {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Achievements",
+            "type": "array"
+          },
+          "credentials": {
+            "items": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Credentials",
+            "type": "array"
+          },
           "education": {
             "items": {
               "maxLength": 800,
@@ -9033,6 +9230,16 @@
             "maxLength": 320,
             "title": "Email",
             "type": "string"
+          },
+          "experience": {
+            "items": {
+              "maxLength": 1200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Experience",
+            "type": "array"
           },
           "full_name": {
             "maxLength": 160,
@@ -10350,6 +10557,74 @@
         "title": "RoleUpdate",
         "type": "object"
       },
+      "RosterCommitResponse": {
+        "properties": {
+          "committed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Committed At"
+          },
+          "handoffs": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationHandoffResponse"
+            },
+            "title": "Handoffs",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invalid_rows": {
+            "title": "Invalid Rows",
+            "type": "integer"
+          },
+          "invited_rows": {
+            "title": "Invited Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/RosterRowResponse"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          },
+          "valid_rows": {
+            "title": "Valid Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "total_rows",
+          "valid_rows",
+          "invalid_rows",
+          "invited_rows",
+          "committed_at",
+          "rows",
+          "handoffs"
+        ],
+        "title": "RosterCommitResponse",
+        "type": "object"
+      },
       "RosterImportResponse": {
         "properties": {
           "committed_at": {
@@ -11626,6 +11901,32 @@
         "title": "StatusEventResponse",
         "type": "object"
       },
+      "StudentAccessRequestSummary": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "created_at"
+        ],
+        "title": "StudentAccessRequestSummary",
+        "type": "object"
+      },
       "StudentIdentityStep": {
         "additionalProperties": false,
         "properties": {
@@ -12416,7 +12717,7 @@
     }
   },
   "info": {
-    "title": "CampusHire AI API",
+    "title": "CampusHire API",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
@@ -18259,6 +18560,65 @@
         ]
       }
     },
+    "/api/v1/auth/active-membership": {
+      "post": {
+        "operationId": "select_active_membership_api_v1_auth_active_membership_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActiveMembershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Active Membership",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
     "/api/v1/auth/csrf": {
       "get": {
         "operationId": "csrf_api_v1_auth_csrf_get",
@@ -18534,6 +18894,59 @@
           }
         },
         "summary": "Me",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/memberships": {
+      "get": {
+        "operationId": "read_active_memberships_api_v1_auth_memberships_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MembershipChoice"
+                  },
+                  "title": "Response Read Active Memberships Api V1 Auth Memberships Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Active Memberships",
         "tags": [
           "authentication"
         ]
@@ -20300,7 +20713,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterImportResponse"
+                  "$ref": "#/components/schemas/RosterCommitResponse"
                 }
               }
             },
@@ -20387,6 +20800,148 @@
           }
         },
         "summary": "Provision Staff Account",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/student-access-requests": {
+      "get": {
+        "operationId": "read_student_access_requests_api_v1_institutions__institution_id__student_access_requests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StudentAccessRequestSummary"
+                  },
+                  "title": "Response Read Student Access Requests Api V1 Institutions  Institution Id  Student Access Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Student Access Requests",
+        "tags": [
+          "institution memberships"
+        ]
+      }
+    },
+    "/api/v1/institutions/{institution_id}/students/{student_id}/manual-recovery": {
+      "post": {
+        "operationId": "issue_student_manual_recovery_api_v1_institutions__institution_id__students__student_id__manual_recovery_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "student_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Student Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualRecoveryHandoff"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Student Manual Recovery",
         "tags": [
           "institution memberships"
         ]
@@ -22600,6 +23155,75 @@
         ]
       }
     },
+    "/api/v1/platform/institutions/{institution_id}/staff-assignments": {
+      "post": {
+        "operationId": "assign_existing_platform_staff_api_v1_platform_institutions__institution_id__staff_assignments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformStaffAssignmentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStaffAccount"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Existing Platform Staff",
+        "tags": [
+          "platform administration"
+        ]
+      }
+    },
     "/api/v1/platform/institutions/{institution_id}/status": {
       "patch": {
         "operationId": "set_platform_institution_status_api_v1_platform_institutions__institution_id__status_patch",
@@ -22819,6 +23443,75 @@
           }
         },
         "summary": "Set Platform Settings",
+        "tags": [
+          "platform administration"
+        ]
+      }
+    },
+    "/api/v1/platform/staff-accounts/{user_id}/manual-recovery": {
+      "post": {
+        "operationId": "issue_staff_manual_recovery_api_v1_platform_staff_accounts__user_id__manual_recovery_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualRecoveryHandoff"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Staff Manual Recovery",
         "tags": [
           "platform administration"
         ]
