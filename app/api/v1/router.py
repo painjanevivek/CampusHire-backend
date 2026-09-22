@@ -27,6 +27,9 @@ from app.api.v1.routes.onboarding import admin_router as admin_onboarding_router
 from app.api.v1.routes.onboarding import student_router as student_onboarding_router
 from app.api.v1.routes.operations import router as operations_router
 from app.api.v1.routes.opportunities import router as opportunities_router
+from app.api.v1.routes.outcomes import platform_router as platform_outcomes_router
+from app.api.v1.routes.outcomes import student_router as student_outcomes_router
+from app.api.v1.routes.outcomes import tnp_router as tnp_outcomes_router
 from app.api.v1.routes.platform import router as platform_router
 from app.api.v1.routes.privacy import router as privacy_router
 from app.api.v1.routes.privacy import tnp_router as tnp_privacy_router
@@ -57,6 +60,7 @@ api_router.include_router(
 api_router.include_router(privacy_router, tags=["privacy"])
 api_router.include_router(tnp_privacy_router, tags=["privacy administration"])
 api_router.include_router(platform_router, tags=["platform administration"])
+api_router.include_router(platform_outcomes_router, tags=["placement outcomes"])
 api_router.include_router(resumes_router, tags=["resumes"])
 api_router.include_router(generative_router, tags=["generative resume studio"])
 api_router.include_router(student_copilot_router, tags=["student copilot"])
@@ -64,12 +68,14 @@ api_router.include_router(tnp_copilot_router, tags=["T&P copilot"])
 api_router.include_router(student_agentic_router, tags=["student agent workflows"])
 api_router.include_router(tnp_agentic_router, tags=["T&P agent workflows"])
 api_router.include_router(opportunities_router, tags=["opportunities and applications"])
+api_router.include_router(student_outcomes_router, tags=["placement outcomes"])
 api_router.include_router(application_packet_student_router, tags=["application packets"])
 api_router.include_router(student_engagement_router, tags=["readiness and communication"])
 api_router.include_router(student_intelligence_router, tags=["semantic relevance"])
 api_router.include_router(
     admin_recruitment_router, prefix="/tnp", tags=["placement administration"]
 )
+api_router.include_router(tnp_outcomes_router, prefix="/tnp", tags=["placement outcomes"])
 api_router.include_router(
     admin_recruitment_router,
     prefix="/admin",

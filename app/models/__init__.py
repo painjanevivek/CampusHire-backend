@@ -61,6 +61,7 @@ from app.models.onboarding import (
     StudentPlacementParticipation,
     StudentProject,
 )
+from app.models.outcomes import MetricDefinitionVersion, OutcomeEvent
 from app.models.privacy import DataDeletionRequest, LegalHold, PrivacyRequest, RetentionClass
 from app.models.profile import ProfilePhoto, StudentProfile
 from app.models.recruitment import (
@@ -129,6 +130,7 @@ __all__ = [
     "EligibilityEvaluation",
     "EligibilityRuleSet",
     "MaterialTermsVersion",
+    "MetricDefinitionVersion",
     "Institution",
     "GenerationUsage",
     "InstitutionDomain",
@@ -147,6 +149,7 @@ __all__ = [
     "PlatformSetting",
     "PlacementDrive",
     "PlacementRole",
+    "OutcomeEvent",
     "PracticeConsent",
     "PreparationPlan",
     "PrivacyRequest",

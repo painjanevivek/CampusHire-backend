@@ -23,9 +23,11 @@ from app.modules.experience.schemas import (
     Metric,
     PreparationEvidence,
     PreparationResponse,
+    ReportDefinitionMetadata,
     ReportResponse,
 )
 from app.modules.experience.service import ExperienceError, utc
+from app.modules.outcomes.service import active_metric_definition, outcome_totals
 
 
 def application_filters(
@@ -301,6 +303,33 @@ async def operational_report(
                 href=base + "&application_status=" + status,
             )
         )
+    outcome_summary = await outcome_totals(db, institution_id, start_at=start, end_at=end)
+    for outcome_state, outcome_counts in (
+        ("provisional", outcome_summary.provisional),
+        ("verified", outcome_summary.verified),
+    ):
+        for event_type, count in sorted(outcome_counts.items()):
+            metrics.append(
+                Metric(
+                    key=f"outcome_{event_type}_{outcome_state}",
+                    label=(
+                        f"{event_type.replace('_', ' ').title()} "
+                        f"({outcome_state})"
+                    ),
+                    value=count,
+                    sample_size=count,
+                    explanation=(
+                        "Current, non-superseded outcome events recorded within the interval. "
+                        "Only a distinct verified joining event contributes to verified joining."
+                    ),
+                    href=(
+                        "/tnp/reports?outcome_type="
+                        + event_type
+                        + "&outcome_state="
+                        + outcome_state
+                    ),
+                )
+            )
     now = datetime.now(UTC)
     drive_conditions = [
         PlacementDrive.institution_id == institution_id,
@@ -336,10 +365,18 @@ async def operational_report(
         )
     )
     institution = await db.get(Institution, institution_id)
+    definition = await active_metric_definition(db, "placement_outcomes", end)
     return ReportResponse(
         start_at=start,
         end_at=end,
         timezone=institution.timezone if institution else "UTC",
+        definition=ReportDefinitionMetadata(
+            code="placement_outcomes",
+            version=definition.version if definition else None,
+            status=definition.status if definition else "unconfigured",
+            effective_at=definition.effective_at if definition else None,
+            frozen_at=end,
+        ),
         metrics=metrics,
     )
 

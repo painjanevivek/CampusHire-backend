@@ -127,10 +127,19 @@ class Metric(BaseModel):
     href: str
 
 
+class ReportDefinitionMetadata(BaseModel):
+    code: str
+    version: int | None = None
+    status: str
+    effective_at: datetime | None = None
+    frozen_at: datetime
+
+
 class ReportResponse(BaseModel):
     start_at: datetime
     end_at: datetime
     timezone: str
+    definition: ReportDefinitionMetadata
     metrics: list[Metric]
 
 

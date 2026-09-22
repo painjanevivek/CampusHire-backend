@@ -6183,6 +6183,194 @@
         "title": "Metric",
         "type": "object"
       },
+      "MetricDefinitionApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_status": {
+            "const": "draft",
+            "default": "draft",
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "MetricDefinitionApproval",
+        "type": "object"
+      },
+      "MetricDefinitionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 80,
+            "minLength": 3,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "denominator": {
+            "additionalProperties": true,
+            "title": "Denominator",
+            "type": "object"
+          },
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "evidence_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Evidence Requirements",
+            "type": "array"
+          },
+          "exclusions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Exclusions",
+            "type": "array"
+          },
+          "filters": {
+            "additionalProperties": true,
+            "title": "Filters",
+            "type": "object"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "numerator": {
+            "additionalProperties": true,
+            "title": "Numerator",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "effective_at",
+          "numerator",
+          "denominator",
+          "evidence_requirements"
+        ],
+        "title": "MetricDefinitionCreate",
+        "type": "object"
+      },
+      "MetricDefinitionResponse": {
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By User Id"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "denominator": {
+            "additionalProperties": true,
+            "title": "Denominator",
+            "type": "object"
+          },
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "evidence_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Requirements",
+            "type": "array"
+          },
+          "exclusions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Exclusions",
+            "type": "array"
+          },
+          "filters": {
+            "additionalProperties": true,
+            "title": "Filters",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "numerator": {
+            "additionalProperties": true,
+            "title": "Numerator",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "version",
+          "status",
+          "effective_at",
+          "filters",
+          "numerator",
+          "denominator",
+          "exclusions",
+          "evidence_requirements",
+          "approved_by_user_id",
+          "approved_at"
+        ],
+        "title": "MetricDefinitionResponse",
+        "type": "object"
+      },
       "MfaCodeRequest": {
         "properties": {
           "code": {
@@ -6731,6 +6919,486 @@
           "saved"
         ],
         "title": "OpportunityResponse",
+        "type": "object"
+      },
+      "OutcomeEventCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "compensation_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensation Amount"
+          },
+          "compensation_currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensation Currency"
+          },
+          "compensation_period": {
+            "anyOf": [
+              {
+                "enum": [
+                  "hour",
+                  "month",
+                  "year",
+                  "total"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensation Period"
+          },
+          "correction_reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 10,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Reason"
+          },
+          "event_at": {
+            "format": "date-time",
+            "title": "Event At",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "selection",
+              "offer_issued",
+              "offer_accepted",
+              "offer_declined",
+              "offer_rescinded",
+              "joining_deferred",
+              "joining",
+              "no_show",
+              "placement_confirmed",
+              "internship",
+              "ppo",
+              "higher_studies",
+              "approved_off_campus"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence_reference": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Reference"
+          },
+          "joining_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joining Date"
+          },
+          "joining_location": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joining Location"
+          },
+          "next_update_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Update Due At"
+          },
+          "next_update_owner": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Update Owner"
+          },
+          "outcome_state": {
+            "enum": [
+              "provisional",
+              "verified"
+            ],
+            "title": "Outcome State",
+            "type": "string"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          },
+          "source_type": {
+            "maxLength": 48,
+            "minLength": 2,
+            "title": "Source Type",
+            "type": "string"
+          },
+          "stipend_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stipend Amount"
+          },
+          "supersedes_event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Event Id"
+          }
+        },
+        "required": [
+          "event_type",
+          "outcome_state",
+          "event_at",
+          "source_type"
+        ],
+        "title": "OutcomeEventCreate",
+        "type": "object"
+      },
+      "OutcomeEventResponse": {
+        "properties": {
+          "application_id": {
+            "format": "uuid",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "compensation_amount": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensation Amount"
+          },
+          "compensation_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensation Currency"
+          },
+          "compensation_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensation Period"
+          },
+          "correction_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Reason"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "format": "uuid",
+            "title": "Created By User Id",
+            "type": "string"
+          },
+          "event_at": {
+            "format": "date-time",
+            "title": "Event At",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "selection",
+              "offer_issued",
+              "offer_accepted",
+              "offer_declined",
+              "offer_rescinded",
+              "joining_deferred",
+              "joining",
+              "no_show",
+              "placement_confirmed",
+              "internship",
+              "ppo",
+              "higher_studies",
+              "approved_off_campus"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Reference"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "institution_id": {
+            "format": "uuid",
+            "title": "Institution Id",
+            "type": "string"
+          },
+          "joining_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joining Date"
+          },
+          "joining_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joining Location"
+          },
+          "next_update_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Update Due At"
+          },
+          "next_update_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Update Owner"
+          },
+          "outcome_state": {
+            "enum": [
+              "provisional",
+              "verified"
+            ],
+            "title": "Outcome State",
+            "type": "string"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "stipend_amount": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stipend Amount"
+          },
+          "student_user_id": {
+            "format": "uuid",
+            "title": "Student User Id",
+            "type": "string"
+          },
+          "superseded_by_event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Event Id"
+          },
+          "supersedes_event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Event Id"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "verified_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified By User Id"
+          }
+        },
+        "required": [
+          "id",
+          "institution_id",
+          "application_id",
+          "student_user_id",
+          "event_type",
+          "outcome_state",
+          "event_at",
+          "source_type",
+          "source_reference",
+          "evidence_reference",
+          "verified_by_user_id",
+          "verified_at",
+          "compensation_amount",
+          "compensation_currency",
+          "compensation_period",
+          "stipend_amount",
+          "joining_date",
+          "joining_location",
+          "next_update_owner",
+          "next_update_due_at",
+          "supersedes_event_id",
+          "correction_reason",
+          "created_by_user_id",
+          "created_at"
+        ],
+        "title": "OutcomeEventResponse",
         "type": "object"
       },
       "OverrideResponse": {
@@ -9111,8 +9779,58 @@
         "title": "RegistrationTokenRequest",
         "type": "object"
       },
+      "ReportDefinitionMetadata": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "frozen_at": {
+            "format": "date-time",
+            "title": "Frozen At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "code",
+          "status",
+          "frozen_at"
+        ],
+        "title": "ReportDefinitionMetadata",
+        "type": "object"
+      },
       "ReportResponse": {
         "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/ReportDefinitionMetadata"
+          },
           "end_at": {
             "format": "date-time",
             "title": "End At",
@@ -9139,6 +9857,7 @@
           "start_at",
           "end_at",
           "timezone",
+          "definition",
           "metrics"
         ],
         "title": "ReportResponse",
@@ -18370,6 +19089,69 @@
         ]
       }
     },
+    "/api/v1/applications/{application_id}/outcomes": {
+      "get": {
+        "operationId": "student_outcome_timeline_api_v1_applications__application_id__outcomes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OutcomeEventResponse"
+                  },
+                  "title": "Response Student Outcome Timeline Api V1 Applications  Application Id  Outcomes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Student Outcome Timeline",
+        "tags": [
+          "placement outcomes"
+        ]
+      }
+    },
     "/api/v1/applications/{application_id}/requests": {
       "get": {
         "operationId": "student_requests_api_v1_applications__application_id__requests_get",
@@ -22967,6 +23749,79 @@
         ]
       }
     },
+    "/api/v1/platform/institutions/{institution_id}/applications/{application_id}/outcomes": {
+      "get": {
+        "operationId": "platform_outcome_drillthrough_api_v1_platform_institutions__institution_id__applications__application_id__outcomes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "institution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Institution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OutcomeEventResponse"
+                  },
+                  "title": "Response Platform Outcome Drillthrough Api V1 Platform Institutions  Institution Id  Applications  Application Id  Outcomes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Outcome Drillthrough",
+        "tags": [
+          "placement outcomes"
+        ]
+      }
+    },
     "/api/v1/platform/institutions/{institution_id}/staff-accounts": {
       "get": {
         "operationId": "read_platform_staff_accounts_api_v1_platform_institutions__institution_id__staff_accounts_get",
@@ -23311,6 +24166,185 @@
         "summary": "Set Platform Institution Status",
         "tags": [
           "platform administration"
+        ]
+      }
+    },
+    "/api/v1/platform/metric-definitions": {
+      "get": {
+        "operationId": "metric_definitions_api_v1_platform_metric_definitions_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MetricDefinitionResponse"
+                  },
+                  "title": "Response Metric Definitions Api V1 Platform Metric Definitions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Metric Definitions",
+        "tags": [
+          "placement outcomes"
+        ]
+      },
+      "post": {
+        "operationId": "create_metric_definition_api_v1_platform_metric_definitions_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricDefinitionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricDefinitionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Metric Definition",
+        "tags": [
+          "placement outcomes"
+        ]
+      }
+    },
+    "/api/v1/platform/metric-definitions/{definition_id}/approve": {
+      "post": {
+        "operationId": "approve_metric_definition_api_v1_platform_metric_definitions__definition_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "definition_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Definition Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricDefinitionApproval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricDefinitionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Metric Definition",
+        "tags": [
+          "placement outcomes"
         ]
       }
     },
@@ -26336,6 +27370,136 @@
         "summary": "Claim Application",
         "tags": [
           "placement administration"
+        ]
+      }
+    },
+    "/api/v1/tnp/recruitment/applications/{application_id}/outcomes": {
+      "get": {
+        "operationId": "tnp_outcome_timeline_api_v1_tnp_recruitment_applications__application_id__outcomes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OutcomeEventResponse"
+                  },
+                  "title": "Response Tnp Outcome Timeline Api V1 Tnp Recruitment Applications  Application Id  Outcomes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tnp Outcome Timeline",
+        "tags": [
+          "placement outcomes"
+        ]
+      },
+      "post": {
+        "operationId": "record_outcome_event_api_v1_tnp_recruitment_applications__application_id__outcomes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "campushire_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Outcome Event",
+        "tags": [
+          "placement outcomes"
         ]
       }
     },
