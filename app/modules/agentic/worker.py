@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.providers.base import StructuredGenerator
 from app.ai.workflows.campus_agent import process_agent_run
 from app.core.config import Settings
-from app.models.agentic import AgentRun
+from app.models.agentic import AgentRun, GenerationUsage
 from app.modules.agentic.service import _append_event
 
 
@@ -27,25 +27,45 @@ async def recover_stale_agent_runs(db: AsyncSession) -> int:
         ).all()
     )
     for run in stale_runs:
-        run.status = "queued"
+        dispatched_attempts = list(
+            (
+                await db.scalars(
+                    select(GenerationUsage)
+                    .where(
+                        GenerationUsage.run_id == run.id,
+                        GenerationUsage.status == "dispatched",
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
         run.lease_owner = None
         run.lease_expires_at = None
         run.revision += 1
-        await _append_event(
-            db,
-            run,
-            "recovered",
-            "Interrupted worker lease expired; task queued for safe recovery.",
-        )
-    await db.execute(
-        update(AgentRun)
-        .where(
-            AgentRun.status == "running",
-            AgentRun.lease_expires_at < now,
-            AgentRun.cancel_requested.is_(False),
-        )
-        .values(status="queued", lease_owner=None, lease_expires_at=None)
-    )
+        if dispatched_attempts:
+            for attempt in dispatched_attempts:
+                attempt.status = "uncertain"
+            run.status = "failed"
+            run.safe_error = "provider_outcome_review_required"
+            run.actual_cost_microunits = max(
+                run.actual_cost_microunits, run.reserved_cost_microunits
+            )
+            run.required_action = None
+            await _append_event(
+                db,
+                run,
+                "provider_outcome_review_required",
+                "The worker stopped after provider dispatch. The task was not replayed.",
+                {"attempts": [attempt.attempt for attempt in dispatched_attempts]},
+            )
+        else:
+            run.status = "queued"
+            await _append_event(
+                db,
+                run,
+                "recovered",
+                "Interrupted worker lease expired; task queued for safe recovery.",
+            )
     await db.execute(
         update(AgentRun)
         .where(

@@ -43,6 +43,15 @@ def test_vercel_api_role_uses_bounded_pool_without_local_worker_dependencies() -
     }
 
 
+def test_production_agent_runs_require_explicit_real_data_approval() -> None:
+    with pytest.raises(ValidationError, match="AI_REAL_DATA_ENABLED=true"):
+        production_settings(agent_runs=True)
+
+    settings = production_settings(agent_runs=True, ai_real_data_enabled=True)
+    assert settings.agent_runs is True
+    assert settings.ai_real_data_enabled is True
+
+
 def test_production_worker_still_requires_clamav_and_docker_parser() -> None:
     with pytest.raises(ValidationError, match="MALWARE_SCANNER=clamav"):
         production_settings(process_role="worker")

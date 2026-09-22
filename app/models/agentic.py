@@ -34,6 +34,13 @@ class AgentRun(Base, TimestampMixin):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     audience: Mapped[str] = mapped_column(String(24), index=True)
     workflow: Mapped[str] = mapped_column(String(64), index=True)
+    workflow_version: Mapped[str] = mapped_column(String(80), default="campus-agent-v1")
+    source_projection_version: Mapped[str] = mapped_column(
+        String(80), default="agent-source-projection-v1"
+    )
+    evaluation_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    provider_name: Mapped[str] = mapped_column(String(80), default="gemini")
+    model_version: Mapped[str] = mapped_column(String(120), default="unconfigured")
     target_kind: Mapped[str] = mapped_column(String(24))
     target_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     status: Mapped[str] = mapped_column(String(24), default="queued", index=True)
@@ -95,6 +102,13 @@ class PreparationPlan(Base, TimestampMixin):
     content: Mapped[dict[str, Any]] = mapped_column(JSON)
     evidence_references: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     source_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    provider_name: Mapped[str] = mapped_column(String(80), default="unrecorded-legacy")
+    model_version: Mapped[str] = mapped_column(String(120), default="unrecorded-legacy")
+    workflow_version: Mapped[str] = mapped_column(String(80), default="campus-agent-v1")
+    source_projection_version: Mapped[str] = mapped_column(
+        String(80), default="agent-source-projection-v1"
+    )
+    evaluation_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -120,6 +134,13 @@ class DrivePreparationArtifact(Base, TimestampMixin):
     content: Mapped[dict[str, Any]] = mapped_column(JSON)
     evidence_references: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     source_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    provider_name: Mapped[str] = mapped_column(String(80), default="unrecorded-legacy")
+    model_version: Mapped[str] = mapped_column(String(120), default="unrecorded-legacy")
+    workflow_version: Mapped[str] = mapped_column(String(80), default="campus-agent-v1")
+    source_projection_version: Mapped[str] = mapped_column(
+        String(80), default="agent-source-projection-v1"
+    )
+    evaluation_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

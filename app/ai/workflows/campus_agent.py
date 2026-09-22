@@ -518,6 +518,9 @@ async def _model_call(
         usage.status = "uncertain"
         usage.latency_ms = round((time.perf_counter() - started) * 1_000)
         run.active_time_ms += usage.latency_ms
+        run.actual_cost_microunits = max(
+            run.actual_cost_microunits, run.reserved_cost_microunits
+        )
         await db.commit()
         raise AgentValidationFailure("provider_attempt_failed") from error
     await db.refresh(run)
@@ -527,6 +530,8 @@ async def _model_call(
         raise AgentValidationFailure("run_cancelled")
     usage.provider = result.provider_name
     usage.model = result.model_version
+    run.provider_name = result.provider_name
+    run.model_version = result.model_version
     usage.status = "completed"
     usage.input_tokens = result.input_tokens
     usage.output_tokens = result.output_tokens
@@ -694,6 +699,11 @@ async def _store_artifact(
                 content=PreparationPlanContent.model_validate(artifact).model_dump(mode="json"),
                 evidence_references=references,
                 source_fingerprint=run.source_fingerprint or "",
+                provider_name=run.provider_name,
+                model_version=run.model_version,
+                workflow_version=run.workflow_version,
+                source_projection_version=run.source_projection_version,
+                evaluation_run_id=run.evaluation_run_id,
             )
         )
     else:
@@ -707,6 +717,11 @@ async def _store_artifact(
                 content=DrivePreparationContent.model_validate(artifact).model_dump(mode="json"),
                 evidence_references=references,
                 source_fingerprint=run.source_fingerprint or "",
+                provider_name=run.provider_name,
+                model_version=run.model_version,
+                workflow_version=run.workflow_version,
+                source_projection_version=run.source_projection_version,
+                evaluation_run_id=run.evaluation_run_id,
             )
         )
     await db.flush()

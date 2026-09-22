@@ -179,6 +179,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "evaluation_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Run Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -186,6 +197,14 @@
           },
           "limits": {
             "$ref": "#/components/schemas/RunLimits"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
           },
           "required_action": {
             "anyOf": [
@@ -224,6 +243,10 @@
               }
             ],
             "title": "Source Fingerprint"
+          },
+          "source_projection_version": {
+            "title": "Source Projection Version",
+            "type": "string"
           },
           "status": {
             "enum": [
@@ -264,12 +287,21 @@
             ],
             "title": "Workflow",
             "type": "string"
+          },
+          "workflow_version": {
+            "title": "Workflow Version",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "audience",
           "workflow",
+          "workflow_version",
+          "source_projection_version",
+          "evaluation_run_id",
+          "provider_name",
+          "model_version",
           "target_kind",
           "target_id",
           "status",
@@ -1413,6 +1445,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "evaluation_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Run Id"
+          },
           "evidence_references": {
             "items": {
               "additionalProperties": true,
@@ -1434,6 +1477,14 @@
             "title": "Kind",
             "type": "string"
           },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          },
           "revision": {
             "title": "Revision",
             "type": "integer"
@@ -1445,6 +1496,10 @@
           },
           "source_fingerprint": {
             "title": "Source Fingerprint",
+            "type": "string"
+          },
+          "source_projection_version": {
+            "title": "Source Projection Version",
             "type": "string"
           },
           "source_target_revision": {
@@ -1477,6 +1532,10 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "workflow_version": {
+            "title": "Workflow Version",
+            "type": "string"
           }
         },
         "required": [
@@ -1489,6 +1548,11 @@
           "content",
           "evidence_references",
           "source_fingerprint",
+          "provider_name",
+          "model_version",
+          "workflow_version",
+          "source_projection_version",
+          "evaluation_run_id",
           "created_at",
           "updated_at"
         ],

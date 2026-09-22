@@ -67,6 +67,11 @@ class AgentRunResponse(StrictModel):
     id: UUID
     audience: Literal["student", "tnp"]
     workflow: Literal["prepare_opportunity", "prepare_drive"]
+    workflow_version: str
+    source_projection_version: str
+    evaluation_run_id: str | None
+    provider_name: str
+    model_version: str
     target_kind: Literal["role", "drive"]
     target_id: UUID
     status: RunStatus
@@ -179,6 +184,11 @@ class ArtifactResponse(StrictModel):
     content: dict[str, Any]
     evidence_references: list[dict[str, Any]]
     source_fingerprint: str
+    provider_name: str
+    model_version: str
+    workflow_version: str
+    source_projection_version: str
+    evaluation_run_id: str | None
     source_target_revision: int | None = None
     created_at: datetime
     updated_at: datetime

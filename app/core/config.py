@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     agent_runs: bool = False
     live_sources: bool = False
     practice_aggregates: bool = False
+    ai_real_data_enabled: bool = False
+    agent_workflow_version: str = Field(default="campus-agent-v1", min_length=1, max_length=80)
+    agent_source_projection_version: str = Field(
+        default="agent-source-projection-v1", min_length=1, max_length=80
+    )
+    agent_evaluation_run_id: str | None = Field(default=None, min_length=1, max_length=120)
     agent_max_model_calls: int = Field(default=4, ge=1, le=12)
     agent_max_tool_calls: int = Field(default=6, ge=1, le=20)
     agent_max_correction_attempts: int = Field(default=1, ge=0, le=3)
@@ -163,6 +169,10 @@ class Settings(BaseSettings):
         if self.demo_admin_mfa_bypass and self.app_env not in {"development", "test"}:
             raise ValueError(
                 "Demo administrator MFA bypass is restricted to development and test environments"
+            )
+        if self.app_env == "production" and self.agent_runs and not self.ai_real_data_enabled:
+            raise ValueError(
+                "Production agent runs require AI_REAL_DATA_ENABLED=true after explicit approval"
             )
         worker_enabled = self.process_role in {"all", "worker"}
         if (

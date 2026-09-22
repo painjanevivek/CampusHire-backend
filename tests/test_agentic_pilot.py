@@ -21,6 +21,7 @@ from app.models.agentic import (
     AgentEvent,
     AgentRun,
     DrivePreparationArtifact,
+    GenerationUsage,
     PreparationPlan,
     SourceVersion,
 )
@@ -142,6 +143,9 @@ async def seed_recruitment_context(
 def agent_settings() -> Settings:
     return Settings(
         gemini_generation_model="test-model",
+        agent_workflow_version="campus-agent-test-v2",
+        agent_source_projection_version="source-projection-test-v2",
+        agent_evaluation_run_id="synthetic-evaluation-20260923",
         ai_input_cost_cents_per_million_tokens=1,
         ai_output_cost_cents_per_million_tokens=1,
     )
@@ -391,6 +395,11 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                 target_kind="role",
                 target_id=role.id,
                 idempotency_key="student-agent-recovery",
+                workflow_version="campus-agent-test-v2",
+                source_projection_version="source-projection-test-v2",
+                evaluation_run_id="synthetic-evaluation-20260923",
+                provider_name="gemini",
+                model_version="test-model",
                 input_payload={
                     "role_id": str(role.id),
                     "goal": "Prepare for the published Python role",
@@ -526,6 +535,11 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
             assert run.lease_owner is None
             plan = await db.scalar(select(PreparationPlan).where(PreparationPlan.run_id == run.id))
             assert plan is not None
+            assert plan.provider_name == "test-provider"
+            assert plan.model_version == "test-model"
+            assert plan.workflow_version == "campus-agent-test-v2"
+            assert plan.source_projection_version == "source-projection-test-v2"
+            assert plan.evaluation_run_id == "synthetic-evaluation-20260923"
             assert any(
                 reference["source_id"] == f"role:{role.id}"
                 for reference in plan.evidence_references
@@ -581,6 +595,66 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                         decision="reject",
                     ),
                 )
+
+
+@pytest.mark.asyncio
+async def test_stale_run_with_dispatched_provider_attempt_requires_manual_review() -> None:
+    async with agent_database() as session_factory:
+        async with session_factory() as db:
+            institution, student, _, role = await seed_recruitment_context(
+                db,
+                code="uncertain-provider",
+                email="uncertain-provider@example.edu",
+                role=UserRole.STUDENT.value,
+            )
+            run = AgentRun(
+                institution_id=institution.id,
+                user_id=student.id,
+                audience="student",
+                workflow="prepare_opportunity",
+                target_kind="role",
+                target_id=role.id,
+                status="running",
+                idempotency_key="uncertain-provider-attempt",
+                input_payload={},
+                checkpoint_data={"stage": "sources_collected", "answers": []},
+                model_calls=1,
+                lease_owner="crashed-worker",
+                lease_expires_at=datetime.now(UTC) - timedelta(seconds=1),
+                expires_at=datetime.now(UTC) + timedelta(days=30),
+            )
+            db.add(run)
+            await db.flush()
+            db.add(
+                GenerationUsage(
+                    run_id=run.id,
+                    institution_id=institution.id,
+                    attempt=1,
+                    provider="gemini",
+                    model="test-model",
+                    prompt_version="planner-v1",
+                    status="dispatched",
+                    created_at=datetime.now(UTC),
+                )
+            )
+            await db.commit()
+
+            assert await recover_stale_agent_runs(db) == 1
+            await db.refresh(run)
+            usage = await db.scalar(
+                select(GenerationUsage).where(GenerationUsage.run_id == run.id)
+            )
+
+            assert usage is not None
+            assert usage.status == "uncertain"
+            assert run.status == "failed"
+            assert run.safe_error == "provider_outcome_review_required"
+            assert run.actual_cost_microunits == run.reserved_cost_microunits
+            assert run.lease_owner is None
+            assert run.lease_expires_at is None
+            assert await claim_next_agent_run(
+                db, worker_id="replacement-worker", lease_seconds=60
+            ) is None
 
 
 @pytest.mark.asyncio

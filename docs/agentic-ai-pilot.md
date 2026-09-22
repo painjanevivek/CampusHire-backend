@@ -9,8 +9,16 @@ authoritative for eligibility and drive mutations.
 Each run reserves 30,000 micro-dollars and shares a lifetime ceiling of four model calls, six tool
 calls, one validated correction, and 90 active seconds. Waiting for review does not consume active
 time, and resuming retains all counters. Provider attempts are written before dispatch so uncertain
-billing is visible and is never retried automatically. Worker execution is fenced by the claimed
-lease owner, so a late worker cannot overwrite or clear a safely recovered claim.
+billing is visible and is never retried automatically. A stale lease with a dispatched attempt is
+stopped with `provider_outcome_review_required`; an operator must review it instead of allowing a
+replacement worker to replay the request. Because the exact provider charge is unknown, the run's
+full reserved amount remains counted against the tenant budget. Worker execution is fenced by the claimed lease owner,
+so a late worker cannot overwrite or clear a safely recovered claim.
+
+Every run and artifact records the model release, workflow version, source-projection version, and
+optional frozen evaluation-run identifier. Production refuses to start agent runs unless
+`AI_REAL_DATA_ENABLED=true` has been set after the separate provider/privacy release gate. The
+default remains false, and `AGENT_RUNS` remains the global operational kill switch.
 
 Enable the global `AGENT_RUNS` switch and the institution `agent_runs` flag only after model,
 pricing, monthly allowance, API, and worker configuration are present. `LIVE_SOURCES` and the
