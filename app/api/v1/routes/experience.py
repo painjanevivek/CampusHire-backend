@@ -98,8 +98,14 @@ async def admin_requests(
     application_id: UUID, db: Database, principal: CurrentPrincipal
 ) -> list[CorrectionResponse]:
     try:
+        application = await service.owned_application(
+            db, institution(principal), application_id
+        )
+        require_assigned_review_access(
+            application, actor_user_id=principal.user.id, actor_role=principal.role
+        )
         return await service.request_page(db, institution(principal), application_id)
-    except service.ExperienceError as error:
+    except (service.ExperienceError, RecruitmentError) as error:
         raise failure(error) from error
 
 

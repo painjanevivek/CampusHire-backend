@@ -78,7 +78,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         {
             "recruitment.read",
             "applications.review",
-            "intelligence.review",
             "operations.read",
         }
     ),

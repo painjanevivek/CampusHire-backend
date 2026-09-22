@@ -11,6 +11,7 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
+    permissions_for_role,
     require_permissions,
     require_roles,
     verify_authenticated_csrf,
@@ -98,7 +99,11 @@ async def read_semantic_match(
 async def read_policies(db: Database, principal: CurrentPrincipal) -> list[PolicyResponse]:
     if principal.institution_id is None:
         raise HTTPException(status_code=403, detail="Institution context required")
-    return await list_policies(db, principal.institution_id)
+    return await list_policies(
+        db,
+        principal.institution_id,
+        approved_only="intelligence.review" not in permissions_for_role(principal.role),
+    )
 
 
 @admin_router.post(

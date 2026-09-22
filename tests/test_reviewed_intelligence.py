@@ -241,6 +241,7 @@ async def test_only_approved_policy_is_grounded_and_reviewed_extraction_changes_
                 ],
             ),
         )
+        assert await list_policies(db, institution.id, approved_only=True) == []
         before = await answer_policy_question(
             db, institution.id, PolicyQuestion(question="What happens when attendance is missing?")
         )
@@ -253,6 +254,8 @@ async def test_only_approved_policy_is_grounded_and_reviewed_extraction_changes_
             PolicyReview(action="approve", reason="Verified against the registrar circular."),
         )
         assert reviewed.status == "approved"
+        approved = await list_policies(db, institution.id, approved_only=True)
+        assert [item.id for item in approved] == [policy.id]
         after = await answer_policy_question(
             db, institution.id, PolicyQuestion(question="What happens when attendance is missing?")
         )

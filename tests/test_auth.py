@@ -34,6 +34,7 @@ from app.models.auth import (
 from app.models.communications import EmailDelivery
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
+from app.modules.auth.dependencies import permissions_for_role
 from app.modules.auth.security import hash_password, hash_secret, totp_code
 from app.modules.platform_admin.service import transfer_platform_admin
 
@@ -43,6 +44,13 @@ engine = create_async_engine(
     poolclass=StaticPool,
 )
 TestSession = async_sessionmaker(engine, expire_on_commit=False)
+
+
+def test_reviewer_cannot_approve_institutional_policy_or_override() -> None:
+    permissions = permissions_for_role(UserRole.TNP_REVIEWER.value)
+    assert "applications.review" in permissions
+    assert "intelligence.review" not in permissions
+    assert "applications.override" not in permissions
 
 
 async def override_db() -> AsyncIterator[AsyncSession]:
@@ -390,8 +398,16 @@ async def test_demo_login_is_hidden_when_disabled(client: TestClient) -> None:
 async def test_demo_login_uses_server_credentials_when_mfa_is_not_enrolled(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _, _, demo_admin, _ = await seed_institution_memberships()
+    _, _, demo_tnp, _ = await seed_institution_memberships()
     async with TestSession() as db:
+        demo_admin = User(
+            email="platform-demo@example.com",
+            username="platform-demo",
+            password_hash=hash_password("a secure platform demo passphrase"),
+            role=UserRole.PLATFORM_ADMIN.value,
+        )
+        db.add(demo_admin)
+        await db.flush()
         await transfer_platform_admin(
             db,
             user_id=demo_admin.id,
@@ -403,8 +419,11 @@ async def test_demo_login_uses_server_credentials_when_mfa_is_not_enrolled(
         patch.setenv("DEMO_ADMIN_MFA_BYPASS", "true")
         patch.setenv("DEMO_STUDENT_EMAIL", "student@campus-a.edu")
         patch.setenv("DEMO_STUDENT_PASSWORD", "a secure student passphrase")
-        patch.setenv("DEMO_ADMIN_EMAIL", "admin@campus-a.edu")
-        patch.setenv("DEMO_ADMIN_PASSWORD", "a secure administrator passphrase")
+        patch.setenv("DEMO_TNP_EMAIL", "admin@campus-a.edu")
+        patch.setenv("DEMO_TNP_USERNAME", "admin")
+        patch.setenv("DEMO_TNP_PASSWORD", "a secure administrator passphrase")
+        patch.setenv("DEMO_ADMIN_EMAIL", "platform-demo@example.com")
+        patch.setenv("DEMO_ADMIN_PASSWORD", "a secure platform demo passphrase")
         get_settings.cache_clear()
 
         student = client.post(
@@ -417,19 +436,30 @@ async def test_demo_login_uses_server_credentials_when_mfa_is_not_enrolled(
         assert student.json()["next_step"] == "complete"
 
         client.cookies.clear()
-        admin = client.post(
+        tnp = client.post(
             "/api/v1/auth/demo-sign-in",
             headers=csrf_headers(client),
             json={"role": "tnp_admin"},
         )
-        assert admin.status_code == 200, admin.text
-        assert admin.json()["user"]["role"] == "platform_admin"
-        assert admin.json()["next_step"] == "complete"
+        assert tnp.status_code == 200, tnp.text
+        assert tnp.json()["user"]["role"] == "tnp_admin"
+        assert tnp.json()["user"]["workspace"] == "tnp"
+        assert tnp.json()["next_step"] == "complete"
         assert client.get("/api/v1/auth/me").status_code == 200
         async with TestSession() as db:
-            session = await db.scalar(select(Session).where(Session.user_id == demo_admin.id))
+            session = await db.scalar(select(Session).where(Session.user_id == demo_tnp.id))
             assert session is not None
             assert session.mfa_verified_at is not None
+
+        client.cookies.clear()
+        admin = client.post(
+            "/api/v1/auth/demo-sign-in",
+            headers=csrf_headers(client),
+            json={"role": "platform_admin"},
+        )
+        assert admin.status_code == 200, admin.text
+        assert admin.json()["user"]["role"] == "platform_admin"
+        assert admin.json()["user"]["workspace"] == "admin"
 
         patch.setenv("DEMO_ADMIN_MFA_BYPASS", "false")
         get_settings.cache_clear()
@@ -437,7 +467,7 @@ async def test_demo_login_uses_server_credentials_when_mfa_is_not_enrolled(
         protected_admin = client.post(
             "/api/v1/auth/demo-sign-in",
             headers=csrf_headers(client),
-            json={"role": "tnp_admin"},
+            json={"role": "platform_admin"},
         )
         assert protected_admin.status_code == 200, protected_admin.text
         assert protected_admin.json()["next_step"] == "complete"
@@ -843,6 +873,18 @@ async def test_reviewer_cannot_apply_bulk_or_override_decisions(client: TestClie
     )
     assert bulk.status_code == 403
     assert bulk.json()["error"]["code"] == "permission_denied"
+
+    policy = client.post(
+        "/api/v1/admin/intelligence/policies",
+        headers=headers,
+        json={
+            "title": "Reviewer-created policy",
+            "source_reference": "Unapproved reviewer source",
+            "sections": [{"section": "1", "page": 1, "text": "Must not be accepted"}],
+        },
+    )
+    assert policy.status_code == 403
+    assert policy.json()["error"]["code"] == "permission_denied"
 
 
 async def seed_institution_owner() -> tuple[Institution, User]:

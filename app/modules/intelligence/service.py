@@ -283,12 +283,15 @@ def _policy_response(item: PolicyDocument) -> PolicyResponse:
     return PolicyResponse.model_validate(item, from_attributes=True)
 
 
-async def list_policies(db: AsyncSession, institution_id: UUID) -> list[PolicyResponse]:
+async def list_policies(
+    db: AsyncSession, institution_id: UUID, *, approved_only: bool = False
+) -> list[PolicyResponse]:
+    statement = select(PolicyDocument).where(PolicyDocument.institution_id == institution_id)
+    if approved_only:
+        statement = statement.where(PolicyDocument.status == ReviewStatus.APPROVED.value)
     items = (
         await db.scalars(
-            select(PolicyDocument)
-            .where(PolicyDocument.institution_id == institution_id)
-            .order_by(PolicyDocument.created_at.desc())
+            statement.order_by(PolicyDocument.created_at.desc())
         )
     ).all()
     return [_policy_response(item) for item in items]

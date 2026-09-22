@@ -376,12 +376,21 @@ async def demo_sign_in(
             },
         )
     if payload.role == "student":
-        email = settings.demo_student_email
+        identifier = settings.demo_student_email
         password = settings.demo_student_password
+        required_role = UserRole.STUDENT.value
+        required_roles = None
+    elif payload.role == "tnp_admin":
+        identifier = settings.demo_tnp_email or settings.demo_tnp_username
+        password = settings.demo_tnp_password
+        required_role = None
+        required_roles = TNP_ROLE_VALUES
     else:
-        email = settings.demo_admin_email
+        identifier = settings.demo_admin_email
         password = settings.demo_admin_password
-    if email is None or password is None:
+        required_role = UserRole.PLATFORM_ADMIN.value
+        required_roles = None
+    if identifier is None or password is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -389,16 +398,16 @@ async def demo_sign_in(
                 "message": "The synthetic demo account is not configured.",
             },
         )
-    await enforce_auth_identity_rate_limit(request, str(email))
-    required_role = "student" if payload.role == "student" else UserRole.PLATFORM_ADMIN.value
+    await enforce_auth_identity_rate_limit(request, str(identifier))
     try:
         auth_session = await authenticate(
             db,
-            str(email),
+            str(identifier),
             password.get_secret_value(),
             settings.session_ttl_hours,
             request.headers.get("User-Agent"),
             required_role=required_role,
+            required_roles=required_roles,
             demo_mfa_bypass=(payload.role != "student" and settings.demo_admin_mfa_bypass),
         )
     except InvalidCredentialsError:
