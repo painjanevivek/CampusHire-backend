@@ -20,17 +20,22 @@ PY
 
 namespace="$(read_value OCI_OBJECT_NAMESPACE)"
 bucket="$(read_value OCI_OBJECT_BUCKET)"
+backup_bucket="$(read_value OCI_BACKUP_BUCKET)"
 recipient="$(read_value BACKUP_AGE_RECIPIENT)"
-[[ -n "$namespace" && -n "$bucket" && -n "$recipient" ]] \
+[[ -n "$namespace" && -n "$bucket" && -n "$backup_bucket" && -n "$recipient" ]] \
   || { printf 'Backup configuration is incomplete\n' >&2; exit 1; }
+[[ "$bucket" != "$backup_bucket" ]] \
+  || { printf 'Backup bucket must differ from the live private-object bucket\n' >&2; exit 1; }
 
 stamp="$(date -u +%Y-%m-%dT%H%M%SZ)"
 database_dump="${backup_directory}/database.dump"
 quarantine_listing="${backup_directory}/quarantine-objects.json"
 clean_listing="${backup_directory}/clean-objects.json"
 object_manifest="${backup_directory}/object-manifest.json"
+private_objects="${backup_directory}/private-objects"
 bundle="${backup_directory}/campushire-${stamp}.tar"
 encrypted="${bundle}.age"
+mkdir -p "$private_objects"
 docker compose --env-file "$environment_file" \
   --file deploy/staging/compose.yaml \
   --file deploy/oci/compose.override.yaml \
@@ -42,55 +47,33 @@ oci os object list --namespace-name "$namespace" --bucket-name "$bucket" \
   --prefix quarantine/ --all --output json >"$quarantine_listing"
 oci os object list --namespace-name "$namespace" --bucket-name "$bucket" \
   --prefix clean/ --all --output json >"$clean_listing"
-python3 - "$stamp" "$quarantine_listing" "$clean_listing" "$object_manifest" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-recorded_at, quarantine_path, clean_path, output_path = sys.argv[1:]
-objects = []
-for source in (quarantine_path, clean_path):
-    payload = json.loads(Path(source).read_text(encoding="utf-8"))
-    for item in payload.get("data", []):
-        objects.append(
-            {
-                "name": item["name"],
-                "size": int(item["size"]),
-                "etag": item.get("etag"),
-                "time_modified": item.get("time-modified"),
-            }
-        )
-manifest = {
-    "schema_version": 1,
-    "recorded_at_utc": recorded_at,
-    "object_count": len(objects),
-    "total_bytes": sum(item["size"] for item in objects),
-    "objects": sorted(objects, key=lambda item: item["name"]),
-}
-Path(output_path).write_text(
-    json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
-    encoding="utf-8",
-)
-PY
+for prefix in quarantine/ clean/; do
+  oci os object bulk-download --namespace-name "$namespace" --bucket-name "$bucket" \
+    --prefix "$prefix" --download-dir "$private_objects" --no-overwrite >/dev/null
+done
+python3 scripts/private_object_recovery.py create \
+  --recorded-at "$stamp" \
+  --listing "$quarantine_listing" --listing "$clean_listing" \
+  --object-root "$private_objects" --output "$object_manifest"
 
 tar --create --file "$bundle" --directory "$backup_directory" \
-  database.dump object-manifest.json
+  database.dump object-manifest.json private-objects
 age --recipient "$recipient" --output "$encrypted" "$bundle"
 sha256sum "$encrypted" | awk '{print $1}' >"${encrypted}.sha256"
 
 for file in "$encrypted" "${encrypted}.sha256"; do
-  oci os object put --namespace-name "$namespace" --bucket-name "$bucket" \
+  oci os object put --namespace-name "$namespace" --bucket-name "$backup_bucket" \
     --name "backups/daily/$(basename "$file")" --file "$file" --force >/dev/null
-  oci os object head --namespace-name "$namespace" --bucket-name "$bucket" \
+  oci os object head --namespace-name "$namespace" --bucket-name "$backup_bucket" \
     --name "backups/daily/$(basename "$file")" >/dev/null
 done
 if [[ "$(date -u +%u)" == "7" ]]; then
   for file in "$encrypted" "${encrypted}.sha256"; do
-    oci os object copy --namespace-name "$namespace" --bucket-name "$bucket" \
+    oci os object copy --namespace-name "$namespace" --bucket-name "$backup_bucket" \
       --source-object-name "backups/daily/$(basename "$file")" \
-      --destination-namespace "$namespace" --destination-bucket "$bucket" \
+      --destination-namespace "$namespace" --destination-bucket "$backup_bucket" \
       --destination-object-name "backups/weekly/$(basename "$file")" >/dev/null
   done
 fi
-python3 scripts/prune_oci_backups.py --namespace "$namespace" --bucket "$bucket"
+python3 scripts/prune_oci_backups.py --namespace "$namespace" --bucket "$backup_bucket"
 printf 'Encrypted off-host backup uploaded and verified: %s\n' "$stamp"

@@ -2,6 +2,14 @@ FROM docker:29-cli@sha256:000bb62ff495f986c9f5578eb67cc2cb98b91138eda81d7762d537
 
 FROM python:3.13-slim@sha256:ffb752e139c0a19692a43af8d8523b274222dd68eebad5d583b45c2201c6e30a AS application
 
+ARG VCS_REF=unknown
+ARG BUILD_CREATED=unknown
+ARG OPENAPI_SHA256=unknown
+LABEL org.opencontainers.image.source="https://github.com/painjanevivek/CampusHire-backend" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_CREATED}" \
+      com.campushire.openapi-sha256="${OPENAPI_SHA256}"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 

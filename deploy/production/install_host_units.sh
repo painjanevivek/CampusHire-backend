@@ -12,6 +12,7 @@ install -d -o campushire -g campushire -m 0700 \
 for unit in \
   campushire-backup.service \
   campushire-backup.timer \
+  campushire-alert@.service \
   campushire-operations-check.service \
   campushire-operations-check.timer; do
   install -o root -g root -m 0644 \

@@ -7,7 +7,7 @@ This target promotes the synthetic OCI staging topology to a bounded real-data c
 - Dedicated OCI Ampere A1 ARM64 VM; no unrelated workloads or datasets.
 - Real owned domain with ports 80/443 routed to Caddy; SSH restricted to operators.
 - OCI CLI and age installed for quota, backup, and restore automation.
-- Instance principal in a production dynamic group with least-privilege access to one private bucket.
+- Instance principal in a production dynamic group with least-privilege access to the live private-object bucket and a distinct encrypted recovery bucket.
 - `/etc/campushire-dedicated-production-host` created only after the isolation review.
 - Rootless, mutually authenticated parser launcher retained from the staging contract.
 
@@ -23,8 +23,10 @@ Keep `/opt/campushire/config/production.env` mode `0600` and outside the checkou
   `redis_password` files with mode `0600`
 - `PARSER_DOCKER_HOST=tcp://host.docker.internal:2376` and an absolute
   `PARSER_CLIENT_CERT_DIR` outside the checkout
-- `OCI_OBJECT_NAMESPACE`, `OCI_OBJECT_BUCKET`, `OCI_OBJECT_QUOTA_BYTES=14000000000`, and `OCI_OBJECT_UPLOADS_ENABLED=true`
-- `BACKUP_AGE_RECIPIENT`; keep `BACKUP_AGE_IDENTITY_FILE` off-host and use it only during rehearsal
+- `OCI_OBJECT_NAMESPACE`, `OCI_OBJECT_BUCKET`, `OCI_BACKUP_BUCKET`, `RESTORE_REHEARSAL_BUCKET`, `OCI_OBJECT_QUOTA_BYTES=14000000000`, and `OCI_OBJECT_UPLOADS_ENABLED=true`. All three buckets must be distinct; the rehearsal bucket must not contain production-serving objects.
+- `BACKUP_AGE_RECIPIENT`; keep `BACKUP_AGE_IDENTITY_FILE` off-host and use it only during rehearsal.
+- `BACKEND_GIT_SHA`, `FRONTEND_GIT_SHA`, and `OPENAPI_SHA256` matching the labels embedded in the immutable candidate images.
+- `OPERATIONS_ALERT_WEBHOOK_URL` and `OPERATIONS_ALERT_OWNER_REFERENCE` for an approved non-local HTTPS alert receiver and named on-call schedule/reference. These values configure delivery; the activation record must still prove a test alert was received.
 - `EMAIL_DELIVERY_MODE=smtp` with a regional OCI SMTP endpoint, workload credential, approved
   from-address, and bounce webhook key; **or** `EMAIL_DELIVERY_MODE=manual` with no SMTP
   credentials and `MANUAL_HANDOFF_APPROVAL_REFERENCE` pointing to the institution-signed
@@ -42,22 +44,22 @@ python3 -m scripts.validate_production_environment /opt/campushire/config/produc
 
 ## Operations
 
-Deploy only immutable image digests:
+Build application images with `VCS_REF`, `BUILD_CREATED`, and `OPENAPI_SHA256` labels, then deploy only immutable image digests. Deployment rejects a Backend or Frontend image whose revision or contract label differs from the protected candidate values:
 
 ```text
 deploy/production/deploy.sh
 ```
 
-Schedule `backup.sh` nightly, run `operations_check.sh` every five minutes, and run `restore_rehearsal.sh` monthly on an isolated clean host. The operations check retains a metrics-only record for API readiness, required container health, object-upload guard state, disk use, backup freshness, and certificate life. CPU, memory, route latency/error rate, database-pool use, and worker lease age still come from the approved monitoring export used by the signed activation snapshot. Follow `docs/FREE_FIRST_PRODUCTION_OPERATIONS.md` for alerts, rotations, incident paths, and paid-upgrade triggers.
+Schedule `backup.sh` nightly, run `operations_check.sh` every five minutes, and run `restore_rehearsal.sh` monthly on an isolated clean host. Each encrypted recovery bundle contains the PostgreSQL dump, private object bytes, and a SHA-256 manifest. The restore rehearsal validates the bundle and restores the objects under a new prefix in the distinct rehearsal bucket; it never writes to the live bucket and intentionally leaves the restored prefix for operator inspection. The operations check retains a metrics-only record for API readiness, required container health, object-upload guard state, disk use, backup freshness, certificate life, oldest queued work, and expired leases. CPU, memory, route latency/error rate, and database-pool use still come from the approved monitoring export used by the signed activation snapshot. Follow `docs/FREE_FIRST_PRODUCTION_OPERATIONS.md` for alerts, rotations, incident paths, and paid-upgrade triggers.
 
 ## systemd scheduling
 
 Install and enable both timer pairs under `deploy/production/systemd/`:
 
-- `campushire-backup.service` / `.timer` for the nightly encrypted database plus private-object-manifest recovery bundle;
+- `campushire-backup.service` / `.timer` for the nightly encrypted database plus checksum-verified private-object recovery bundle;
 - `campushire-operations-check.service` / `.timer` for five-minute readiness and recovery-boundary evidence.
 
-Both run under the non-login `campushire` service account with a read-only system view and private temporary storage. Configure the host monitoring/notification system to page on either unit entering `failed`; a timer without a consumed failure alert is not a monitoring system. Restore rehearsals remain deliberately operator-started on a separate clean host and must never run against the production database host.
+Both run under the non-login `campushire` service account with a read-only system view and private temporary storage. Their `OnFailure` handlers send a minimal event to the configured webhook without exposing its URL in the process list. A timer without a successfully rehearsed, consumed failure alert is not a monitoring system. Restore rehearsals remain deliberately operator-started on a separate clean host and must never run against the production database host.
 
 After the dedicated host and non-login account are provisioned, install the units once with:
 

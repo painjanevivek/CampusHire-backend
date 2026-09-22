@@ -2,6 +2,7 @@
 Description=CampusHire encrypted OCI PostgreSQL backup
 Wants=network-online.target
 After=network-online.target docker.service
+OnFailure=campushire-alert@%n.service
 
 [Service]
 Type=oneshot

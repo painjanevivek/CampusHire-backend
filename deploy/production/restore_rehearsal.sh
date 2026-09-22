@@ -25,8 +25,15 @@ PY
 
 namespace="$(read_value OCI_OBJECT_NAMESPACE)"
 bucket="$(read_value OCI_OBJECT_BUCKET)"
+backup_bucket="$(read_value OCI_BACKUP_BUCKET)"
+rehearsal_bucket="$(read_value RESTORE_REHEARSAL_BUCKET)"
 identity_file="$(read_value BACKUP_AGE_IDENTITY_FILE)"
-latest="$(oci os object list --namespace-name "$namespace" --bucket-name "$bucket" \
+[[ -n "$backup_bucket" && -n "$rehearsal_bucket" && -f "$identity_file" ]] \
+  || { printf 'Restore rehearsal configuration is incomplete\n' >&2; exit 1; }
+[[ "$bucket" != "$backup_bucket" && "$bucket" != "$rehearsal_bucket" \
+   && "$backup_bucket" != "$rehearsal_bucket" ]] \
+  || { printf 'Live, backup, and rehearsal buckets must be distinct\n' >&2; exit 1; }
+latest="$(oci os object list --namespace-name "$namespace" --bucket-name "$backup_bucket" \
   --prefix backups/daily/ --all --output json | python3 -c '
 import json
 import sys
@@ -41,9 +48,9 @@ checksum="${encrypted}.sha256"
 bundle="${rehearsal_directory}/backup.tar"
 database_dump="${rehearsal_directory}/database.dump"
 object_manifest="${rehearsal_directory}/object-manifest.json"
-oci os object get --namespace-name "$namespace" --bucket-name "$bucket" \
+oci os object get --namespace-name "$namespace" --bucket-name "$backup_bucket" \
   --name "$latest" --file "$encrypted" >/dev/null
-oci os object get --namespace-name "$namespace" --bucket-name "$bucket" \
+oci os object get --namespace-name "$namespace" --bucket-name "$backup_bucket" \
   --name "${latest}.sha256" --file "$checksum" >/dev/null
 expected_checksum="$(tr -d '[:space:]' <"$checksum")"
 actual_checksum="$(sha256sum "$encrypted" | awk '{print $1}')"
@@ -51,26 +58,22 @@ actual_checksum="$(sha256sum "$encrypted" | awk '{print $1}')"
   || { printf 'Encrypted backup checksum mismatch\n' >&2; exit 1; }
 age --decrypt --identity "$identity_file" --output "$bundle" "$encrypted"
 tar --extract --file "$bundle" --directory "$rehearsal_directory" \
-  database.dump object-manifest.json
+  database.dump object-manifest.json private-objects
 pg_restore --list "$database_dump" >/dev/null
-python3 - "$object_manifest" <<'PY'
-import json
-import sys
-from pathlib import Path
+private_objects="${rehearsal_directory}/private-objects"
+python3 scripts/private_object_recovery.py validate \
+  --manifest "$object_manifest" --object-root "$private_objects"
 
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if payload.get("schema_version") != 1:
-    raise SystemExit("Object manifest schema is unsupported")
-objects = payload.get("objects")
-if not isinstance(objects, list):
-    raise SystemExit("Object manifest entries are missing")
-if payload.get("object_count") != len(objects):
-    raise SystemExit("Object manifest count does not match entries")
-if payload.get("total_bytes") != sum(int(item["size"]) for item in objects):
-    raise SystemExit("Object manifest byte total does not match entries")
-if any(not str(item.get("name", "")).startswith(("quarantine/", "clean/")) for item in objects):
-    raise SystemExit("Object manifest contains an unexpected key prefix")
-PY
+restore_prefix="restore-rehearsal/$(date -u +%Y-%m-%dT%H%M%SZ)"
+oci os object bulk-upload --namespace-name "$namespace" --bucket-name "$rehearsal_bucket" \
+  --src-dir "$private_objects" --object-prefix "${restore_prefix}/" \
+  --verify-checksum --no-overwrite >/dev/null
+restored_listing="${rehearsal_directory}/restored-objects.json"
+oci os object list --namespace-name "$namespace" --bucket-name "$rehearsal_bucket" \
+  --prefix "${restore_prefix}/" --all --output json >"$restored_listing"
+python3 scripts/private_object_recovery.py validate-upload \
+  --manifest "$object_manifest" --restore-prefix "$restore_prefix" \
+  --listing "$restored_listing"
 
 docker run --detach --name "$container_name" --tmpfs /var/lib/postgresql/data \
   --env POSTGRES_PASSWORD=rehearsal-only \
@@ -82,4 +85,5 @@ docker exec "$container_name" pg_restore -U postgres -d campushire_restore_rehea
   --no-owner --no-privileges /tmp/backup.dump
 docker exec "$container_name" psql -U postgres -d campushire_restore_rehearsal \
   -v ON_ERROR_STOP=1 -Atc 'select count(*) >= 0 from alembic_version' | grep -qx t
-printf 'Isolated encrypted restore rehearsal passed for %s\n' "$latest"
+printf 'Isolated database and private-object restore rehearsal passed for %s into %s/%s\n' \
+  "$latest" "$rehearsal_bucket" "$restore_prefix"

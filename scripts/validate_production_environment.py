@@ -15,6 +15,8 @@ REQUIRED = (
     *IMAGE_VARIABLES,
     "OCI_OBJECT_NAMESPACE",
     "OCI_OBJECT_BUCKET",
+    "OCI_BACKUP_BUCKET",
+    "RESTORE_REHEARSAL_BUCKET",
     "OCI_OBJECT_QUOTA_BYTES",
     "OCI_OBJECT_UPLOADS_ENABLED",
     "PRODUCTION_SECRET_DIR",
@@ -23,6 +25,11 @@ REQUIRED = (
     "DATABASE_URL",
     "REDIS_URL",
     "BACKUP_AGE_RECIPIENT",
+    "OPERATIONS_ALERT_WEBHOOK_URL",
+    "OPERATIONS_ALERT_OWNER_REFERENCE",
+    "BACKEND_GIT_SHA",
+    "FRONTEND_GIT_SHA",
+    "OPENAPI_SHA256",
     "EMAIL_DELIVERY_MODE",
     "OPERATOR_BOOTSTRAP_KEY",
     "MFA_ENCRYPTION_KEY",
@@ -56,6 +63,35 @@ def validate_production_environment(values: dict[str, str]) -> list[str]:
         value = values.get(variable, "")
         if value and not IMAGE_REFERENCE.fullmatch(value):
             errors.append(f"{variable} must be an immutable GHCR digest")
+    for variable in ("BACKEND_GIT_SHA", "FRONTEND_GIT_SHA"):
+        value = values.get(variable, "")
+        if value and not re.fullmatch(r"[a-f0-9]{40}", value):
+            errors.append(f"{variable} must be a full lowercase Git commit SHA")
+    openapi_hash = values.get("OPENAPI_SHA256", "")
+    if openapi_hash and not re.fullmatch(r"[a-f0-9]{64}", openapi_hash):
+        errors.append("OPENAPI_SHA256 must be a lowercase SHA-256 digest")
+    primary_bucket = values.get("OCI_OBJECT_BUCKET", "")
+    backup_bucket = values.get("OCI_BACKUP_BUCKET", "")
+    rehearsal_bucket = values.get("RESTORE_REHEARSAL_BUCKET", "")
+    if primary_bucket and backup_bucket == primary_bucket:
+        errors.append("OCI_BACKUP_BUCKET must differ from OCI_OBJECT_BUCKET")
+    if rehearsal_bucket and rehearsal_bucket in {primary_bucket, backup_bucket}:
+        errors.append(
+            "RESTORE_REHEARSAL_BUCKET must differ from primary and backup buckets"
+        )
+    alert_url = values.get("OPERATIONS_ALERT_WEBHOOK_URL", "")
+    if alert_url:
+        parsed_alert = urlparse(alert_url)
+        if (
+            parsed_alert.scheme != "https"
+            or not parsed_alert.hostname
+            or parsed_alert.username
+            or parsed_alert.password
+            or parsed_alert.hostname in {"localhost", "127.0.0.1", "::1"}
+            or parsed_alert.hostname.endswith((".example.com", ".example.org"))
+            or parsed_alert.fragment
+        ):
+            errors.append("Operations alert webhook must be a non-local HTTPS endpoint")
     parser_host = values.get("PARSER_DOCKER_HOST", "")
     if parser_host and parser_host != "tcp://host.docker.internal:2376":
         errors.append(

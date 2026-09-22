@@ -18,6 +18,18 @@ fail() { printf 'Production deployment blocked: %s\n' "$1" >&2; exit 1; }
 (cd "${backend_root}" && python3 -m scripts.validate_production_environment "${environment_file}")
 "${backend_root}/deploy/production/check_object_quota.sh" "${environment_file}"
 
+read_value() {
+  python3 - "$environment_file" "$1" <<'PY'
+import sys
+from pathlib import Path
+name = sys.argv[2]
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    if line.startswith(f"{name}="):
+        print(line.split("=", 1)[1], end="")
+        break
+PY
+}
+
 compose=(docker compose --env-file "${environment_file}"
   --file "${backend_root}/deploy/staging/compose.yaml"
   --file "${backend_root}/deploy/oci/compose.override.yaml"
@@ -25,6 +37,23 @@ compose=(docker compose --env-file "${environment_file}"
 
 "${compose[@]}" config --quiet
 "${compose[@]}" pull
+
+backend_sha="$(read_value BACKEND_GIT_SHA)"
+frontend_sha="$(read_value FRONTEND_GIT_SHA)"
+openapi_sha="$(read_value OPENAPI_SHA256)"
+verify_image_label() {
+  local image="$1" label="$2" expected="$3"
+  local actual
+  actual="$(docker image inspect --format "{{ index .Config.Labels \"${label}\" }}" "$image")"
+  [[ "$actual" == "$expected" ]] \
+    || fail "${image} label ${label} does not match the frozen candidate"
+}
+verify_image_label "$(read_value BACKEND_API_IMAGE)" org.opencontainers.image.revision "$backend_sha"
+verify_image_label "$(read_value BACKEND_API_IMAGE)" com.campushire.openapi-sha256 "$openapi_sha"
+verify_image_label "$(read_value BACKEND_WORKER_IMAGE)" org.opencontainers.image.revision "$backend_sha"
+verify_image_label "$(read_value BACKEND_WORKER_IMAGE)" com.campushire.openapi-sha256 "$openapi_sha"
+verify_image_label "$(read_value FRONTEND_IMAGE)" org.opencontainers.image.revision "$frontend_sha"
+verify_image_label "$(read_value FRONTEND_IMAGE)" com.campushire.openapi-sha256 "$openapi_sha"
 "${compose[@]}" up --detach --remove-orphans --wait --wait-timeout 420
 
 production_host="$(python3 - "${environment_file}" <<'PY'

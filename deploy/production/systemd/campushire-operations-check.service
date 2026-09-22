@@ -2,6 +2,7 @@
 Description=CampusHire production readiness, quota, backup, and certificate check
 Wants=network-online.target
 After=network-online.target docker.service
+OnFailure=campushire-alert@%n.service
 
 [Service]
 Type=oneshot

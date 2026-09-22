@@ -24,7 +24,8 @@ PY
 host="$(read_value PRODUCTION_HOST)"
 namespace="$(read_value OCI_OBJECT_NAMESPACE)"
 bucket="$(read_value OCI_OBJECT_BUCKET)"
-[[ -n "$host" && -n "$namespace" && -n "$bucket" ]] \
+backup_bucket="$(read_value OCI_BACKUP_BUCKET)"
+[[ -n "$host" && -n "$namespace" && -n "$bucket" && -n "$backup_bucket" ]] \
   || fail "non-secret operations configuration is incomplete"
 
 compose=(docker compose --env-file "$environment_file"
@@ -63,7 +64,7 @@ certificate_days="$(( (certificate_epoch - now_epoch) / 86400 ))"
 (( certificate_days > 14 )) || fail "certificate expires inside 14 days"
 
 latest_backup_epoch="$(
-  oci os object list --namespace-name "$namespace" --bucket-name "$bucket" \
+  oci os object list --namespace-name "$namespace" --bucket-name "$backup_bucket" \
     --prefix backups/daily/ --all --output json | python3 -c '
 import datetime as dt
 import json
@@ -79,16 +80,51 @@ backup_age_seconds="$(( now_epoch - latest_backup_epoch ))"
 (( backup_age_seconds >= 0 && backup_age_seconds < 108000 )) \
   || fail "latest encrypted backup is at least 30 hours old"
 
+worker_metrics="$("${compose[@]}" exec -T postgres \
+  psql -U campushire -d campushire -At -F '|' -v ON_ERROR_STOP=1 -c "
+WITH queued(age_seconds) AS (
+  SELECT EXTRACT(EPOCH FROM now() - min(created_at))::bigint
+    FROM agent_runs WHERE status = 'queued'
+  UNION ALL
+  SELECT EXTRACT(EPOCH FROM now() - min(available_at))::bigint
+    FROM resume_processing_jobs WHERE status = 'queued'
+  UNION ALL
+  SELECT EXTRACT(EPOCH FROM now() - min(available_at))::bigint
+    FROM data_deletion_requests WHERE status = 'pending'
+), expired(count) AS (
+  SELECT count(*) FROM agent_runs
+    WHERE status = 'running' AND lease_expires_at < now()
+  UNION ALL
+  SELECT count(*) FROM resume_processing_jobs
+    WHERE status = 'running' AND lease_expires_at < now()
+)
+SELECT coalesce(greatest(max(age_seconds), 0), 0),
+       coalesce((SELECT sum(count) FROM expired), 0)
+  FROM queued;")" || fail "worker backlog query failed"
+IFS='|' read -r worker_oldest_queued_seconds worker_expired_leases <<<"$worker_metrics"
+[[ "$worker_oldest_queued_seconds" =~ ^[0-9]+$ && "$worker_expired_leases" =~ ^[0-9]+$ ]] \
+  || fail "worker backlog metrics are unreadable"
+(( worker_oldest_queued_seconds < 600 )) || fail "oldest queued work is at least ten minutes old"
+(( worker_expired_leases == 0 )) || fail "expired worker leases require recovery"
+
 install -d -m 0700 "$evidence_directory"
 evidence="${evidence_directory}/operations-$(date -u +%Y-%m-%dT%H%M%SZ).json"
 temporary="${evidence}.tmp"
-python3 - "$temporary" "$disk_percent" "$certificate_days" "$backup_age_seconds" <<'PY'
+python3 - "$temporary" "$disk_percent" "$certificate_days" "$backup_age_seconds" \
+  "$worker_oldest_queued_seconds" "$worker_expired_leases" <<'PY'
 import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-path, disk_percent, certificate_days, backup_age_seconds = sys.argv[1:]
+(
+    path,
+    disk_percent,
+    certificate_days,
+    backup_age_seconds,
+    worker_oldest_queued_seconds,
+    worker_expired_leases,
+) = sys.argv[1:]
 payload = {
     "schema_version": 1,
     "recorded_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -99,6 +135,8 @@ payload = {
     "disk_percent": int(disk_percent),
     "certificate_days_remaining": int(certificate_days),
     "backup_age_seconds": int(backup_age_seconds),
+    "worker_oldest_queued_seconds": int(worker_oldest_queued_seconds),
+    "worker_expired_leases": int(worker_expired_leases),
 }
 Path(path).write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
 PY

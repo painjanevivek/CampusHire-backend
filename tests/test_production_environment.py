@@ -14,12 +14,19 @@ def valid_environment() -> dict[str, str]:
         "CLAMAV_IMAGE": digest,
         "OCI_OBJECT_NAMESPACE": "tenantnamespace",
         "OCI_OBJECT_BUCKET": "campushire-private-production",
+        "OCI_BACKUP_BUCKET": "campushire-recovery-production",
+        "RESTORE_REHEARSAL_BUCKET": "campushire-restore-rehearsal",
         "PRODUCTION_SECRET_DIR": "/opt/campushire/config/secrets",
         "PARSER_DOCKER_HOST": "tcp://host.docker.internal:2376",
         "PARSER_CLIENT_CERT_DIR": "/opt/campushire/config/parser-client-tls",
         "DATABASE_URL": "postgresql+asyncpg://campushire:secret@postgres:5432/campushire",
         "REDIS_URL": "redis://:secret@redis:6379/0",
         "BACKUP_AGE_RECIPIENT": "age1productionrecipient",
+        "OPERATIONS_ALERT_WEBHOOK_URL": "https://alerts.example.in/campushire-hook",
+        "OPERATIONS_ALERT_OWNER_REFERENCE": "on-call-primary",
+        "BACKEND_GIT_SHA": "b" * 40,
+        "FRONTEND_GIT_SHA": "f" * 40,
+        "OPENAPI_SHA256": "c" * 64,
         "EMAIL_DELIVERY_MODE": "smtp",
         "EMAIL_SMTP_HOST": "smtp.email.ap-mumbai-1.oci.oraclecloud.com",
         "EMAIL_SMTP_USERNAME": "ocid1.user.oc1..smtp",
@@ -94,3 +101,27 @@ def test_production_environment_allows_explicit_approved_manual_handoff_without_
         "MANUAL_HANDOFF_APPROVAL_REFERENCE" in error
         for error in validate_production_environment(values)
     )
+
+
+def test_production_environment_requires_separate_recovery_boundaries() -> None:
+    values = valid_environment()
+    values["OCI_BACKUP_BUCKET"] = values["OCI_OBJECT_BUCKET"]
+    values["RESTORE_REHEARSAL_BUCKET"] = values["OCI_OBJECT_BUCKET"]
+
+    errors = validate_production_environment(values)
+
+    assert any("OCI_BACKUP_BUCKET must differ" in error for error in errors)
+    assert any("RESTORE_REHEARSAL_BUCKET must differ" in error for error in errors)
+
+
+def test_production_environment_requires_actionable_alert_and_candidate_identity() -> None:
+    values = valid_environment()
+    values["OPERATIONS_ALERT_WEBHOOK_URL"] = "http://localhost/hook"
+    values["BACKEND_GIT_SHA"] = "short"
+    values["OPENAPI_SHA256"] = "not-a-hash"
+
+    errors = validate_production_environment(values)
+
+    assert any("alert webhook" in error.casefold() for error in errors)
+    assert any("BACKEND_GIT_SHA" in error for error in errors)
+    assert any("OPENAPI_SHA256" in error for error in errors)
