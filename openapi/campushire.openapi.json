@@ -484,26 +484,6 @@
         "title": "ApplicationAppealResponse",
         "type": "object"
       },
-      "ApplicationCreate": {
-        "properties": {
-          "resume_version_id": {
-            "format": "uuid",
-            "title": "Resume Version Id",
-            "type": "string"
-          },
-          "role_id": {
-            "format": "uuid",
-            "title": "Role Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "role_id",
-          "resume_version_id"
-        ],
-        "title": "ApplicationCreate",
-        "type": "object"
-      },
       "ApplicationDisclosureResponse": {
         "properties": {
           "answers": {
@@ -18029,17 +18009,6 @@
         "operationId": "submit_application_api_v1_applications_post",
         "parameters": [
           {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "maxLength": 80,
-              "minLength": 8,
-              "title": "Idempotency-Key",
-              "type": "string"
-            }
-          },
-          {
             "in": "cookie",
             "name": "campushire_session",
             "required": false,
@@ -18056,26 +18025,14 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApplicationCreate"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
-          "201": {
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationResponse"
-                }
+                "schema": {}
               }
             },
-            "description": "Successful Response"
+            "description": "Direct submission is retired; use the versioned application packet."
           },
           "422": {
             "content": {

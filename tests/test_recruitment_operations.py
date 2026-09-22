@@ -1011,7 +1011,18 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
         resume = await setup_db.scalar(
             select(ResumeVersion).where(ResumeVersion.user_id == student.id)
         )
+        profile = await setup_db.scalar(
+            select(StudentProfile).where(StudentProfile.user_id == student.id)
+        )
         assert resume is not None
+        assert profile is not None
+        profile.phone = "+91 90000 00000"
+        profile.academic_year = "Final year"
+        profile.city = "Pune"
+        profile.country_code = "IN"
+        profile.revision += 1
+        await setup_db.commit()
+        profile_revision = profile.revision
 
     principal = AuthenticatedPrincipal(
         user=admin,
@@ -1147,16 +1158,48 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             assert opportunities.json()["items"][0]["eligibility"]["status"] == "eligible"
             forbidden = await client.get("/api/v1/admin/recruitment/companies")
             assert forbidden.status_code == 403
-            applied = await client.post(
+            legacy_submission = await client.post(
                 "/api/v1/applications",
                 headers={"Idempotency-Key": "api-application-001"},
                 json={"role_id": role.json()["id"], "resume_version_id": str(resume.id)},
             )
+            assert legacy_submission.status_code == 410, legacy_submission.text
+            assert legacy_submission.json()["error"]["code"] == "canonical_packet_required"
+
+            draft = await client.post(
+                f"/api/v1/opportunities/{role.json()['id']}/application-draft"
+            )
+            assert draft.status_code == 200, draft.text
+            selected_resume = await client.put(
+                f"/api/v1/application-drafts/{draft.json()['id']}/resume",
+                json={
+                    "expected_revision": draft.json()["revision"],
+                    "resume_version_id": str(resume.id),
+                },
+            )
+            assert selected_resume.status_code == 200, selected_resume.text
+            confirmed_profile = await client.put(
+                f"/api/v1/application-drafts/{draft.json()['id']}/profile-confirmation",
+                json={
+                    "expected_revision": selected_resume.json()["revision"],
+                    "profile_revision": profile_revision,
+                },
+            )
+            assert confirmed_profile.status_code == 200, confirmed_profile.text
+            submission_payload = {
+                "expected_revision": confirmed_profile.json()["revision"],
+                "confirmation": "I CONFIRM THIS APPLICATION IS ACCURATE",
+            }
+            applied = await client.post(
+                f"/api/v1/application-drafts/{draft.json()['id']}/submit",
+                headers={"Idempotency-Key": "api-application-001"},
+                json=submission_payload,
+            )
             assert applied.status_code == 201, applied.text
             replayed = await client.post(
-                "/api/v1/applications",
+                f"/api/v1/application-drafts/{draft.json()['id']}/submit",
                 headers={"Idempotency-Key": "api-application-001"},
-                json={"role_id": role.json()["id"], "resume_version_id": str(resume.id)},
+                json=submission_payload,
             )
             assert replayed.status_code == 200
             assert replayed.json()["id"] == applied.json()["id"]

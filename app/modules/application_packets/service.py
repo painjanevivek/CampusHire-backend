@@ -897,6 +897,10 @@ async def submit_draft(
     draft.revision += 1
     draft.last_saved_at = datetime.now(UTC)
     await db.flush()
+    # The final packet mutations trigger server-managed timestamps on Application.
+    # Refresh before returning so async response serialization never attempts an
+    # implicit scalar reload outside SQLAlchemy's greenlet context.
+    await db.refresh(application)
     return application, False
 
 

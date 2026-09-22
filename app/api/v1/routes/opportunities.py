@@ -16,7 +16,6 @@ from app.modules.communications.service import record_product_event
 from app.modules.recruitment.schemas import (
     ApplicationAppealCreate,
     ApplicationAppealResponse,
-    ApplicationCreate,
     ApplicationResponse,
     ApplicationWithdrawal,
     OpportunityPage,
@@ -26,7 +25,6 @@ from app.modules.recruitment.schemas import (
 from app.modules.recruitment.service import (
     RecruitmentError,
     application_appeal_response,
-    create_application,
     create_application_appeal,
     get_application_deadline_calendar,
     get_opportunity,
@@ -251,52 +249,23 @@ async def download_application_deadline(
 
 @router.post(
     "/applications",
-    response_model=ApplicationResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_410_GONE,
     deprecated=True,
     dependencies=[Depends(verify_authenticated_csrf)],
+    responses={
+        status.HTTP_410_GONE: {
+            "description": "Direct submission is retired; use the versioned application packet."
+        }
+    },
 )
-async def submit_application(
-    request: Request,
-    payload: ApplicationCreate,
-    db: Database,
-    tenant: CurrentTenant,
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=80)],
-) -> ApplicationResponse | JSONResponse:
-    try:
-        application, replayed = await create_application(
-            db,
-            tenant.institution_id,
-            tenant.user_id,
-            idempotency_key,
-            payload,
-        )
-        response = await response_for_application(db, application)
-    except RecruitmentError as error:
-        raise _http_error(error) from error
-    if not replayed:
-        await record_product_event(
-            db,
-            event_name="first_application_submitted",
-            route_group="applications",
-            institution_id=tenant.institution_id,
-            dedupe_key=f"first-application:{tenant.user_id}",
-        )
-        record_audit_event(
-            db,
-            event_type="application.submitted",
-            actor_user_id=tenant.user_id,
-            institution_id=tenant.institution_id,
-            resource_type="application",
-            resource_id=str(application.id),
-            correlation_id=request.state.correlation_id,
-            details={
-                "role_id": str(application.role_id),
-                "resume_version_id": str(application.resume_version_id),
-                "eligibility_evaluation_id": str(application.eligibility_evaluation_id),
-            },
-        )
-        await db.commit()
-    if replayed:
-        return JSONResponse(response.model_dump(mode="json"), status_code=status.HTTP_200_OK)
-    return response
+async def submit_application() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "canonical_packet_required",
+            "message": (
+                "Direct application submission is retired. Start or resume the versioned "
+                "application packet for this opportunity."
+            ),
+        },
+    )
