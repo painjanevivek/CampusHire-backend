@@ -14,12 +14,14 @@ from app.models import Base
 from app.models.auth import (
     Institution,
     InstitutionRegistrationRequest,
+    PlatformAdminAssignment,
     StudentRegistrationRequest,
+    User,
     UserRole,
 )
 from app.models.profile import StudentProfile
 from app.modules.auth import registration as registration_service
-from app.modules.auth.security import totp_code
+from app.modules.auth.security import hash_password, totp_code
 from app.modules.institutions import lifecycle as institution_lifecycle
 from tests.test_auth import add_approved_student_invitation
 
@@ -183,11 +185,8 @@ async def test_tnp_registration_verification_approval_and_onboarding_journey(
 ) -> None:
     verification_token = "institution-verification-token"  # noqa: S105
     owner_token = "institution-owner-activation-token"  # noqa: S105
-    operator_key = "test-operator-bootstrap-key"
     monkeypatch.setattr(registration_service, "new_secret", lambda: verification_token)
     monkeypatch.setattr(institution_lifecycle, "new_secret", lambda: owner_token)
-    monkeypatch.setenv("OPERATOR_BOOTSTRAP_KEY", operator_key)
-    get_settings.cache_clear()
 
     started = client.post(
         "/api/v1/auth/institution-registrations",
@@ -209,14 +208,37 @@ async def test_tnp_registration_verification_approval_and_onboarding_journey(
     assert verified.status_code == 200, verified.text
     assert verified.json()["status"] == "pending_approval"
 
+    async with TestSession() as db:
+        platform_admin = User(
+            email="platform-admin@example.com",
+            username="platform-admin",
+            password_hash=hash_password("a secure platform passphrase"),
+            role=UserRole.PLATFORM_ADMIN.value,
+        )
+        db.add(platform_admin)
+        await db.flush()
+        db.add(PlatformAdminAssignment(singleton_key=1, user_id=platform_admin.id))
+        await db.commit()
+    signed_in = client.post(
+        "/api/v1/auth/sign-in",
+        headers=csrf_headers(client),
+        json={
+            "identifier": "platform-admin",
+            "password": "a secure platform passphrase",
+            "workspace": "admin",
+        },
+    )
+    assert signed_in.status_code == 200, signed_in.text
+
     approved = client.post(
-        f"/api/v1/operator/institution-registration-requests/{started.json()['request_id']}/decision",
-        headers={"X-Operator-Key": operator_key},
+        f"/api/v1/platform/institution-registration-requests/{started.json()['request_id']}/decision",
+        headers=csrf_headers(client),
         json={"decision": "approve"},
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["status"] == "approved"
 
+    client.cookies.clear()
     activated = client.post(
         f"/api/v1/auth/invitations/{owner_token}/accept",
         headers=csrf_headers(client),

@@ -126,35 +126,21 @@ async def test_student_access_requests_are_visible_only_to_the_assigned_institut
     ).status_code == 403
 
 
-async def test_operator_provisioning_is_keyed_and_audited(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("OPERATOR_BOOTSTRAP_KEY", "operator-test-key-with-enough-entropy")
-    get_settings.cache_clear()
+async def test_legacy_operator_provisioning_is_not_exposed(client: TestClient) -> None:
     payload = {
         "institution_code": "new-campus",
         "institution_name": "New Campus",
         "admin_email": "placement@new-campus.edu",
     }
 
-    assert client.post("/api/v1/operator/institutions", json=payload).status_code == 403
-    response = client.post(
-        "/api/v1/operator/institutions",
-        headers={"X-Operator-Key": "operator-test-key-with-enough-entropy"},
-        json=payload,
+    assert client.post("/api/v1/operator/institutions", json=payload).status_code == 404
+    assert (
+        client.get(
+            "/api/v1/operator/institution-registration-requests",
+            headers={"X-Operator-Key": "a leaked legacy operator secret"},
+        ).status_code
+        == 404
     )
-
-    assert response.status_code == 201, response.text
-    assert response.json()["admin_invitation_token"]
-    async with TestSession() as db:
-        invitation = await db.scalar(
-            select(MembershipInvitation).where(
-                MembershipInvitation.id == UUID(response.json()["admin_invitation_id"])
-            )
-        )
-        assert invitation is not None
-        assert invitation.role == UserRole.TNP_OWNER.value
-    get_settings.cache_clear()
 
 
 async def test_admin_can_enrol_mfa_from_settings_when_ready(client: TestClient) -> None:

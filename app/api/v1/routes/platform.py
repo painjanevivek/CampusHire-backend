@@ -33,6 +33,11 @@ from app.modules.auth.schemas import (
 from app.modules.auth.security import normalize_username
 from app.modules.auth.service import issue_password_reset
 from app.modules.communications.service import email_delivery_configured
+from app.modules.institutions.lifecycle import ProvisionConflictError, provision_institution
+from app.modules.institutions.schemas import (
+    InstitutionProvisionRequest,
+    InstitutionProvisionResponse,
+)
 from app.modules.institutions.service import (
     MembershipPermissionError,
     MembershipUserNotFoundError,
@@ -117,6 +122,49 @@ async def read_platform_institutions(
         db, query=query, is_active=is_active, page=page, page_size=page_size
     )
     return PlatformInstitutionPage(items=items, page=page, page_size=page_size, total=total)
+
+
+@router.post(
+    "/institutions",
+    response_model=InstitutionProvisionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(require_permissions("platform.institutions.manage")),
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
+)
+async def provision_platform_institution(
+    payload: InstitutionProvisionRequest,
+    request: Request,
+    response: Response,
+    db: Database,
+    principal: PlatformAdmin,
+) -> InstitutionProvisionResponse:
+    try:
+        result = await provision_institution(
+            db,
+            code=payload.institution_code,
+            name=payload.institution_name,
+            admin_email=str(payload.admin_email),
+            correlation_id=request.state.correlation_id,
+            actor_user_id=principal.user.id,
+        )
+    except ProvisionConflictError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "institution_conflict",
+                "message": "Institution provisioning conflicts with an existing record.",
+            },
+        ) from None
+    response.headers["Cache-Control"] = "no-store"
+    return InstitutionProvisionResponse(
+        institution_id=result.institution.id,
+        admin_invitation_id=result.invitation.id,
+        admin_invitation_token=result.raw_token,
+        expires_at=result.invitation.expires_at,
+    )
 
 
 @router.get(

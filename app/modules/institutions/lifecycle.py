@@ -61,6 +61,7 @@ async def provision_institution(
     name: str,
     admin_email: str,
     correlation_id: str | None,
+    actor_user_id: UUID | None = None,
     is_active: bool = True,
     commit: bool = True,
 ) -> ProvisionedInstitution:
@@ -99,6 +100,7 @@ async def provision_institution(
     record_audit_event(
         db,
         institution_id=institution.id,
+        actor_user_id=actor_user_id,
         event_type="institution.provisioned",
         resource_type="institution",
         resource_id=str(institution.id),

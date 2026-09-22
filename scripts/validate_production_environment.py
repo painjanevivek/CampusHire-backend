@@ -31,7 +31,6 @@ REQUIRED = (
     "FRONTEND_GIT_SHA",
     "OPENAPI_SHA256",
     "EMAIL_DELIVERY_MODE",
-    "OPERATOR_BOOTSTRAP_KEY",
     "MFA_ENCRYPTION_KEY",
 )
 
@@ -110,7 +109,6 @@ def validate_production_environment(values: dict[str, str]) -> list[str]:
     for variable in (
         "EMAIL_SMTP_PASSWORD",
         "EMAIL_DELIVERY_WEBHOOK_KEY",
-        "OPERATOR_BOOTSTRAP_KEY",
         "MFA_ENCRYPTION_KEY",
     ):
         value = values.get(variable, "")

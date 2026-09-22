@@ -1,23 +1,16 @@
-import secrets
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.core.config import get_settings
 from app.core.rate_limit import enforce_auth_identity_rate_limit, enforce_auth_rate_limit
-from app.models.auth import InstitutionRegistrationRequest, RegistrationStatus
 from app.modules.auth.dependencies import Database, verify_public_csrf
 from app.modules.auth.registration import (
     RegistrationConflictError,
     RegistrationTokenError,
-    decide_institution_registration,
     start_institution_registration,
     verify_institution_registration,
 )
 from app.modules.auth.schemas import (
-    InstitutionRegistrationDecision,
     InstitutionRegistrationRequestCreate,
     InstitutionRegistrationResponse,
     InstitutionRegistrationStartResponse,
@@ -25,13 +18,6 @@ from app.modules.auth.schemas import (
 )
 
 public_router = APIRouter(prefix="/auth/institution-registrations")
-operator_router = APIRouter(prefix="/operator/institution-registration-requests")
-
-
-def _verify_operator_key(value: str | None) -> None:
-    configured = get_settings().operator_bootstrap_key
-    if configured is None or value is None or not secrets.compare_digest(configured, value):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator access denied")
 
 
 @public_router.post(
@@ -92,53 +78,4 @@ async def verify_registration_request(
                 "message": "This verification link is invalid or expired.",
             },
         ) from None
-    return InstitutionRegistrationResponse.model_validate(item)
-
-
-@operator_router.get("", response_model=list[InstitutionRegistrationResponse])
-async def list_registration_requests(
-    db: Database,
-    x_operator_key: Annotated[str | None, Header()] = None,
-) -> list[InstitutionRegistrationResponse]:
-    _verify_operator_key(x_operator_key)
-    records = await db.scalars(
-        select(InstitutionRegistrationRequest)
-        .where(
-            InstitutionRegistrationRequest.status.in_(
-                (
-                    RegistrationStatus.PENDING_APPROVAL.value,
-                    RegistrationStatus.DUPLICATE_REVIEW.value,
-                )
-            )
-        )
-        .order_by(InstitutionRegistrationRequest.created_at)
-        .limit(100)
-    )
-    return [InstitutionRegistrationResponse.model_validate(item) for item in records.all()]
-
-
-@operator_router.post("/{request_id}/decision", response_model=InstitutionRegistrationResponse)
-async def review_registration_request(
-    request_id: UUID,
-    payload: InstitutionRegistrationDecision,
-    request: Request,
-    db: Database,
-    x_operator_key: Annotated[str | None, Header()] = None,
-) -> InstitutionRegistrationResponse:
-    _verify_operator_key(x_operator_key)
-    try:
-        item = await decide_institution_registration(
-            db,
-            request_id=request_id,
-            approve=payload.decision == "approve",
-            reason=payload.reason,
-            correlation_id=request.state.correlation_id,
-        )
-    except RegistrationConflictError as error:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": str(error), "message": "The request cannot be processed."},
-        ) from None
-    if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     return InstitutionRegistrationResponse.model_validate(item)

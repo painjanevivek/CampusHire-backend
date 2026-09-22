@@ -38,7 +38,6 @@ class Settings(BaseSettings):
     mfa_lockout_minutes: int = Field(default=15, ge=1, le=1440)
     request_body_overhead_bytes: int = Field(default=65_536, ge=1024, le=1_048_576)
     roster_max_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
-    operator_bootstrap_key: str | None = None
     mfa_encryption_key: str = "development-only-change-me"
     demo_login_enabled: bool = False
     demo_admin_mfa_bypass: bool = False
@@ -192,8 +191,6 @@ class Settings(BaseSettings):
                 raise ValueError("Staging and production require HTTPS FRONTEND_ORIGINS")
             if not self.trusted_hosts or "*" in self.trusted_hosts:
                 raise ValueError("Staging and production require explicit TRUSTED_HOSTS")
-            if not self.operator_bootstrap_key or len(self.operator_bootstrap_key) < 24:
-                raise ValueError("Staging and production require a strong OPERATOR_BOOTSTRAP_KEY")
             if self.mfa_encryption_key == "development-only-change-me":
                 raise ValueError("Staging and production require a dedicated MFA_ENCRYPTION_KEY")
             if self.email_smtp_host and (

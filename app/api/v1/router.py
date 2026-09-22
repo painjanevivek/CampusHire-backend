@@ -19,7 +19,6 @@ from app.api.v1.routes.experience import admin_router as admin_experience_router
 from app.api.v1.routes.experience import student_router as student_experience_router
 from app.api.v1.routes.generative import router as generative_router
 from app.api.v1.routes.health import router as health_router
-from app.api.v1.routes.institutions import operator_router
 from app.api.v1.routes.institutions import router as institutions_router
 from app.api.v1.routes.intelligence import admin_router as admin_intelligence_router
 from app.api.v1.routes.intelligence import student_router as student_intelligence_router
@@ -34,7 +33,6 @@ from app.api.v1.routes.platform import router as platform_router
 from app.api.v1.routes.privacy import router as privacy_router
 from app.api.v1.routes.privacy import tnp_router as tnp_privacy_router
 from app.api.v1.routes.profiles import router as profiles_router
-from app.api.v1.routes.registrations import operator_router as registration_operator_router
 from app.api.v1.routes.registrations import public_router as registration_public_router
 from app.api.v1.routes.resumes import router as resumes_router
 
@@ -42,10 +40,8 @@ api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(auth_router, tags=["authentication"])
 api_router.include_router(registration_public_router, tags=["authentication"])
-api_router.include_router(registration_operator_router, tags=["institution provisioning"])
 api_router.include_router(communications_router, tags=["communications and guidance"])
 api_router.include_router(institutions_router, tags=["institution memberships"])
-api_router.include_router(operator_router, tags=["institution provisioning"])
 api_router.include_router(profiles_router, tags=["student profile"])
 api_router.include_router(student_onboarding_router, tags=["student onboarding"])
 api_router.include_router(

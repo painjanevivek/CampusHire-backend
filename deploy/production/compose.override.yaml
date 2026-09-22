@@ -17,13 +17,13 @@ services:
       OCI_OBJECT_NAMESPACE: ${OCI_OBJECT_NAMESPACE:?Set the OCI namespace}
       OCI_OBJECT_BUCKET: ${OCI_OBJECT_BUCKET:?Set the private bucket}
       OCI_OBJECT_UPLOADS_ENABLED: ${OCI_OBJECT_UPLOADS_ENABLED:-true}
-      OPERATOR_BOOTSTRAP_KEY: ${OPERATOR_BOOTSTRAP_KEY:?Set a protected operator key}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set a protected MFA encryption key}
-      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:?Set the regional OCI SMTP endpoint}
-      EMAIL_SMTP_USERNAME: ${EMAIL_SMTP_USERNAME:?Set the workload SMTP user}
-      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:?Set the workload SMTP credential}
-      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:?Set the approved sender}
-      EMAIL_DELIVERY_WEBHOOK_KEY: ${EMAIL_DELIVERY_WEBHOOK_KEY:?Set the bounce webhook key}
+      EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:?Choose smtp or manual delivery}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-}
+      EMAIL_SMTP_USERNAME: ${EMAIL_SMTP_USERNAME:-}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-no-reply@campushire.invalid}
+      EMAIL_DELIVERY_WEBHOOK_KEY: ${EMAIL_DELIVERY_WEBHOOK_KEY:-}
 
   api:
     environment: *production_environment

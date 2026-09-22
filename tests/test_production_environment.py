@@ -33,7 +33,6 @@ def valid_environment() -> dict[str, str]:
         "EMAIL_SMTP_PASSWORD": "s" * 32,
         "EMAIL_FROM_ADDRESS": "no-reply@campushire.example.in",
         "EMAIL_DELIVERY_WEBHOOK_KEY": "w" * 32,
-        "OPERATOR_BOOTSTRAP_KEY": "o" * 32,
         "MFA_ENCRYPTION_KEY": "m" * 32,
         "OCI_OBJECT_QUOTA_BYTES": "14000000000",
         "OCI_OBJECT_UPLOADS_ENABLED": "true",

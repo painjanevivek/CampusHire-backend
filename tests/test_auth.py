@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -980,6 +980,39 @@ async def test_singleton_platform_admin_receives_only_platform_capabilities(
     assert "applications.review" not in user["capabilities"]
     assert client.get("/api/v1/platform/dashboard").status_code == 200
     assert client.get("/api/v1/admin/recruitment/applications").status_code == 403
+
+
+async def test_platform_admin_provisions_institution_with_attributed_audit(
+    client: TestClient,
+) -> None:
+    admin = await seed_platform_admin()
+    sign_in(client, "platform-admin", "a secure platform passphrase")
+
+    response = client.post(
+        "/api/v1/platform/institutions",
+        headers=csrf_headers(client),
+        json={
+            "institution_code": "new-campus",
+            "institution_name": "New Campus",
+            "admin_email": "placement@new-campus.edu",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["admin_invitation_token"]
+    async with TestSession() as db:
+        invitation = await db.get(
+            MembershipInvitation, UUID(response.json()["admin_invitation_id"])
+        )
+        audit = await db.scalar(
+            select(AuditEvent).where(
+                AuditEvent.event_type == "institution.provisioned",
+                AuditEvent.actor_user_id == admin.id,
+            )
+        )
+        assert invitation is not None and invitation.role == UserRole.TNP_OWNER.value
+        assert audit is not None
 
 
 async def test_platform_assignment_and_tnp_context_switch_are_tenant_scoped(

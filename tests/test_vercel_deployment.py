@@ -14,7 +14,6 @@ def production_settings(**overrides: Any) -> Settings:
         "process_role": "api",
         "frontend_origins": ["https://app.campushire.example"],
         "trusted_hosts": ["api.campushire.example"],
-        "operator_bootstrap_key": "o" * 32,
         "mfa_encryption_key": "m" * 32,
         "resume_storage_backend": "oci",
         "oci_auth_mode": "api_key",

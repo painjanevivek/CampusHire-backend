@@ -57,7 +57,6 @@ def test_production_configuration_accepts_only_the_sandbox_backend() -> None:
         resume_parser_image="registry.example.edu/campushire/parser@sha256:abc123",
         frontend_origins=["https://staging.example.edu"],
         trusted_hosts=["staging.example.edu"],
-        operator_bootstrap_key="production-operator-key-with-entropy",
         mfa_encryption_key="production-mfa-encryption-key-with-entropy",
         resume_storage_backend="oci",
         oci_object_namespace="production-namespace",

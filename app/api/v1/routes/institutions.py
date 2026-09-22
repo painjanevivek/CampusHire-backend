@@ -1,6 +1,5 @@
 import csv
 import io
-import secrets
 from collections.abc import Sequence
 from typing import Annotated, Literal
 from uuid import UUID
@@ -9,7 +8,6 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
-    Header,
     HTTPException,
     Query,
     Request,
@@ -44,19 +42,15 @@ from app.modules.auth.service import issue_password_reset
 from app.modules.communications.service import email_delivery_configured
 from app.modules.institutions.lifecycle import (
     InvalidRosterError,
-    ProvisionConflictError,
     commit_roster,
     get_roster_import,
     invitation_status,
     list_invitations,
     preview_roster,
-    provision_institution,
     resend_invitation,
     revoke_invitation,
 )
 from app.modules.institutions.schemas import (
-    InstitutionProvisionRequest,
-    InstitutionProvisionResponse,
     InvitationActionResponse,
     InvitationHandoffResponse,
     InvitationRevocationRequest,
@@ -85,7 +79,6 @@ from app.modules.institutions.service import (
 )
 
 router = APIRouter(prefix="/institutions/{institution_id}")
-operator_router = APIRouter(prefix="/operator")
 InstitutionAdmin = Annotated[
     AuthenticatedPrincipal, Depends(require_permissions("institution.manage"))
 ]
@@ -635,46 +628,4 @@ async def revoke_membership_invitation(
         status="revoked",
         expires_at=invitation.expires_at,
         message="The invitation was revoked and can no longer be used.",
-    )
-
-
-@operator_router.post(
-    "/institutions",
-    response_model=InstitutionProvisionResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_institution(
-    payload: InstitutionProvisionRequest,
-    request: Request,
-    db: Database,
-    x_operator_key: Annotated[str | None, Header()] = None,
-) -> InstitutionProvisionResponse:
-    configured = get_settings().operator_bootstrap_key
-    if (
-        configured is None
-        or x_operator_key is None
-        or not secrets.compare_digest(configured, x_operator_key)
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator access denied")
-    try:
-        result = await provision_institution(
-            db,
-            code=payload.institution_code,
-            name=payload.institution_name,
-            admin_email=str(payload.admin_email),
-            correlation_id=request.state.correlation_id,
-        )
-    except ProvisionConflictError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "institution_conflict",
-                "message": "Institution provisioning conflicts with an existing record.",
-            },
-        ) from None
-    return InstitutionProvisionResponse(
-        institution_id=result.institution.id,
-        admin_invitation_id=result.invitation.id,
-        admin_invitation_token=result.raw_token,
-        expires_at=result.invitation.expires_at,
     )

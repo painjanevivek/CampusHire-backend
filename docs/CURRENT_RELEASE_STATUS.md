@@ -1,5 +1,52 @@
 # Current Release Status
 
+## Phase 8 release-candidate engineering update — 2026-09-23
+
+Decision: **NO-GO for real student data and production. Synthetic engineering qualification is
+complete for this branch; external release gates remain open.**
+
+This update describes the `phase/08-release-candidate` source pair descended from Backend
+`ef790dd1aaea0f671bd17dd165ac3d8075f9ba45` and Frontend
+`6d11b785be47a6aeb56956c99a339e8f7ced7115`. The final commit identifiers are the commits that
+contain this record and are reported with the pushed branch. Backend and Frontend carry the same
+reviewed OpenAPI SHA-256
+`B92CE1B65543596FD23AB5D7B5A285405C7016F2983ED90702B34F27A890750E`; generated Frontend types
+are byte-stable across repeated generation. Alembic has the single head `20260923_0036`.
+
+The current engineering checks pass: Backend `258 passed, 1 skipped`, Ruff, and strict MyPy over
+149 source files; Frontend `263 passed`, lint, typecheck, and production build. An isolated
+PostgreSQL 17 rehearsal upgraded from an empty database through head, downgraded one revision,
+rolled forward, created a logical backup, and restored to a separate database. It preserved the
+synthetic record counts, application evidence digest, private-object reference, and queued-work
+timestamp.
+
+The current security work has two layers. Standard scan
+`76a5a163-a664-43d6-8e18-064c59c83735` found one medium legacy operator-key authorization bypass
+in the Backend parent. This branch removes those institution provisioning and registration-decision
+routes, removes the bootstrap secret, and exposes institution provisioning only through the
+authenticated singleton Platform Admin route with explicit permission, CSRF, recent MFA, actor
+attribution, and `no-store` handling for its one-time invitation token. Focused tests prove the old
+routes return `404` and the protected replacement rejects missing controls. Diff scan
+`fa3026b5-a1a3-4ce7-b1bc-b06915465fef` reviewed all nine security-relevant Backend changes and
+reported zero new findings. Frontend standard scan `31893d29-8c23-4f9e-b936-ffcade36a5fd`
+reported zero findings across its nine reviewed surfaces. These are source reviews, not deployed
+penetration tests or dependency-advisory certification.
+
+The following gates remain blocked and prevent a `GO`:
+
+- accountable legal/privacy, T&P, reporting, accessibility, IT/security, support, and cost
+  approvals are absent;
+- representative Student and Officer UAT is not signed;
+- digest-qualified images, SBOM, provenance, signatures, rollback pair, and an approved registry
+  promotion are not recorded for this source pair;
+- an authorized staging deployment, named alert recipient, separate-host recovery rehearsal, and
+  measured capacity/cost result are not present;
+- Gemini model/privacy/billing approval and the institution's authenticated manual-code handoff
+  procedure are not approved; and
+- no final candidate-specific real-data authorization exists.
+
+Historical evidence below retains its original scope and cannot be inherited by this candidate.
+
 ## Phase 0 baseline update — 2026-09-22
 
 Decision: **NO-GO for real student data and production. Synthetic qualification only.**
