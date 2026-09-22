@@ -439,6 +439,7 @@ class ApplicationAppeal(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     administrator_response: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    resolution_effect: Mapped[str | None] = mapped_column(String(80), nullable=True)
     resolved_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )

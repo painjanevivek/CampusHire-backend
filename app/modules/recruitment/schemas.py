@@ -268,11 +268,17 @@ class ApplicationAppealResponse(BaseModel):
     due_at: datetime | None = None
     escalation_state: str = "none"
     revision: int = 1
+    resolution_effect: str | None = None
+    independence_status: Literal["unassigned", "independent", "conflicted"] = "unassigned"
 
 
 class ApplicationAppealResolution(BaseModel):
     status: Literal["approved", "declined"]
     administrator_response: str = Field(min_length=10, max_length=2000)
+    expected_revision: int = Field(ge=1)
+    resolution_effect: Literal[
+        "decision_upheld", "decision_changed", "record_corrected", "no_change"
+    ]
 
 
 class ApplicationResponse(BaseModel):

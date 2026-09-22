@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import Base
 from app.models.auth import Institution, InstitutionMembership, MembershipStatus, User, UserRole
-from app.models.privacy import DataDeletionRequest, LegalHold
+from app.models.privacy import DataDeletionRequest, LegalHold, PrivacyRequest
 from app.models.profile import StudentProfile
 from app.models.recruitment import Application
 from app.models.resume import Resume, ResumeProcessingJob, ResumeVersion, ScanStatus
@@ -122,6 +122,75 @@ async def test_deletion_removes_authoritative_data_then_retries_private_cleanup(
         assert request.object_keys == []
         with pytest.raises(ObjectStoreError, match="resume_storage_unavailable"):
             store.read(key)
+
+
+async def test_erasure_receipt_is_complete_only_after_private_storage_cleanup(
+    tmp_path: Path,
+) -> None:
+    store = LocalObjectStore(str(tmp_path / "privacy-receipt"))
+    key = store.put_quarantined(b"%PDF-1.4 receipt")
+    async with Session() as db:
+        institution, student = await seed_student(db)
+        officer = User(
+            institution_id=institution.id,
+            email="privacy-receipt-officer@example.edu",
+            password_hash=hash_password("a secure officer passphrase"),
+            role=UserRole.TNP_ADMIN.value,
+        )
+        resume = Resume(user_id=student.id, institution_id=institution.id)
+        db.add_all([officer, resume])
+        await db.flush()
+        db.add(
+            ResumeVersion(
+                resume_id=resume.id,
+                user_id=student.id,
+                institution_id=institution.id,
+                version_number=1,
+                storage_key=key,
+                original_name="receipt.pdf",
+                checksum="b" * 64,
+                scan_status=ScanStatus.QUARANTINED.value,
+                created_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+        privacy_request = await create_privacy_request(
+            db,
+            user_id=student.id,
+            institution_id=institution.id,
+            payload=PrivacyRequestCreate(
+                request_type="erasure", details="Remove all eligible student data."
+            ),
+            correlation_id="privacy-receipt",
+        )
+        processing = await decide_privacy_request(
+            db,
+            request_id=privacy_request.id,
+            institution_id=institution.id,
+            actor_user_id=officer.id,
+            payload=PrivacyRequestDecision(
+                action="approve",
+                reason="Identity verified and erasure scope approved.",
+                resolution_effect="eligible_data_erased",
+                expected_updated_at=privacy_request.updated_at,
+            ),
+            correlation_id="privacy-receipt",
+            max_cleanup_attempts=3,
+        )
+        assert processing.status == "processing"
+        assert processing.processing_receipt["database"] == "completed"
+        assert processing.processing_receipt["private_storage"] == "pending"
+        assert processing.completed_at is None
+        assert processing.cleanup_request_id is not None
+
+        await process_next_deletion_cleanup(db, store=store)
+        stored = await db.get(PrivacyRequest, privacy_request.id)
+        assert stored is not None
+        assert stored.status == "completed"
+        assert stored.processing_receipt["private_storage"] == "completed"
+        assert stored.processing_receipt["external_processors"] == "not_configured"
+        assert stored.resolution_effect == "eligible_data_erased"
+        assert stored.completed_at is not None
 
 
 async def test_application_snapshot_creates_an_explicit_retention_hold() -> None:

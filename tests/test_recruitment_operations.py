@@ -733,6 +733,19 @@ async def test_student_can_track_withdraw_and_appeal_without_losing_history() ->
                 reason="Assign the appeal to an independent placement officer.",
             ),
         )
+        with pytest.raises(RecruitmentError, match="application_appeal_revision_conflict"):
+            await resolve_application_appeal(
+                db,
+                institution.id,
+                admin.id,
+                first.id,
+                ApplicationAppealResolution(
+                    status="approved",
+                    administrator_response="This stale resolution must not be recorded.",
+                    expected_revision=1,
+                    resolution_effect="decision_changed",
+                ),
+            )
         resolved = await resolve_application_appeal(
             db,
             institution.id,
@@ -743,9 +756,12 @@ async def test_student_can_track_withdraw_and_appeal_without_losing_history() ->
                 administrator_response=(
                     "The evidence was reviewed and accepted for this application."
                 ),
+                expected_revision=first.revision,
+                resolution_effect="decision_changed",
             ),
         )
         assert resolved.resolved_by_user_id == admin.id
+        assert resolved.resolution_effect == "decision_changed"
         withdrawn, withdrawal_replayed = await withdraw_application(
             db,
             institution.id,
@@ -776,6 +792,8 @@ async def test_student_can_track_withdraw_and_appeal_without_losing_history() ->
         assert [event.to_status for event in response.history] == ["submitted", "withdrawn"]
         assert response.appeals[0].status == "approved"
         assert response.appeals[0].administrator_response is not None
+        assert response.appeals[0].resolution_effect == "decision_changed"
+        assert response.appeals[0].independence_status == "independent"
         calendar = application_deadline_calendar(application)
         assert "BEGIN:VCALENDAR\r\n" in calendar
         assert "Software Engineer application deadline" in calendar

@@ -1244,24 +1244,7 @@ async def _application_response(db: AsyncSession, application: Application) -> A
         withdrawn_at=application.withdrawn_at,
         withdrawal_reason=application.withdrawal_reason,
         can_withdraw=_can_withdraw(application),
-        appeals=[
-            ApplicationAppealResponse(
-                id=item.id,
-                kind=item.kind,
-                status=item.status,
-                reason=item.reason,
-                supporting_evidence=list(item.supporting_evidence),
-                administrator_response=item.administrator_response,
-                assignee_user_id=item.assignee_user_id,
-                due_at=item.due_at,
-                escalation_state=item.escalation_state,
-                revision=item.revision,
-                created_at=item.created_at,
-                updated_at=item.updated_at,
-                resolved_at=item.resolved_at,
-            )
-            for item in appeals
-        ],
+        appeals=[application_appeal_response(item) for item in appeals],
         history=[
             StatusEventResponse(
                 id=item.id,
@@ -1597,6 +1580,14 @@ async def create_application_appeal(
 
 
 def application_appeal_response(appeal: ApplicationAppeal) -> ApplicationAppealResponse:
+    independence_status = "unassigned"
+    reviewer_id = appeal.resolved_by_user_id or appeal.assignee_user_id
+    if reviewer_id is not None:
+        independence_status = (
+            "conflicted"
+            if reviewer_id == appeal.disputed_decision_actor_user_id
+            else "independent"
+        )
     return ApplicationAppealResponse(
         id=appeal.id,
         kind=appeal.kind,
@@ -1608,6 +1599,8 @@ def application_appeal_response(appeal: ApplicationAppeal) -> ApplicationAppealR
         due_at=appeal.due_at,
         escalation_state=appeal.escalation_state,
         revision=appeal.revision,
+        resolution_effect=appeal.resolution_effect,
+        independence_status=independence_status,
         created_at=appeal.created_at,
         updated_at=appeal.updated_at,
         resolved_at=appeal.resolved_at,
@@ -1633,12 +1626,15 @@ async def resolve_application_appeal(
         raise RecruitmentError("application_appeal_not_found")
     if appeal.status in {"approved", "declined"}:
         raise RecruitmentError("application_appeal_already_resolved")
+    if appeal.revision != payload.expected_revision:
+        raise RecruitmentError("application_appeal_revision_conflict")
     if appeal.assignee_user_id != actor_user_id:
         raise RecruitmentError("application_appeal_assignment_required")
     if appeal.disputed_decision_actor_user_id == actor_user_id:
         raise RecruitmentError("application_appeal_independence_required")
     appeal.status = payload.status
     appeal.administrator_response = payload.administrator_response
+    appeal.resolution_effect = payload.resolution_effect
     appeal.resolved_by_user_id = actor_user_id
     appeal.resolved_at = datetime.now(UTC)
     appeal.revision += 1

@@ -170,6 +170,11 @@ async def create_privacy_request(
         details=payload.details,
         due_at=datetime.now(UTC) + timedelta(days=7),
         receipt_reference=f"PR-{uuid4().hex[:16].upper()}",
+        processing_receipt={
+            "database": "not_started",
+            "private_storage": "not_started",
+            "external_processors": "not_configured",
+        },
     )
     db.add(item)
     await db.flush()
@@ -251,6 +256,11 @@ async def decide_privacy_request(
     elif payload.action == "decline":
         item.status = "declined"
         item.result_summary = payload.reason
+        item.resolution_effect = payload.resolution_effect
+        item.processing_receipt = {
+            **item.processing_receipt,
+            "institutional_decision": "completed",
+        }
         item.completed_at = datetime.now(UTC)
     elif payload.action == "hold":
         if item.user_id is None:
@@ -316,16 +326,29 @@ async def decide_privacy_request(
                         status="processing",
                         cleanup_request_id=deletion.id,
                         result_summary=deletion.message,
+                        resolution_effect=payload.resolution_effect,
+                        processing_receipt={
+                            "database": "completed",
+                            "private_storage": "pending",
+                            "external_processors": "not_configured",
+                        },
                     )
                 )
                 await db.commit()
                 refreshed = await db.get(PrivacyRequest, request_id)
                 if refreshed is None:
                     raise PrivacyError("privacy_request_not_found")
+                await db.refresh(refreshed)
                 return PrivacyRequestResponse.model_validate(refreshed)
         else:
             item.status = "completed"
             item.result_summary = payload.reason
+            item.resolution_effect = payload.resolution_effect
+            item.processing_receipt = {
+                **item.processing_receipt,
+                "institutional_processing": "completed",
+                "external_processors": "not_applicable",
+            }
             item.completed_at = datetime.now(UTC)
     record_audit_event(
         db,
@@ -489,10 +512,20 @@ async def process_next_deletion_cleanup(
             linked_request.status = "completed"
             linked_request.completed_at = item.completed_at
             linked_request.result_summary = "Erasure processing completed."
+            linked_request.processing_receipt = {
+                **linked_request.processing_receipt,
+                "database": "completed",
+                "private_storage": "completed",
+            }
         elif item.status == "failed":
             linked_request.status = "failed"
             linked_request.result_summary = (
                 "Account records were removed, but private-file cleanup needs support."
             )
+            linked_request.processing_receipt = {
+                **linked_request.processing_receipt,
+                "database": "completed",
+                "private_storage": "failed",
+            }
     await db.commit()
     return item.id

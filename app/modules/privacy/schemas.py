@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DataDeletionCreate(BaseModel):
@@ -33,6 +33,9 @@ class PrivacyRequestResponse(BaseModel):
     owner_user_id: UUID | None
     due_at: datetime | None
     result_summary: str | None
+    resolution_effect: str | None
+    processing_receipt: dict[str, object]
+    cleanup_request_id: UUID | None
     receipt_reference: str | None
     created_at: datetime
     updated_at: datetime
@@ -43,7 +46,14 @@ class PrivacyRequestDecision(BaseModel):
     action: Literal["assign", "approve", "decline", "hold", "complete"]
     owner_user_id: UUID | None = None
     reason: str = Field(min_length=10, max_length=2000)
+    resolution_effect: str | None = Field(default=None, min_length=3, max_length=80)
     expected_updated_at: datetime
+
+    @model_validator(mode="after")
+    def require_resolution_effect(self) -> "PrivacyRequestDecision":
+        if self.action in {"approve", "decline", "complete"} and not self.resolution_effect:
+            raise ValueError("A resolution effect is required for this action")
+        return self
 
 
 class LegalHoldCreate(BaseModel):

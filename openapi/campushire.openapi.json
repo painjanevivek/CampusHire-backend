@@ -392,6 +392,21 @@
             "title": "Administrator Response",
             "type": "string"
           },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "resolution_effect": {
+            "enum": [
+              "decision_upheld",
+              "decision_changed",
+              "record_corrected",
+              "no_change"
+            ],
+            "title": "Resolution Effect",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "approved",
@@ -403,7 +418,9 @@
         },
         "required": [
           "status",
-          "administrator_response"
+          "administrator_response",
+          "expected_revision",
+          "resolution_effect"
         ],
         "title": "ApplicationAppealResolution",
         "type": "object"
@@ -460,6 +477,16 @@
             "title": "Id",
             "type": "string"
           },
+          "independence_status": {
+            "default": "unassigned",
+            "enum": [
+              "unassigned",
+              "independent",
+              "conflicted"
+            ],
+            "title": "Independence Status",
+            "type": "string"
+          },
           "kind": {
             "title": "Kind",
             "type": "string"
@@ -467,6 +494,17 @@
           "reason": {
             "title": "Reason",
             "type": "string"
+          },
+          "resolution_effect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Effect"
           },
           "resolved_at": {
             "anyOf": [
@@ -8741,6 +8779,19 @@
             "minLength": 10,
             "title": "Reason",
             "type": "string"
+          },
+          "resolution_effect": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Effect"
           }
         },
         "required": [
@@ -8753,6 +8804,18 @@
       },
       "PrivacyRequestResponse": {
         "properties": {
+          "cleanup_request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleanup Request Id"
+          },
           "completed_at": {
             "anyOf": [
               {
@@ -8810,6 +8873,11 @@
             ],
             "title": "Owner User Id"
           },
+          "processing_receipt": {
+            "additionalProperties": true,
+            "title": "Processing Receipt",
+            "type": "object"
+          },
           "receipt_reference": {
             "anyOf": [
               {
@@ -8824,6 +8892,17 @@
           "request_type": {
             "title": "Request Type",
             "type": "string"
+          },
+          "resolution_effect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Effect"
           },
           "result_summary": {
             "anyOf": [
@@ -8867,6 +8946,9 @@
           "owner_user_id",
           "due_at",
           "result_summary",
+          "resolution_effect",
+          "processing_receipt",
+          "cleanup_request_id",
           "receipt_reference",
           "created_at",
           "updated_at",
