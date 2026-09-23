@@ -9469,6 +9469,79 @@
         "title": "ProjectEntry",
         "type": "object"
       },
+      "ProjectEntryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "minLength": 10,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "project_type": {
+            "enum": [
+              "academic",
+              "personal",
+              "internship",
+              "hackathon",
+              "other"
+            ],
+            "title": "Project Type",
+            "type": "string"
+          },
+          "project_url": {
+            "anyOf": [
+              {
+                "format": "uri",
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Url"
+          },
+          "technologies": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Technologies",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 2,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "project_type",
+          "description",
+          "technologies",
+          "outcomes",
+          "project_url"
+        ],
+        "title": "ProjectEntryResponse",
+        "type": "object"
+      },
       "ProjectsSkillsStep": {
         "additionalProperties": false,
         "properties": {
@@ -12997,8 +13070,7 @@
           },
           "projects": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ProjectEntryResponse"
             },
             "title": "Projects",
             "type": "array"

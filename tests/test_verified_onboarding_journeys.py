@@ -20,6 +20,7 @@ from app.models.auth import (
     User,
     UserRole,
 )
+from app.models.onboarding import StudentProject
 from app.models.profile import StudentProfile
 from app.modules.auth import registration as registration_service
 from app.modules.auth.security import hash_password, totp_code
@@ -162,7 +163,23 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
             ],
         },
         {"step": 3},
-        {"step": 4},
+        {
+            "step": 4,
+            "projects_skills": {
+                "projects": [
+                    {
+                        "title": "Campus Placement Portal",
+                        "project_type": "academic",
+                        "description": "Built a student placement portal with role-based dashboards.",
+                        "technologies": ["React", "PostgreSQL"],
+                        "outcomes": ["Reduced manual placement tracking"],
+                        "project_url": "https://example.edu/placement-portal",
+                    }
+                ],
+                "skills": ["React", "PostgreSQL"],
+                "certifications": [],
+            },
+        },
         {
             "step": 5,
             "career_preferences": {
@@ -186,6 +203,10 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
     ]
     for step in steps[:-1]:
         state = save_step(client, "/api/v1/onboarding/step", state, **step)
+    async with TestSession() as db:
+        saved_project = await db.scalar(select(StudentProject))
+        assert saved_project is not None
+        assert saved_project.project_type == "academic"
 
     rejected_review = client.put(
         "/api/v1/onboarding/step",
@@ -204,8 +225,11 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
     assert state["current_step"] == 7
     assert state["identity"]["full_name"] == "Student One"  # type: ignore[index]
     assert state["experience"] == []
-    assert state["projects"] == []
-    assert state["skills"] == []
+    assert state["projects"][0]["project_type"] == "academic"  # type: ignore[index]
+    assert state["skills"] == [
+        {"name": "React", "proficiency": "comfortable"},
+        {"name": "PostgreSQL", "proficiency": "comfortable"},
+    ]
     assert state["placement_participation"]["privacy_accepted"] is True  # type: ignore[index]
 
 

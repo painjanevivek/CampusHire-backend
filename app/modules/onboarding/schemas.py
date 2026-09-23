@@ -54,6 +54,16 @@ class ProjectEntry(StrictModel):
     project_url: AnyHttpUrl | None = None
 
 
+class ProjectEntryResponse(StrictModel):
+    id: UUID
+    title: str = Field(min_length=2, max_length=160)
+    project_type: Literal["academic", "personal", "internship", "hackathon", "other"]
+    description: str = Field(min_length=10, max_length=300)
+    technologies: list[str] = Field(max_length=30)
+    outcomes: list[str] = Field(max_length=12)
+    project_url: AnyHttpUrl | None
+
+
 class CertificationEntry(StrictModel):
     name: str = Field(min_length=2, max_length=200)
     issuer: str = Field(min_length=2, max_length=200)
@@ -132,7 +142,7 @@ class StudentOnboardingResponse(StrictModel):
     identity: dict[str, object]
     education: list[dict[str, object]]
     experience: list[dict[str, object]]
-    projects: list[dict[str, object]]
+    projects: list[ProjectEntryResponse]
     skills: list[dict[str, object]]
     certifications: list[dict[str, object]]
     career_preferences: dict[str, object] | None
