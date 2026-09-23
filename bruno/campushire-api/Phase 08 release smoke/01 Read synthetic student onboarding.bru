@@ -1,0 +1,21 @@
+meta {
+  name: Read synthetic student onboarding
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/onboarding
+  body: none
+  auth: none
+}
+
+tests {
+  test("onboarding belongs to the signed-in synthetic student", function () {
+    const state = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(state.identity.full_name).to.equal("Aarav Sharma");
+    expect(state.revision).to.be.a("number");
+    bru.setVar("onboardingRevision", state.revision);
+  });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: Read project type
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/onboarding
+  body: none
+  auth: none
+}
+
+tests {
+  test("project_type persists when onboarding is read again", function () {
+    const state = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    const project = state.projects.find((item) =>
+      item.title === "CampusHire Release Smoke Project"
+    );
+    expect(project, "saved synthetic project").to.exist;
+    expect(project.project_type).to.equal("academic");
+    expect(state.revision).to.equal(Number(bru.getVar("onboardingRevision")));
+  });
+}

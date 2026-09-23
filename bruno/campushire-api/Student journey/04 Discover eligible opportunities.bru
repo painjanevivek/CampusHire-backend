@@ -1,0 +1,31 @@
+meta {
+  name: Discover eligible opportunities
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/opportunities?page=1&page_size=20
+  body: none
+  auth: none
+}
+
+tests {
+  test("opportunity discovery returns a page", function () {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(body.items).to.be.an("array");
+    expect(body.page).to.equal(1);
+  });
+
+  test("student has an eligible opportunity without an application", function () {
+    const body = res.getBody();
+    const opportunity = body.items.find((item) =>
+      item.eligibility &&
+      item.eligibility.status === "eligible" &&
+      !item.application_status
+    );
+    expect(opportunity, "eligible unsubmitted opportunity").to.exist;
+    bru.setVar("eligibleRoleId", opportunity.id);
+  });
+}

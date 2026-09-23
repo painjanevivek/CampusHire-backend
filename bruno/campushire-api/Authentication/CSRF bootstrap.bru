@@ -1,0 +1,17 @@
+meta {
+  name: CSRF bootstrap
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/auth/csrf
+  body: none
+  auth: none
+}
+
+tests {
+  test("CSRF bootstrap returns HTTP 204", function () {
+    expect(res.getStatus()).to.equal(204);
+  });
+}

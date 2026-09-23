@@ -1,0 +1,43 @@
+meta {
+  name: Update student profile
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/profile
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Origin: http://localhost:3000
+  X-CSRF-Token: {{csrfToken}}
+}
+
+body:json {
+  {
+    "full_name": "{{studentName}}",
+    "city": "{{studentCity}}",
+    "expected_revision": {{profileRevision}}
+  }
+}
+
+script:pre-request {
+  const token = bru.cookies.get("campushire_csrf");
+  if (!token) {
+    throw new Error("The authenticated CSRF cookie is missing.");
+  }
+  bru.setVar("csrfToken", token);
+}
+
+tests {
+  test("profile update accepts the current revision and preserves synthetic data", function () {
+    const profile = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(profile.full_name).to.equal("Aarav Sharma");
+    expect(profile.city).to.equal("Pune");
+    expect(profile.revision).to.be.greaterThan(Number(bru.getVar("profileRevision")));
+  });
+}

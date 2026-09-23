@@ -1,0 +1,39 @@
+meta {
+  name: Sign in as synthetic student
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/demo-sign-in
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Origin: http://localhost:3000
+  X-CSRF-Token: {{csrfToken}}
+}
+
+body:json {
+  {
+    "role": "student"
+  }
+}
+
+script:pre-request {
+  const token = bru.cookies.get("campushire_csrf");
+  if (!token) {
+    throw new Error("Run the CSRF bootstrap request before student sign-in.");
+  }
+  bru.setVar("csrfToken", token);
+}
+
+tests {
+  test("demo student sign-in succeeds", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().user.role).to.equal("student");
+    expect(res.getBody().next_step).to.equal("complete");
+  });
+}

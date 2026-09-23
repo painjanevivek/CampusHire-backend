@@ -1,0 +1,45 @@
+meta {
+  name: Accept confirmed onboarding review
+  type: http
+  seq: 13
+}
+
+put {
+  url: {{baseUrl}}/onboarding/step
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Origin: http://localhost:3000
+  X-CSRF-Token: {{csrfToken}}
+}
+
+body:json {
+  {
+    "expected_revision": {{onboardingRevision}},
+    "step": 7,
+    "review": {
+      "confirmed": true
+    }
+  }
+}
+
+script:pre-request {
+  const token = bru.cookies.get("campushire_csrf");
+  if (!token) {
+    throw new Error("The authenticated CSRF cookie is missing.");
+  }
+  bru.setVar("csrfToken", token);
+}
+
+tests {
+  test("confirmed review completes onboarding", function () {
+    const state = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(state.completed).to.equal(true);
+    expect(state.completed_at).to.be.a("string");
+    expect(state.revision).to.be.greaterThan(Number(bru.getVar("onboardingRevision")));
+  });
+}

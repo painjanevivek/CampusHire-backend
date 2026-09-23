@@ -1,0 +1,57 @@
+meta {
+  name: Save project type
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{baseUrl}}/onboarding/step
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Origin: http://localhost:3000
+  X-CSRF-Token: {{csrfToken}}
+}
+
+body:json {
+  {
+    "expected_revision": {{onboardingRevision}},
+    "step": 4,
+    "projects_skills": {
+      "projects": [
+        {
+          "title": "CampusHire Release Smoke Project",
+          "project_type": "academic",
+          "description": "Synthetic project used to verify project type persistence.",
+          "technologies": ["Python", "FastAPI"],
+          "outcomes": ["Verified onboarding project persistence"]
+        }
+      ],
+      "skills": [],
+      "certifications": []
+    }
+  }
+}
+
+script:pre-request {
+  const token = bru.cookies.get("campushire_csrf");
+  if (!token) {
+    throw new Error("The authenticated CSRF cookie is missing.");
+  }
+  bru.setVar("csrfToken", token);
+}
+
+tests {
+  test("project with an explicit project_type is saved", function () {
+    const state = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(state.projects).to.have.length(1);
+    expect(state.projects[0].title).to.equal("CampusHire Release Smoke Project");
+    expect(state.projects[0].project_type).to.equal("academic");
+    expect(state.revision).to.be.greaterThan(Number(bru.getVar("onboardingRevision")));
+    bru.setVar("onboardingRevision", state.revision);
+  });
+}

@@ -1,0 +1,36 @@
+meta {
+  name: Start or resume application draft
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/opportunities/{{eligibleRoleId}}/application-draft
+  body: none
+  auth: none
+}
+
+headers {
+  Origin: http://localhost:3000
+  X-CSRF-Token: {{csrfToken}}
+}
+
+script:pre-request {
+  const token = bru.cookies.get("campushire_csrf");
+  if (!token) {
+    throw new Error("The authenticated CSRF cookie is missing.");
+  }
+  bru.setVar("csrfToken", token);
+}
+
+tests {
+  test("application draft starts or resumes for the selected role", function () {
+    const draft = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(draft).to.have.property("id");
+    expect(draft.role_id).to.equal(bru.getVar("eligibleRoleId"));
+    expect(draft.role_title).to.be.a("string");
+    expect(draft.submitted_application_id).to.equal(null);
+    bru.setVar("applicationDraftId", draft.id);
+  });
+}

@@ -1,0 +1,49 @@
+meta {
+  name: Skip empty projects and skills step
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{baseUrl}}/onboarding/step
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Origin: http://localhost:3000
+  X-CSRF-Token: {{csrfToken}}
+}
+
+body:json {
+  {
+    "expected_revision": {{onboardingRevision}},
+    "step": 4,
+    "projects_skills": {
+      "projects": [],
+      "skills": [],
+      "certifications": []
+    }
+  }
+}
+
+script:pre-request {
+  const token = bru.cookies.get("campushire_csrf");
+  if (!token) {
+    throw new Error("The authenticated CSRF cookie is missing.");
+  }
+  bru.setVar("csrfToken", token);
+}
+
+tests {
+  test("empty projects and skills are accepted as an optional step", function () {
+    const state = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(state.projects).to.be.an("array").that.is.empty;
+    expect(state.skills).to.be.an("array").that.is.empty;
+    expect(state.certifications).to.be.an("array").that.is.empty;
+    expect(state.revision).to.be.greaterThan(Number(bru.getVar("onboardingRevision")));
+    bru.setVar("onboardingRevision", state.revision);
+  });
+}

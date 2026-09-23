@@ -1,0 +1,17 @@
+meta {
+  name: Unauthenticated session is rejected
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/auth/me
+  body: none
+  auth: none
+}
+
+tests {
+  test("session endpoint rejects requests without a session", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}
