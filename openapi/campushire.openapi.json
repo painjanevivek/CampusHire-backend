@@ -9409,7 +9409,7 @@
         "additionalProperties": false,
         "properties": {
           "description": {
-            "maxLength": 2000,
+            "maxLength": 300,
             "minLength": 10,
             "title": "Description",
             "type": "string"
@@ -9421,6 +9421,18 @@
             "maxItems": 12,
             "title": "Outcomes",
             "type": "array"
+          },
+          "project_type": {
+            "default": "other",
+            "enum": [
+              "academic",
+              "personal",
+              "internship",
+              "hackathon",
+              "other"
+            ],
+            "title": "Project Type",
+            "type": "string"
           },
           "project_url": {
             "anyOf": [

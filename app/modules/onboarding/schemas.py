@@ -47,7 +47,8 @@ class ExperienceEntry(StrictModel):
 
 class ProjectEntry(StrictModel):
     title: str = Field(min_length=2, max_length=160)
-    description: str = Field(min_length=10, max_length=2000)
+    project_type: Literal["academic", "personal", "internship", "hackathon", "other"] = "other"
+    description: str = Field(min_length=10, max_length=300)
     technologies: list[str] = Field(default_factory=list, max_length=30)
     outcomes: list[str] = Field(default_factory=list, max_length=12)
     project_url: AnyHttpUrl | None = None
@@ -112,7 +113,8 @@ class StudentOnboardingUpdate(StrictModel):
             6: self.placement_participation,
             7: self.review,
         }
-        if fields[self.step] is None:
+        # Experience and projects/skills are optional steps and may be skipped empty.
+        if self.step not in {3, 4} and fields[self.step] is None:
             raise ValueError(f"Step {self.step} data is required")
         if self.step == 2 and not self.education:
             raise ValueError("At least one education record is required")

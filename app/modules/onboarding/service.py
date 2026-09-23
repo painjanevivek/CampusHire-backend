@@ -140,6 +140,7 @@ async def student_onboarding_response(
                 item,
                 "id",
                 "title",
+                "project_type",
                 "description",
                 "technologies",
                 "outcomes",

@@ -59,6 +59,7 @@ class StudentProject(Base, TimestampMixin):
         ForeignKey("student_profiles.id", ondelete="CASCADE"), index=True
     )
     title: Mapped[str] = mapped_column(String(160))
+    project_type: Mapped[str] = mapped_column(String(24), default="other", server_default="other")
     description: Mapped[str] = mapped_column(String(2000))
     technologies: Mapped[list[str]] = mapped_column(JSON, default=list)
     outcomes: Mapped[list[str]] = mapped_column(JSON, default=list)

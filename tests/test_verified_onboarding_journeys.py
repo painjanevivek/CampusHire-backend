@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -23,6 +24,26 @@ from app.models.profile import StudentProfile
 from app.modules.auth import registration as registration_service
 from app.modules.auth.security import hash_password, totp_code
 from app.modules.institutions import lifecycle as institution_lifecycle
+from app.modules.onboarding.schemas import ProjectEntry
+
+
+def test_project_entry_accepts_project_type_and_caps_description() -> None:
+    project = ProjectEntry(
+        title="Campus Placement Portal",
+        project_type="academic",
+        description="Built a student placement portal with role-based dashboards.",
+        technologies=["React", "PostgreSQL"],
+    )
+
+    assert project.project_type == "academic"
+    assert len(project.description) <= 300
+
+    with pytest.raises(ValidationError):
+        ProjectEntry(
+            title="Campus Placement Portal",
+            project_type="academic",
+            description="A" * 301,
+        )
 
 engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -140,11 +161,8 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
                 }
             ],
         },
-        {"step": 3, "experience": []},
-        {
-            "step": 4,
-            "projects_skills": {"projects": [], "skills": ["Python"], "certifications": []},
-        },
+        {"step": 3},
+        {"step": 4},
         {
             "step": 5,
             "career_preferences": {
@@ -166,12 +184,29 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
         },
         {"step": 7, "review": {"confirmed": True}},
     ]
-    for step in steps:
+    for step in steps[:-1]:
         state = save_step(client, "/api/v1/onboarding/step", state, **step)
+
+    rejected_review = client.put(
+        "/api/v1/onboarding/step",
+        headers=csrf_headers(client),
+        json={
+            "expected_revision": state["revision"],
+            "step": 7,
+            "review": {"confirmed": False},
+        },
+    )
+    assert rejected_review.status_code == 422
+    assert state["completed"] is False
+    state = save_step(client, "/api/v1/onboarding/step", state, **steps[-1])
 
     assert state["completed"] is True
     assert state["current_step"] == 7
     assert state["identity"]["full_name"] == "Student One"  # type: ignore[index]
+    assert state["experience"] == []
+    assert state["projects"] == []
+    assert state["skills"] == []
+    assert state["placement_participation"]["privacy_accepted"] is True  # type: ignore[index]
 
 
 async def test_tnp_registration_verification_approval_and_onboarding_journey(
