@@ -20,6 +20,11 @@ six public pages and four viewport sizes with zero axe violations, keyboard fail
 browser console errors. The exact generated-client hash and focused contract evidence are recorded in
 `PHASE_08_RELEASE_CANDIDATE.md` in each deployable.
 
+The local API, worker, and PDF parser production Docker targets also build successfully. API and
+worker images carry the Backend source revision and OpenAPI hash labels. Their local image IDs are
+recorded in the Backend candidate record. These images have not been pushed to a registry or
+deployed; they do not replace candidate-specific provenance, signature, and promotion evidence.
+
 This run added project type and a 300-character project-description limit to the onboarding contract,
 allowed empty experience and project/skills stages, and kept required review and privacy confirmation
 enforced. It corrected a wildcard-CORS bug in the accessibility harness's credentialed degraded-API

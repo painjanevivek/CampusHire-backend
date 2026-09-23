@@ -27,6 +27,14 @@ external review, deployment, and final authorization.
 - Backend and Frontend OpenAPI snapshots are byte-identical at the SHA-256 above. A repeated
   frontend generated-client pass was stable; see the Frontend candidate record for the exact
   generated-types digest.
+- Local production Docker builds passed for the `api` and `worker` targets and the separate PDF
+  parser image. API/worker image labels bind them to Backend commit
+  `532dd83056a95d0769b5d2f4991128688e921bd1` and the OpenAPI digest above. The local image IDs are
+  API `sha256:ea7fb34b0774107b72146d0aedd233144e26fd1ff818450e8351c0f58687be92`, worker
+  `sha256:42b9e1859199c48d3b984ce23a6e5b2c9eb3ca22b2fd6d99764420b38060b70b`, and parser
+  `sha256:16710fec18e390d327c60064fd2f59446bf55d2b5cfec436be791ea8ed263a52`. These are local
+  Docker image IDs, not registry digests or signed release artifacts; no image was pushed or
+  deployed.
 - The production public smoke passed four configured routes. The Chromium public accessibility
   matrix passed 24/24 route/viewport checks with zero axe violations, keyboard failures, or
   unexpected console errors.
