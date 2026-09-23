@@ -1,6 +1,42 @@
 # Current Release Status
 
-## Phase 8 release-candidate engineering update — 2026-09-23
+## Phase 8 revalidation — 2026-09-23
+
+Decision: **NO-GO for real student data and production. Synthetic-only engineering validation is
+complete for the source pair below; external gates remain open.**
+
+This revalidation applies to Backend commit `532dd83056a95d0769b5d2f4991128688e921bd1` on
+`phase/08-release-candidate` paired with Frontend commit
+`533fd4e9c1d6fa5aa8fefed8815d07e3992acb9d` on `feat/landing-and-sign-in-experience`. Their recorded
+parents are Backend `2dc5e56fd25a6bd028700adf92fff9212d06e615` and Frontend
+`bf26df9e431d1364e66098705420aee984073f03`. Backend and Frontend OpenAPI snapshots match at SHA-256
+`C58EF1A6271958173AAFA6FC60D9FE555C44C477E91634B8EBD649F8660E6D41`; the single code migration
+head is `20260923_0038`.
+
+The latest engineering checks pass: Backend `262 passed, 1 skipped`, Ruff, and strict MyPy across 149
+source files; Frontend `287 passed` across 79 files, lint, typecheck, and production build. The public
+production smoke passed four routes. Chromium accessibility passed all 24 route/viewport checks on
+six public pages and four viewport sizes with zero axe violations, keyboard failures, or unexpected
+browser console errors. The exact generated-client hash and focused contract evidence are recorded in
+`PHASE_08_RELEASE_CANDIDATE.md` in each deployable.
+
+This run added project type and a 300-character project-description limit to the onboarding contract,
+allowed empty experience and project/skills stages, and kept required review and privacy confirmation
+enforced. It corrected a wildcard-CORS bug in the accessibility harness's credentialed degraded-API
+fixture; this did not change production CORS settings.
+
+The institution still needs to define whether student signup itself must wait for a human admission
+review. The current student signup endpoint can create an active session/membership, while institution
+registration review is a separate workflow. Do not claim that student signup is institution-reviewed
+until policy and backend behavior agree.
+
+The local database remains at `20260923_0036`; it was not upgraded or modified. Only isolated
+synthetic test databases were used. A live migration, staging restore, current-candidate security
+approval, representative UAT, external support/alert ownership, capacity/cost evidence, artifact
+provenance, legal/privacy decisions, and final authorization remain unverified. The
+`REAL_DATA_AUTHORIZATION_LOG.md` was not changed; no deployment or real student data use is approved.
+
+## Earlier Phase 8 validation record — superseded by the revalidation above
 
 Decision: **NO-GO for real student data and production. Synthetic engineering qualification is
 complete for this branch; external release gates remain open.**
