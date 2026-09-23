@@ -12846,6 +12846,7 @@
             "enum": [
               "explain_eligibility",
               "explain_role_match",
+              "interview_practice",
               "improve_profile_or_resume",
               "preparation_roadmap"
             ],

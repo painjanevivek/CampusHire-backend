@@ -50,3 +50,20 @@ Schema-valid output is only a candidate. The runner separately validates determi
 source resolution, source support, student-evidence state, selected drive fields, and planned effort.
 Failures receive at most one bounded correction. Any material that still lacks support is withheld
 and the run ends with a safe error.
+
+## Synthetic interview-practice pilot
+
+Interview practice is a separate Student Copilot intent, backed by the configured Gemini structured
+generator. It uses only the published role title/skills and a minimized conversation transcript; it
+does not load the student's profile or resume. Each conversation is limited to 12 model turns and
+the route retains its 20-requests-per-minute tenant/user limit. The feature is restricted in settings
+to development and test, requires both `AI_GENERATION=true` and `STUDENT_COPILOT=true`, and also
+requires the institution's matching feature flags. `INTERVIEW_PRACTICE_PILOT=true` enables it only
+when `COPILOT_GENERATION_PROVIDER=gemini` and
+`GEMINI_GENERATION_MODEL=gemini-3.8-flash`.
+
+The free-tier provider may use prompts to improve its products. The interface warns students to use
+synthetic answers and avoid personal or confidential information. Do not enable this pilot for real
+student data or production; provider privacy, institutional approval, usage limits, and budget policy
+must be reviewed first. The agent gives practice feedback only and never assesses eligibility or
+hiring outcomes.

@@ -85,6 +85,10 @@ class AiMessage(Base):
     conversation_id: Mapped[UUID] = mapped_column(
         ForeignKey("ai_conversations.id", ondelete="CASCADE"), index=True
     )
+    intent: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    target_role_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("placement_roles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)
     citations: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)

@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     ai_generation: bool = False
     ai_resume_studio: bool = False
     student_copilot: bool = False
+    interview_practice_pilot: bool = False
     tnp_copilot: bool = False
     agent_runs: bool = False
     live_sources: bool = False
@@ -140,6 +141,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_requires_real_malware_scanning(self) -> "Settings":
+        if self.interview_practice_pilot and self.app_env not in {"development", "test"}:
+            raise ValueError("Interview practice pilot is restricted to development and test")
+        if self.interview_practice_pilot and (
+            self.copilot_generation_provider != "gemini"
+            or self.gemini_generation_model != "gemini-3.8-flash"
+        ):
+            raise ValueError(
+                "Interview practice pilot requires the configured Gemini free-tier model"
+            )
         if self.demo_login_enabled:
             if self.app_env not in {"development", "test"}:
                 raise ValueError("Demo login is restricted to development and test environments")

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 StudentIntent = Literal[
     "explain_eligibility",
     "explain_role_match",
+    "interview_practice",
     "improve_profile_or_resume",
     "preparation_roadmap",
 ]
@@ -28,6 +29,15 @@ class StudentMessageCreate(BaseModel):
     intent: StudentIntent
     message: str = Field(min_length=2, max_length=2000)
     role_id: UUID | None = None
+
+
+class InterviewPracticeResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: str = Field(max_length=1600)
+    strengths: list[str] = Field(default_factory=list, max_length=3)
+    improvements: list[str] = Field(default_factory=list, max_length=3)
+    next_question: str = Field(min_length=3, max_length=800)
 
 
 class TnpMessageCreate(BaseModel):
