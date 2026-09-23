@@ -185,10 +185,7 @@ async def test_signup_fails_without_a_verified_college_identity(
     assert response.status_code == 409
     assert response.json() == {
         "status": "registration_unavailable",
-        "message": (
-            "We could not match this request. Check your college selection and, if you "
-            "entered an invitation code, confirm it was issued for this email address."
-        ),
+        "message": "We could not match this college. Check your selection and try again.",
         "next_path": None,
     }
     async with TestSession() as db:
@@ -200,51 +197,26 @@ async def test_signup_fails_without_a_verified_college_identity(
         assert registration.date_of_birth is None
 
 
-async def test_signup_requires_a_roster_invitation_even_for_a_verified_domain(
+async def test_signup_with_selected_college_does_not_require_an_invitation(
     client: TestClient,
 ) -> None:
-    invitation_code = "approved-roster-invitation-code"  # noqa: S105
     async with TestSession() as db:
-        institution = Institution(code="direct-campus", name="Direct Campus")
+        institution = Institution(code="direct-campus", name="Direct Campus", is_active=True)
         db.add(institution)
-        await db.flush()
-        await add_approved_student_invitation(
-            db, institution, "asha@direct-campus.edu", invitation_code
-        )
         await db.commit()
 
     payload = {
-            "name": "Asha",
-            "surname": "Patil",
-            "dob": "2004-05-16",
-            "email": "asha@direct-campus.edu",
-            "password": "a secure campus passphrase",
-            "re_enter_password": "a secure campus passphrase",
-            "terms_version": "2026-08-28",
-            "privacy_version": "2026-08-28",
+        "name": "Asha",
+        "surname": "Patil",
+        "dob": "2004-05-16",
+        "email": "asha@example.edu",
+        "institution_id": str(institution.id),
+        "password": "a secure campus passphrase",
+        "re_enter_password": "a secure campus passphrase",
+        "terms_version": "2026-08-28",
+        "privacy_version": "2026-08-28",
     }
-    pending = client.post("/api/v1/auth/signup", headers=csrf_headers(client), json=payload)
-    assert pending.status_code == 202
-    assert pending.json()["status"] == "approval_pending"
-    assert pending.json()["next_path"] is None
-    assert client.get("/api/v1/auth/me").status_code == 401
-
-    async with TestSession() as db:
-        request = await db.scalar(
-            select(StudentRegistrationRequest).where(
-                StudentRegistrationRequest.email == "asha@direct-campus.edu",
-                StudentRegistrationRequest.status == RegistrationStatus.PENDING_APPROVAL.value,
-            )
-        )
-        assert request is not None
-        assert request.institution_id == institution.id
-        assert request.password_hash is None
-
-    response = client.post(
-        "/api/v1/auth/signup",
-        headers=csrf_headers(client),
-        json={**payload, "invitation_code": invitation_code},
-    )
+    response = client.post("/api/v1/auth/signup", headers=csrf_headers(client), json=payload)
 
     assert response.status_code == 201, response.text
     assert response.json() == {
@@ -254,16 +226,19 @@ async def test_signup_requires_a_roster_invitation_even_for_a_verified_domain(
     }
     assert client.get("/api/v1/auth/me").status_code == 200
     async with TestSession() as db:
-        user = await db.scalar(select(User).where(User.email == "asha@direct-campus.edu"))
+        user = await db.scalar(select(User).where(User.email == "asha@example.edu"))
         assert user is not None
         pending_request = await db.scalar(
             select(StudentRegistrationRequest).where(
-                StudentRegistrationRequest.email == "asha@direct-campus.edu",
+                StudentRegistrationRequest.email == "asha@example.edu",
                 StudentRegistrationRequest.invitation_id.is_(None),
             )
         )
         assert pending_request is not None
         assert pending_request.status == RegistrationStatus.ACTIVATED.value
+        assert pending_request.first_name == "Asha"
+        assert pending_request.surname == "Patil"
+        assert str(pending_request.date_of_birth) == "2004-05-16"
         membership = await db.scalar(
             select(InstitutionMembership).where(InstitutionMembership.user_id == user.id)
         )
@@ -278,8 +253,7 @@ async def test_signup_requires_a_roster_invitation_even_for_a_verified_domain(
         assert profile is not None
         assert profile.full_name == "Asha Patil"
         assert {item.document_type for item in acceptances} == {"terms", "privacy"}
-        invitation = await db.scalar(select(MembershipInvitation))
-        assert invitation is not None and invitation.accepted_at is not None
+        assert membership.verified_by_user_id is None
         assert await db.scalar(select(EmailDelivery.id)) is None
 
 

@@ -23,7 +23,6 @@ from app.models.profile import StudentProfile
 from app.modules.auth import registration as registration_service
 from app.modules.auth.security import hash_password, totp_code
 from app.modules.institutions import lifecycle as institution_lifecycle
-from tests.test_auth import add_approved_student_invitation
 
 engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -78,15 +77,10 @@ def save_step(
     return response.json()
 
 
-async def test_student_invited_signup_and_onboarding_journey(client: TestClient) -> None:
-    invitation_code = "approved-onboarding-roster-code"  # noqa: S105
+async def test_student_signup_without_invitation_and_onboarding_journey(client: TestClient) -> None:
     async with TestSession() as db:
         institution = Institution(code="student-campus", name="Student Campus", is_active=True)
         db.add(institution)
-        await db.flush()
-        await add_approved_student_invitation(
-            db, institution, "student@student-campus.edu", invitation_code
-        )
         await db.commit()
 
     started = client.post(
@@ -97,11 +91,11 @@ async def test_student_invited_signup_and_onboarding_journey(client: TestClient)
             "surname": "One",
             "dob": "2004-05-16",
             "email": "student@student-campus.edu",
+            "institution_id": str(institution.id),
             "password": "a secure student passphrase",
             "re_enter_password": "a secure student passphrase",
             "terms_version": "2026-08-28",
             "privacy_version": "2026-08-28",
-            "invitation_code": invitation_code,
         },
     )
     assert started.status_code == 201, started.text

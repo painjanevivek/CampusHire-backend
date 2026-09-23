@@ -122,20 +122,6 @@ async def start_student_registration(
     db.add(attempt)
     await db.flush()
     existing_user = await db.scalar(select(User.id).where(User.email == normalized_email))
-    if not invitation_code and institution_id is not None and existing_user is None:
-        attempt.status = RegistrationStatus.PENDING_APPROVAL.value
-        record_audit_event(
-            db,
-            institution_id=institution_id,
-            event_type="registration.student.review_requested",
-            resource_type="student_registration_request",
-            resource_id=str(attempt.id),
-            outcome="pending",
-            reason="student_requested_access_without_invitation",
-            correlation_id=correlation_id,
-        )
-        await db.commit()
-        return StudentRegistrationResult(status="approval_pending")
     if institution_id is None or existing_user is not None:
         record_audit_event(
             db,
@@ -218,7 +204,9 @@ async def start_student_registration(
         resource_type="student_registration_request",
         resource_id=str(attempt.id),
         correlation_id=correlation_id,
-        details={"identity_source": "invitation"},
+        details={
+            "identity_source": "invitation" if invitation is not None else "selected_institution"
+        },
     )
     await db.commit()
     return StudentRegistrationResult(status="registered", next_path="/onboarding")

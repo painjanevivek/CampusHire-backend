@@ -174,19 +174,15 @@ async def signup(
         response.status_code = status.HTTP_409_CONFLICT
         return RegistrationStartResponse(
             status=result.status,
-            message=(
-                "We could not match this request. Check your college selection and, if you "
-                "entered an invitation code, confirm it was issued for this email address."
-            ),
+            message="We could not match this college. Check your selection and try again.",
         )
     if result.status == "approval_pending":
         response.status_code = status.HTTP_202_ACCEPTED
         return RegistrationStartResponse(
             status=result.status,
             message=(
-                "Your request was recorded for placement-office review. Your account is not "
-                "active yet. Ask your office to verify your identity and provide a one-time "
-                "invitation code."
+                "Your student access request is with the placement office for review. "
+                "You will be notified when the account is ready."
             ),
         )
     auth_session = await authenticate(
