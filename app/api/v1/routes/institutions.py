@@ -39,6 +39,10 @@ from app.modules.auth.dependencies import (
     require_recent_reauthentication,
     verify_authenticated_csrf,
 )
+from app.modules.auth.institutional_identity import (
+    InstitutionalEmailError,
+    validate_pcco_email_prn_consistency,
+)
 from app.modules.auth.placement_access import normalize_prn
 from app.modules.auth.schemas import ManualRecoveryHandoff, ManualRecoveryRequest
 from app.modules.auth.service import issue_password_reset
@@ -140,6 +144,18 @@ async def verify_student_prn(
                 "message": "The entered PRN does not match the student's saved profile.",
             },
         )
+    student_user = await db.get(User, student_id)
+    try:
+        if student_user is not None:
+            validate_pcco_email_prn_consistency(student_user.email, registered_prn)
+    except InstitutionalEmailError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "student_prn_email_batch_mismatch",
+                "message": str(error),
+            },
+        ) from error
     verified_at = datetime.now(UTC)
     profile.prn_verified_at = verified_at
     profile.prn_verified_by_user_id = principal.user.id

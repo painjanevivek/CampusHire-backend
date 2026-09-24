@@ -245,6 +245,10 @@ class MfaDisableRequest(BaseModel):
     code: str = Field(min_length=6, max_length=32)
 
 
+class MfaRecoveryRegenerateRequest(MfaDisableRequest):
+    pass
+
+
 class SessionResponse(BaseModel):
     id: UUID
     created_at: datetime

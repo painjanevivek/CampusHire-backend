@@ -175,6 +175,18 @@ async def test_student_mfa_challenge_is_server_enforced_and_recovery_is_single_u
     assert verified.status_code == 204
     assert client.get("/api/v1/profile").status_code == 200
 
+    regenerated = client.post(
+        "/api/v1/auth/mfa/recovery-codes/regenerate",
+        headers=csrf_headers(client),
+        json={
+            "password": "a secure student passphrase",
+            "code": totp_code(secret),
+        },
+    )
+    assert regenerated.status_code == 200, regenerated.text
+    new_recovery_code = regenerated.json()["recovery_codes"][0]
+    assert new_recovery_code != recovery_code
+
     client.cookies.clear()
     challenge_sign_in = client.post(
         "/api/v1/auth/sign-in",
@@ -187,10 +199,16 @@ async def test_student_mfa_challenge_is_server_enforced_and_recovery_is_single_u
     )
     assert challenge_sign_in.json()["next_step"] == "mfa_challenge"
     headers = csrf_headers(client)
-    first_use = client.post(
+    replaced_code = client.post(
         "/api/v1/auth/mfa/challenge",
         headers=headers,
         json={"code": recovery_code},
+    )
+    assert replaced_code.status_code == 401
+    first_use = client.post(
+        "/api/v1/auth/mfa/challenge",
+        headers=csrf_headers(client),
+        json={"code": new_recovery_code},
     )
     assert first_use.status_code == 204
     client.cookies.clear()
@@ -206,7 +224,7 @@ async def test_student_mfa_challenge_is_server_enforced_and_recovery_is_single_u
     replay = client.post(
         "/api/v1/auth/mfa/challenge",
         headers=csrf_headers(client),
-        json={"code": recovery_code},
+        json={"code": new_recovery_code},
     )
     assert challenge_sign_in.json()["next_step"] == "mfa_challenge"
     assert replay.status_code == 401

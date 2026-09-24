@@ -778,6 +778,35 @@ async def verify_mfa(db: AsyncSession, session: Session, code: str) -> bool:
     return recovery is not None
 
 
+async def regenerate_mfa_recovery_codes(
+    db: AsyncSession,
+    *,
+    session: Session,
+    password: str,
+    code: str,
+    correlation_id: str | None,
+) -> list[str]:
+    if not await verify_password_async(session.user.password_hash, password):
+        raise InvalidCredentialsError
+    await verify_mfa(db, session, code)
+    await db.execute(delete(MfaRecoveryCode).where(MfaRecoveryCode.user_id == session.user_id))
+    codes = [f"{new_secret()[:5]}-{new_secret()[:5]}" for _ in range(10)]
+    db.add_all(
+        [MfaRecoveryCode(user_id=session.user_id, code_hash=hash_secret(item)) for item in codes]
+    )
+    record_audit_event(
+        db,
+        actor_user_id=session.user_id,
+        institution_id=session.user.institution_id,
+        event_type="auth.mfa_recovery_codes_regenerated",
+        resource_type="user",
+        resource_id=str(session.user_id),
+        correlation_id=correlation_id,
+    )
+    await db.commit()
+    return codes
+
+
 async def disable_mfa(
     db: AsyncSession,
     *,

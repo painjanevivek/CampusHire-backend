@@ -39,6 +39,7 @@ from app.modules.auth.schemas import (
     MfaCodeRequest,
     MfaConfirmResponse,
     MfaDisableRequest,
+    MfaRecoveryRegenerateRequest,
     MfaSetupResponse,
     MfaStatusResponse,
     PasswordResetConfirm,
@@ -70,6 +71,7 @@ from app.modules.auth.service import (
     is_mfa_enabled,
     issue_password_reset,
     list_sessions,
+    regenerate_mfa_recovery_codes,
     revoke_all_sessions,
     revoke_session,
     revoke_session_by_id,
@@ -664,6 +666,43 @@ async def challenge_mfa(payload: MfaCodeRequest, db: Database, session: CurrentS
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_mfa_code", "message": "The verification code is invalid."},
         ) from None
+
+
+@router.post(
+    "/mfa/recovery-codes/regenerate",
+    response_model=MfaConfirmResponse,
+    dependencies=[Depends(verify_authenticated_csrf), Depends(enforce_auth_rate_limit)],
+)
+async def regenerate_recovery_codes(
+    payload: MfaRecoveryRegenerateRequest,
+    request: Request,
+    db: Database,
+    session: CurrentSession,
+) -> MfaConfirmResponse:
+    _require_mfa_session(session)
+    await enforce_auth_identity_rate_limit(request, str(session.user_id))
+    try:
+        codes = await regenerate_mfa_recovery_codes(
+            db,
+            session=session,
+            password=payload.password,
+            code=payload.code,
+            correlation_id=request.state.correlation_id,
+        )
+    except InvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "recovery_code_regeneration_failed",
+                "message": "Verify your password and authenticator code.",
+            },
+        ) from None
+    except InvalidMfaCodeError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "invalid_mfa_code", "message": "The verification code is invalid."},
+        ) from None
+    return MfaConfirmResponse(recovery_codes=codes)
 
 
 @router.post(
