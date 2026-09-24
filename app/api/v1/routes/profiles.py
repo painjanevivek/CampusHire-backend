@@ -31,6 +31,7 @@ from app.modules.profiles.schemas import (
 )
 from app.modules.profiles.service import (
     ProfileConflictError,
+    ProfileIdentityConflictError,
     get_or_create,
     to_response,
     update_profile,
@@ -68,6 +69,11 @@ async def _update(
                 "message": "The profile changed in another session.",
                 "current_revision": error.current_revision,
             },
+        ) from error
+    except ProfileIdentityConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "student_identity_mismatch", "message": str(error)},
         ) from error
     return to_response(profile, principal.user.email)
 

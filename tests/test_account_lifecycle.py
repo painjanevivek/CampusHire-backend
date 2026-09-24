@@ -666,7 +666,7 @@ async def test_invitation_acceptance_records_policy_versions(client: TestClient)
         db.add(institution)
         await db.flush()
         await add_approved_student_invitation(
-            db, institution, "policy.student@example.edu", token
+            db, institution, "policy.student23@pccoepune.org", token
         )
         await db.commit()
 

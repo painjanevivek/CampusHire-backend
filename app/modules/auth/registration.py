@@ -24,6 +24,7 @@ from app.models.auth import (
 )
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
+from app.modules.auth.institutional_identity import normalize_pccoe_email
 from app.modules.auth.invitation_scope import is_approved_student_invitation
 from app.modules.auth.security import hash_password_async, hash_secret, new_secret, normalize_email
 from app.modules.communications.service import enqueue_email
@@ -67,7 +68,8 @@ async def start_student_registration(
     requested_institution_id: UUID | None,
     correlation_id: str | None,
 ) -> StudentRegistrationResult:
-    normalized_email = normalize_email(email)
+    normalized_email, _ = normalize_pccoe_email(email)
+    pccoe_domain = get_settings().pccoe_student_email_domain.strip().casefold()
     invitation: MembershipInvitation | None = None
     if invitation_code:
         invitation = await db.scalar(
@@ -113,6 +115,29 @@ async def start_student_registration(
             )
         )
         institution_id = domain_record.institution_id if domain_record is not None else None
+    pccoe_domain_owner = await db.scalar(
+        select(InstitutionDomain.institution_id)
+        .join(Institution, Institution.id == InstitutionDomain.institution_id)
+        .where(
+            InstitutionDomain.domain == pccoe_domain,
+            InstitutionDomain.verification_status == "verified",
+            Institution.is_active.is_(True),
+        )
+    )
+    if pccoe_domain_owner is None or pccoe_domain_owner != institution_id:
+        institution_id = None
+    else:
+        normalized_email, _ = normalize_pccoe_email(normalized_email)
+    if institution_id is not None:
+        pccoe_domain_record = await db.scalar(
+            select(InstitutionDomain.id).where(
+                InstitutionDomain.institution_id == institution_id,
+                InstitutionDomain.domain == pccoe_domain,
+                InstitutionDomain.verification_status == "verified",
+            )
+        )
+        if pccoe_domain_record is not None:
+            normalized_email, _ = normalize_pccoe_email(normalized_email)
     attempt = StudentRegistrationRequest(
         email=normalized_email,
         institution_id=institution_id,
@@ -122,7 +147,12 @@ async def start_student_registration(
     db.add(attempt)
     await db.flush()
     existing_user = await db.scalar(select(User.id).where(User.email == normalized_email))
-    if institution_id is None or existing_user is not None:
+    institution_name = (
+        await db.scalar(select(Institution.name).where(Institution.id == institution_id))
+        if institution_id is not None
+        else None
+    )
+    if institution_id is None or institution_name is None or existing_user is not None:
         record_audit_event(
             db,
             institution_id=institution_id,
@@ -164,6 +194,7 @@ async def start_student_registration(
             StudentProfile(
                 user_id=user.id,
                 institution_id=institution_id,
+                institution_name=institution_name,
                 full_name=f"{name} {surname}".strip(),
                 date_of_birth=dob,
             ),

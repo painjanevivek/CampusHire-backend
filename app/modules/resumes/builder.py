@@ -277,7 +277,7 @@ def generate_pdf(content: ResumeContent, *, artifact_id: str | None = None) -> b
     write_section("PROJECTS", content.projects)
     write_section("EDUCATION", content.education)
     write_section("EXPERIENCE", content.experience)
-    write_section("OPEN SOURCE, RESEARCH, AND CERTIFICATION", content.credentials)
+    write_section("RESEARCH, PUBLICATIONS, OPEN SOURCE, AND CERTIFICATIONS", content.credentials)
     skills_and_achievements = []
     if content.skills:
         skills_and_achievements.append(f"Skills: {', '.join(content.skills)}")

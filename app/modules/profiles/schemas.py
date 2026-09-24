@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.modules.auth.placement_access import normalize_prn
+
 
 class EducationItem(BaseModel):
     degree: str = Field(min_length=2, max_length=120)
@@ -40,6 +42,16 @@ class ProfileUpdate(BaseModel):
     github_url: str | None = Field(default=None, max_length=500)
     portfolio_url: str | None = Field(default=None, max_length=500)
     onboarding_step: int | None = Field(default=None, ge=1, le=8)
+
+    @field_validator("prn")
+    @classmethod
+    def validate_prn(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        try:
+            return normalize_prn(value)
+        except ValueError as error:
+            raise ValueError("Enter a PRN in the institution's registered format") from error
 
     @field_validator("github_url")
     @classmethod
@@ -115,6 +127,16 @@ class IdentityUpdate(BaseModel):
         default=None, min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$"
     )
     onboarding_step: int | None = Field(default=None, ge=1, le=8)
+
+    @field_validator("prn")
+    @classmethod
+    def validate_prn(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        try:
+            return normalize_prn(value)
+        except ValueError as error:
+            raise ValueError("Enter a PRN in the institution's registered format") from error
 
 
 class EducationUpdate(BaseModel):

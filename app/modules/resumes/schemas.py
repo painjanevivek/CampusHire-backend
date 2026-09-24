@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.modules.resumes.builder import ResumeContent
 
@@ -65,6 +65,20 @@ class ResumeVersionResponse(BaseModel):
     extracted_data: dict[str, Any] = Field(default_factory=dict)
     job: ResumeJobResponse | None = None
     suggestions: list[ResumeSuggestionResponse] = Field(default_factory=list)
+
+
+class ResumeRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name or any(character in name for character in ("/", "\\")):
+            raise ValueError("Resume name must be a file name")
+        if any(ord(character) < 32 for character in name):
+            raise ValueError("Resume name cannot contain control characters")
+        return name
 
 
 class ResumeUploadResponse(BaseModel):

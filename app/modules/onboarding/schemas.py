@@ -2,7 +2,17 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from app.modules.auth.placement_access import normalize_prn
 
 
 class StrictModel(BaseModel):
@@ -14,6 +24,14 @@ class StudentIdentityStep(StrictModel):
     prn: str = Field(min_length=2, max_length=64)
     department: str = Field(min_length=2, max_length=120)
     graduation_year: int = Field(ge=2000, le=2100)
+
+    @field_validator("prn")
+    @classmethod
+    def validate_prn(cls, value: str) -> str:
+        try:
+            return normalize_prn(value)
+        except ValueError as error:
+            raise ValueError("Enter a PRN in the institution's registered format") from error
 
 
 class EducationEntry(StrictModel):

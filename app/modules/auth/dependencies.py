@@ -19,6 +19,13 @@ from app.models.auth import (
     PlatformAdminAssignment,
     Session,
     User,
+    UserRole,
+)
+from app.models.profile import StudentProfile
+from app.modules.auth.placement_access import (
+    PlacementAccessCapability,
+    derive_placement_access,
+    unavailable_capability,
 )
 from app.modules.auth.security import hash_secret
 
@@ -248,6 +255,17 @@ async def get_current_principal(
                 "message": "Complete administrator verification to continue.",
             },
         )
+    if effective_role == UserRole.STUDENT.value and session.mfa_verified_at is None:
+        from app.modules.auth.service import is_mfa_enabled
+
+        if await is_mfa_enabled(db, session.user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "mfa_required",
+                    "message": "Enter your authenticator code to continue.",
+                },
+            )
     return AuthenticatedPrincipal(user=session.user, session=session, membership=membership)
 
 
@@ -268,6 +286,38 @@ async def get_tenant_context(principal: CurrentPrincipal) -> TenantContext:
 
 
 CurrentTenant = Annotated[TenantContext, Depends(get_tenant_context)]
+
+
+async def require_student_placement_access(
+    principal: CurrentPrincipal, db: Database
+) -> PlacementAccessCapability:
+    """Enforce the derived placement capability inside the existing session/role model."""
+    if principal.role != UserRole.STUDENT.value:
+        return PlacementAccessCapability(True, None, None)
+    institution_id = principal.institution_id
+    if institution_id is None:
+        capability = unavailable_capability()
+    else:
+        profile = await db.scalar(
+            select(StudentProfile).where(
+                StudentProfile.user_id == principal.user.id,
+                StudentProfile.institution_id == institution_id,
+            )
+        )
+        institution = await db.get(Institution, institution_id)
+        capability = derive_placement_access(profile, institution)
+    if not capability.available:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "placement_access_unavailable",
+                "message": (
+                    "CampusHire placement services are available to third-year and final-year "
+                    "students. Review your student profile or contact your placement office."
+                ),
+            },
+        )
+    return capability
 
 
 def verify_authenticated_csrf(request: Request, session: CurrentSession) -> None:

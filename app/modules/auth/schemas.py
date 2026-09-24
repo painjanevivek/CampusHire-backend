@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.modules.auth.institutional_identity import normalize_pccoe_email
+
 
 def _reject_password_control_characters(value: str) -> str:
     if any(ord(character) < 32 for character in value):
@@ -25,11 +27,16 @@ class SignupRequest(BaseModel):
     dob: date
     email: EmailStr
     institution_id: UUID | None = None
-    password: str = Field(min_length=12, max_length=128)
-    re_enter_password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
+    re_enter_password: str = Field(min_length=8, max_length=128)
     terms_version: str = Field(min_length=1, max_length=64)
     privacy_version: str = Field(min_length=1, max_length=64)
     invitation_code: str | None = Field(default=None, min_length=20, max_length=200)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_signup_email(cls, value: EmailStr) -> str:
+        return normalize_pccoe_email(str(value))[0]
 
     @field_validator("name", "surname")
     @classmethod
@@ -129,6 +136,13 @@ class DemoSignInRequest(BaseModel):
     role: Literal["student", "tnp_admin", "platform_admin"]
 
 
+class PlacementAccessResponse(BaseModel):
+    available: bool
+    study_year: int | None = None
+    academic_year_start: int | None = None
+    verification_required: bool = False
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -141,6 +155,7 @@ class UserResponse(BaseModel):
     membership_status: str | None = None
     workspace: Literal["admin", "tnp", "student"] = "student"
     capabilities: list[str] = Field(default_factory=list)
+    placement_access: PlacementAccessResponse | None = None
 
 
 class MembershipChoice(BaseModel):

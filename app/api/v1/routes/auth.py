@@ -1,9 +1,9 @@
 from typing import Annotated
-from urllib.parse import quote
 from uuid import UUID
 
+import pyotp
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from app.core.config import get_settings
 from app.core.rate_limit import enforce_auth_identity_rate_limit, enforce_auth_rate_limit
@@ -16,6 +16,7 @@ from app.models.auth import (
     User,
     UserRole,
 )
+from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
@@ -26,6 +27,8 @@ from app.modules.auth.dependencies import (
     verify_public_csrf,
     workspace_for_role,
 )
+from app.modules.auth.institutional_identity import InstitutionalEmailError
+from app.modules.auth.placement_access import derive_placement_access, unavailable_capability
 from app.modules.auth.registration import start_student_registration
 from app.modules.auth.schemas import (
     ActiveMembershipRequest,
@@ -40,6 +43,7 @@ from app.modules.auth.schemas import (
     MfaStatusResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
+    PlacementAccessResponse,
     RegistrationStartResponse,
     SessionResponse,
     SignInRequest,
@@ -73,6 +77,7 @@ from app.modules.auth.service import (
     verify_mfa,
 )
 from app.modules.communications.service import email_delivery_configured
+from app.modules.institutions.signup_catalog import SIGNUP_COLLEGE_CODES
 
 router = APIRouter(prefix="/auth")
 
@@ -138,8 +143,16 @@ async def signup_institutions(response: Response, db: Database) -> list[SignupIn
     institutions = (
         await db.scalars(
             select(Institution)
-            .where(Institution.is_active.is_(True))
-            .order_by(Institution.name, Institution.id)
+            .where(
+                Institution.is_active.is_(True),
+                Institution.code.in_(SIGNUP_COLLEGE_CODES),
+            )
+            .order_by(
+                case(
+                    {code: position for position, code in enumerate(SIGNUP_COLLEGE_CODES)},
+                    value=Institution.code,
+                )
+            )
         )
     ).all()
     return [SignupInstitution(id=item.id, name=item.name) for item in institutions]
@@ -157,19 +170,25 @@ async def signup(
     __: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> RegistrationStartResponse:
     await enforce_auth_identity_rate_limit(request, str(payload.email))
-    result = await start_student_registration(
-        db,
-        name=payload.name,
-        surname=payload.surname,
-        dob=payload.dob,
-        email=str(payload.email),
-        password=payload.password,
-        terms_version=payload.terms_version,
-        privacy_version=payload.privacy_version,
-        invitation_code=payload.invitation_code,
-        requested_institution_id=payload.institution_id,
-        correlation_id=request.state.correlation_id,
-    )
+    try:
+        result = await start_student_registration(
+            db,
+            name=payload.name,
+            surname=payload.surname,
+            dob=payload.dob,
+            email=str(payload.email),
+            password=payload.password,
+            terms_version=payload.terms_version,
+            privacy_version=payload.privacy_version,
+            invitation_code=payload.invitation_code,
+            requested_institution_id=payload.institution_id,
+            correlation_id=request.state.correlation_id,
+        )
+    except InstitutionalEmailError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "institutional_email_invalid", "message": str(error)},
+        ) from error
     if result.status == "registration_unavailable":
         response.status_code = status.HTTP_409_CONFLICT
         return RegistrationStartResponse(
@@ -551,7 +570,7 @@ async def reset_password(
         ) from None
 
 
-def _require_admin_session(session: CurrentSession) -> None:
+def _require_mfa_session(session: CurrentSession) -> None:
     if session.user.requires_terms_acceptance:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -570,15 +589,15 @@ def _require_admin_session(session: CurrentSession) -> None:
         if session.active_membership is not None
         else session.user.role
     )
-    if role not in ADMIN_ROLE_VALUES:
+    if role not in ADMIN_ROLE_VALUES and role != UserRole.STUDENT.value:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Authenticator access required"
         )
 
 
 @router.get("/mfa/status", response_model=MfaStatusResponse)
 async def read_mfa_status(db: Database, session: CurrentSession) -> MfaStatusResponse:
-    _require_admin_session(session)
+    _require_mfa_session(session)
     return MfaStatusResponse(enabled=await is_mfa_enabled(db, session.user_id))
 
 
@@ -586,7 +605,7 @@ async def read_mfa_status(db: Database, session: CurrentSession) -> MfaStatusRes
     "/mfa/setup", response_model=MfaSetupResponse, dependencies=[Depends(verify_authenticated_csrf)]
 )
 async def setup_mfa(db: Database, session: CurrentSession) -> MfaSetupResponse:
-    _require_admin_session(session)
+    _require_mfa_session(session)
     try:
         secret = await begin_mfa_setup(db, session)
     except MfaReauthenticationRequiredError:
@@ -597,8 +616,10 @@ async def setup_mfa(db: Database, session: CurrentSession) -> MfaSetupResponse:
                 "message": "Verify the enrolled factor before replacing it.",
             },
         ) from None
-    label = quote(session.user.email)
-    uri = f"otpauth://totp/CampusHire:{label}?secret={secret}&issuer=CampusHire&digits=6&period=30"
+    uri = pyotp.TOTP(secret, digits=6, interval=30).provisioning_uri(
+        name=session.user.email,
+        issuer_name="CampusHire AI",
+    )
     return MfaSetupResponse(secret=secret, provisioning_uri=uri)
 
 
@@ -610,7 +631,7 @@ async def setup_mfa(db: Database, session: CurrentSession) -> MfaSetupResponse:
 async def confirm_mfa(
     payload: MfaCodeRequest, db: Database, session: CurrentSession
 ) -> MfaConfirmResponse:
-    _require_admin_session(session)
+    _require_mfa_session(session)
     try:
         codes = await confirm_mfa_setup(db, session, payload.code)
     except MfaReauthenticationRequiredError:
@@ -635,7 +656,7 @@ async def confirm_mfa(
     dependencies=[Depends(verify_authenticated_csrf)],
 )
 async def challenge_mfa(payload: MfaCodeRequest, db: Database, session: CurrentSession) -> None:
-    _require_admin_session(session)
+    _require_mfa_session(session)
     try:
         await verify_mfa(db, session, payload.code)
     except InvalidMfaCodeError:
@@ -656,7 +677,7 @@ async def reset_mfa_factor(
     db: Database,
     session: CurrentSession,
 ) -> None:
-    _require_admin_session(session)
+    _require_mfa_session(session)
     try:
         await disable_mfa(
             db,
@@ -702,8 +723,37 @@ async def delete_session(session_id: UUID, db: Database, principal: CurrentPrinc
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(principal: CurrentPrincipal) -> UserResponse:
-    return _user_response(principal.user, principal.membership)
+async def me(principal: CurrentPrincipal, db: Database) -> UserResponse:
+    user = _user_response(principal.user, principal.membership)
+    if principal.role != UserRole.STUDENT.value:
+        return user
+    institution_id = principal.institution_id
+    profile = (
+        await db.scalar(
+            select(StudentProfile).where(
+                StudentProfile.user_id == principal.user.id,
+                StudentProfile.institution_id == institution_id,
+            )
+        )
+        if institution_id is not None
+        else None
+    )
+    institution = await db.get(Institution, institution_id) if institution_id else None
+    capability = (
+        derive_placement_access(profile, institution) if institution else unavailable_capability()
+    )
+    return user.model_copy(
+        update={
+            "placement_access": PlacementAccessResponse(
+                available=capability.available,
+                study_year=capability.study_year,
+                academic_year_start=capability.academic_year_start,
+                verification_required=(
+                    capability.reason == "student_prn_verification_required"
+                ),
+            )
+        }
+    )
 
 
 @router.post(

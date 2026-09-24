@@ -12,6 +12,7 @@ from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     Database,
+    require_student_placement_access,
     require_roles,
     verify_authenticated_csrf,
 )
@@ -19,6 +20,7 @@ from app.modules.communications.service import record_product_event
 from app.modules.resumes.builder import ResumeContent
 from app.modules.resumes.schemas import (
     ExtractionReviewRequest,
+    ResumeRenameRequest,
     ResumeVersionResponse,
     SuggestionDecisionRequest,
     SuggestionReviewBatch,
@@ -32,6 +34,7 @@ from app.modules.resumes.workflow import (
     delete_owned_version,
     get_owned_version,
     list_owned_versions,
+    rename_owned_version,
     retry_job,
     review_extraction,
     review_suggestions_batch,
@@ -51,6 +54,7 @@ def _workflow_http_error(error: ResumeWorkflowError) -> HTTPException:
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=code)
     if code in {
         "resume_invalid_field_decision",
+        "resume_invalid_filename",
         "resume_suggestion_unsupported_claim",
         "resume_extraction_unavailable",
     }:
@@ -135,6 +139,40 @@ async def read_resume(
         raise _workflow_http_error(error) from error
 
 
+@router.patch(
+    "/{resume_id}/name",
+    response_model=ResumeVersionResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def rename_resume_version(
+    request: Request,
+    resume_id: UUID,
+    payload: ResumeRenameRequest,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ResumeVersionResponse:
+    try:
+        version = await rename_owned_version(
+            db,
+            user_id=principal.user.id,
+            version_id=resume_id,
+            name=payload.name,
+        )
+    except ResumeWorkflowError as error:
+        raise _workflow_http_error(error) from error
+    record_audit_event(
+        db,
+        event_type="resume.version_renamed",
+        actor_user_id=principal.user.id,
+        institution_id=principal.institution_id,
+        resource_type="resume_version",
+        resource_id=str(resume_id),
+        correlation_id=request.state.correlation_id,
+    )
+    await db.commit()
+    return to_response(version)
+
+
 @router.get("/{resume_id}/editable-content", response_model=ResumeContent)
 async def read_editable_resume_content(
     resume_id: UUID, db: Database, principal: CurrentPrincipal
@@ -157,7 +195,7 @@ async def read_editable_resume_content(
     "/{resume_id}/tailored-versions",
     response_model=ResumeVersionResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_authenticated_csrf)],
+    dependencies=[Depends(verify_authenticated_csrf), Depends(require_student_placement_access)],
 )
 async def create_tailored_resume_version(
     request: Request,

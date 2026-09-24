@@ -7,7 +7,7 @@ def test_required_readiness_is_separate_from_recommendations() -> None:
     profile = StudentProfile(
         full_name="Asha Patil",
         institution_name="Campus Institute",
-        prn="CS-280",
+        prn="123B1B287",
         department="Computer Science",
         education=[{"degree": "B.Tech"}],
         target_roles=["AI Engineer"],

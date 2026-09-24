@@ -90,7 +90,7 @@ async def signup(client: TestClient) -> dict[str, str]:
         institution = Institution(code="student-campus", name="Student Campus")
         db.add(institution)
         await db.flush()
-        await add_approved_student_invitation(db, institution, "student@example.edu", token)
+        await add_approved_student_invitation(db, institution, "student23@pccoepune.org", token)
         await db.commit()
     response = client.post(
         f"/api/v1/auth/invitations/{token}/accept",
@@ -175,7 +175,7 @@ async def test_signup_fails_without_a_verified_college_identity(
             "name": "Asha",
             "surname": "Patil",
             "dob": "2004-05-16",
-            "email": "student@example.edu",
+            "email": "student23@pccoepune.org",
             "password": "a secure campus passphrase",
             "re_enter_password": "a secure campus passphrase",
             "terms_version": "2026-08-28",
@@ -203,19 +203,40 @@ async def test_signup_with_selected_college_does_not_require_an_invitation(
     async with TestSession() as db:
         institution = Institution(code="direct-campus", name="Direct Campus", is_active=True)
         db.add(institution)
+        await db.flush()
+        db.add(
+            InstitutionDomain(
+                institution_id=institution.id,
+                domain="pccoepune.org",
+                verification_status="verified",
+                verified_at=datetime.now(UTC),
+            )
+        )
         await db.commit()
 
     payload = {
         "name": "Asha",
         "surname": "Patil",
         "dob": "2004-05-16",
-        "email": "asha@example.edu",
+        "email": "asha.patil23@pccoepune.org",
         "institution_id": str(institution.id),
-        "password": "a secure campus passphrase",
-        "re_enter_password": "a secure campus passphrase",
+        "password": "Campus88",
+        "re_enter_password": "Campus88",
         "terms_version": "2026-08-28",
         "privacy_version": "2026-08-28",
     }
+    short_password_payload = {
+        **payload,
+        "password": "Campus8",
+        "re_enter_password": "Campus8",
+    }
+    short_password = client.post(
+        "/api/v1/auth/signup",
+        headers=csrf_headers(client),
+        json=short_password_payload,
+    )
+    assert short_password.status_code == 422
+
     response = client.post("/api/v1/auth/signup", headers=csrf_headers(client), json=payload)
 
     assert response.status_code == 201, response.text
@@ -226,11 +247,11 @@ async def test_signup_with_selected_college_does_not_require_an_invitation(
     }
     assert client.get("/api/v1/auth/me").status_code == 200
     async with TestSession() as db:
-        user = await db.scalar(select(User).where(User.email == "asha@example.edu"))
+        user = await db.scalar(select(User).where(User.email == "asha.patil23@pccoepune.org"))
         assert user is not None
         pending_request = await db.scalar(
             select(StudentRegistrationRequest).where(
-                StudentRegistrationRequest.email == "asha@example.edu",
+                StudentRegistrationRequest.email == "asha.patil23@pccoepune.org",
                 StudentRegistrationRequest.invitation_id.is_(None),
             )
         )
@@ -255,6 +276,27 @@ async def test_signup_with_selected_college_does_not_require_an_invitation(
         assert {item.document_type for item in acceptances} == {"terms", "privacy"}
         assert membership.verified_by_user_id is None
         assert await db.scalar(select(EmailDelivery.id)) is None
+
+
+async def test_signup_college_catalog_shows_only_pccoe(
+    client: TestClient,
+) -> None:
+    catalog = [
+        ("pccoe-pune", "Pimpri Chinchwad College of Engineering (PCCOE), Pune."),
+    ]
+    async with TestSession() as db:
+        db.add_all(
+            [Institution(code=code, name=name, is_active=True) for code, name in catalog]
+            + [Institution(code="old-demo-campus", name="Old Demo College", is_active=True)]
+        )
+        await db.commit()
+
+    response = client.get("/api/v1/auth/signup/institutions")
+
+    assert response.status_code == 200
+    assert {item["name"] for item in response.json()} == {name for _, name in catalog}
+    assert [item["name"] for item in response.json()] == [name for _, name in catalog]
+    assert len(response.json()) == len(catalog)
 
 
 async def test_unlinked_student_invitation_cannot_activate_an_account(
@@ -326,7 +368,7 @@ async def test_invitation_acceptance_normalizes_email_and_creates_student_sessio
     client: TestClient,
 ) -> None:
     payload = await signup(client)
-    assert payload["email"] == "student@example.edu"
+    assert payload["email"] == "student23@pccoepune.org"
     assert payload["role"] == "student"
     me = client.get("/api/v1/auth/me")
     assert me.status_code == 200
@@ -352,7 +394,7 @@ async def test_invalid_credentials_use_generic_error(client: TestClient) -> None
     response = client.post(
         "/api/v1/auth/sign-in",
         headers=csrf_headers(client),
-        json={"email": "student@example.edu", "password": "wrong"},
+        json={"email": "student23@pccoepune.org", "password": "wrong"},
     )
     assert response.status_code == 401
     assert response.json()["error"]["message"] == "Invalid username, email, or password"

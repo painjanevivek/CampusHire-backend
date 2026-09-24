@@ -28,6 +28,10 @@ from app.models.onboarding import (
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.security import hash_secret, new_secret, normalize_email
+from app.modules.auth.institutional_identity import (
+    InstitutionalEmailError,
+    validate_pcco_email_prn_consistency,
+)
 from app.modules.communications.service import enqueue_email, record_product_event
 from app.modules.onboarding.schemas import (
     InstitutionOnboardingResponse,
@@ -192,7 +196,14 @@ async def update_student_onboarding(
     if payload.expected_revision != profile.revision:
         raise OnboardingConflictError(profile.revision)
     if payload.step == 1 and payload.identity:
+        try:
+            validate_pcco_email_prn_consistency(user.email, payload.identity.prn)
+        except InstitutionalEmailError as error:
+            raise OnboardingValidationError(str(error)) from error
         institution = await db.get(Institution, institution_id) if institution_id else None
+        if profile.prn != payload.identity.prn:
+            profile.prn_verified_at = None
+            profile.prn_verified_by_user_id = None
         profile.full_name = payload.identity.full_name
         profile.institution_name = institution.name if institution else profile.institution_name
         profile.prn = payload.identity.prn

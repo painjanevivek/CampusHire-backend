@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models.auth import (
     ADMIN_ROLE_VALUES,
+    InstitutionDomain,
     InstitutionMembership,
     MembershipInvitation,
     MembershipStatus,
@@ -24,6 +25,7 @@ from app.models.auth import (
 )
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
+from app.modules.auth.institutional_identity import normalize_pccoe_email
 from app.modules.auth.invitation_scope import is_approved_student_invitation
 from app.modules.auth.security import (
     decrypt_totp_secret,
@@ -70,7 +72,7 @@ class AuthenticatedSession:
 
 
 async def create_student(db: AsyncSession, email: str, password: str) -> User:
-    normalized = normalize_email(email)
+    normalized, _ = normalize_pccoe_email(email)
     existing = await db.scalar(select(User.id).where(User.email == normalized))
     if existing:
         raise DuplicateEmailError
@@ -183,9 +185,11 @@ async def authenticate(
             MfaEnrollment.disabled_at.is_(None),
         )
     )
-    # MFA is optional until an administrator elects to enrol an authenticator
-    # from Account settings. Enrolment makes it mandatory for later sign-ins.
-    requires_mfa = effective_role in ADMIN_ROLE_VALUES and enrollment is not None
+    # MFA is optional until an account elects to enrol an authenticator.
+    # Enrolment makes it mandatory for every later sign-in.
+    requires_mfa = (
+        effective_role in ADMIN_ROLE_VALUES or effective_role == UserRole.STUDENT.value
+    ) and enrollment is not None
     bypasses_mfa = requires_mfa and demo_mfa_bypass
     next_step = "terms_acceptance" if user.requires_terms_acceptance else "complete"
     if requires_mfa and not bypasses_mfa and not user.requires_terms_acceptance:
@@ -259,6 +263,28 @@ async def accept_invitation(
     expires_at = invitation.expires_at
     if (expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=UTC)) <= now:
         raise ExpiredOrUsedTokenError
+    if invitation.role == UserRole.STUDENT.value:
+        pccoe_domain = get_settings().pccoe_student_email_domain.strip().casefold()
+        pccoe_tenant = await db.scalar(
+            select(InstitutionDomain.id).where(
+                InstitutionDomain.institution_id == invitation.institution_id,
+                InstitutionDomain.domain == pccoe_domain,
+                InstitutionDomain.verification_status == "verified",
+            )
+        )
+        pccoe_domain_owner = await db.scalar(
+            select(InstitutionDomain.institution_id)
+            .where(
+                InstitutionDomain.domain == pccoe_domain,
+                InstitutionDomain.verification_status == "verified",
+            )
+        )
+        try:
+            normalize_pccoe_email(invitation.email)
+        except ValueError as error:
+            raise ExpiredOrUsedTokenError from error
+        if pccoe_tenant is None or pccoe_domain_owner != invitation.institution_id:
+            raise ExpiredOrUsedTokenError
     if invitation.role == UserRole.STUDENT.value and not await is_approved_student_invitation(
         db, invitation
     ):

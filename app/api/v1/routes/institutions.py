@@ -1,6 +1,7 @@
 import csv
 import io
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -28,6 +29,7 @@ from app.models.auth import (
     User,
     UserRole,
 )
+from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     AuthenticatedPrincipal,
@@ -37,6 +39,7 @@ from app.modules.auth.dependencies import (
     require_recent_reauthentication,
     verify_authenticated_csrf,
 )
+from app.modules.auth.placement_access import normalize_prn
 from app.modules.auth.schemas import ManualRecoveryHandoff, ManualRecoveryRequest
 from app.modules.auth.service import issue_password_reset
 from app.modules.communications.service import email_delivery_configured
@@ -66,6 +69,8 @@ from app.modules.institutions.schemas import (
     StaffAccountCreate,
     StaffAccountResponse,
     StudentAccessRequestSummary,
+    StudentPrnVerificationDecision,
+    StudentPrnVerificationResponse,
 )
 from app.modules.institutions.service import (
     MembershipPermissionError,
@@ -85,6 +90,74 @@ InstitutionAdmin = Annotated[
 InstitutionOwner = Annotated[
     AuthenticatedPrincipal, Depends(require_permissions("institution.roles.manage"))
 ]
+
+
+@router.post(
+    "/students/{student_id}/prn-verification",
+    response_model=StudentPrnVerificationResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def verify_student_prn(
+    institution_id: UUID,
+    student_id: UUID,
+    payload: StudentPrnVerificationDecision,
+    request: Request,
+    db: Database,
+    principal: InstitutionAdmin,
+) -> StudentPrnVerificationResponse:
+    require_institution(principal, institution_id)
+    membership = await db.scalar(
+        select(InstitutionMembership.id).where(
+            InstitutionMembership.institution_id == institution_id,
+            InstitutionMembership.user_id == student_id,
+            InstitutionMembership.role == UserRole.STUDENT.value,
+            InstitutionMembership.status == MembershipStatus.ACTIVE.value,
+        )
+    )
+    profile = await db.scalar(
+        select(StudentProfile).where(
+            StudentProfile.user_id == student_id,
+            StudentProfile.institution_id == institution_id,
+        )
+    )
+    if membership is None or profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+    try:
+        registered_prn = normalize_prn(profile.prn) if profile.prn else None
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "student_prn_requires_correction",
+                "message": "Correct the student's PRN before verifying it.",
+            },
+        ) from error
+    if registered_prn is None or registered_prn != payload.official_prn:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "student_prn_verification_mismatch",
+                "message": "The entered PRN does not match the student's saved profile.",
+            },
+        )
+    verified_at = datetime.now(UTC)
+    profile.prn_verified_at = verified_at
+    profile.prn_verified_by_user_id = principal.user.id
+    record_audit_event(
+        db,
+        actor_user_id=principal.user.id,
+        institution_id=institution_id,
+        event_type="student.prn_verified",
+        resource_type="student_profile",
+        resource_id=str(profile.id),
+        reason=payload.reason,
+        correlation_id=request.state.correlation_id,
+        details={"verification_method": "institution_staff_review"},
+    )
+    await db.commit()
+    return StudentPrnVerificationResponse(
+        student_id=student_id, verified=True, verified_at=verified_at
+    )
 
 
 @router.post(

@@ -1,4 +1,6 @@
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,8 +16,12 @@ from app.main import app
 from app.models import Base
 from app.models.auth import (
     Institution,
+    InstitutionDomain,
+    InstitutionMembership,
     InstitutionRegistrationRequest,
+    MembershipStatus,
     PlatformAdminAssignment,
+    Session,
     StudentRegistrationRequest,
     User,
     UserRole,
@@ -23,7 +29,8 @@ from app.models.auth import (
 from app.models.onboarding import StudentProject
 from app.models.profile import StudentProfile
 from app.modules.auth import registration as registration_service
-from app.modules.auth.security import hash_password, totp_code
+from app.modules.auth.placement_access import current_academic_year_start
+from app.modules.auth.security import hash_password, hash_secret, totp_code
 from app.modules.institutions import lifecycle as institution_lifecycle
 from app.modules.onboarding.schemas import ProjectEntry
 
@@ -103,6 +110,15 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
     async with TestSession() as db:
         institution = Institution(code="student-campus", name="Student Campus", is_active=True)
         db.add(institution)
+        await db.flush()
+        db.add(
+            InstitutionDomain(
+                institution_id=institution.id,
+                domain="pccoepune.org",
+                verification_status="verified",
+                verified_at=datetime.now(UTC),
+            )
+        )
         await db.commit()
 
     started = client.post(
@@ -112,7 +128,7 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
             "name": "Student",
             "surname": "One",
             "dob": "2004-05-16",
-            "email": "student@student-campus.edu",
+            "email": "student.one23@pccoepune.org",
             "institution_id": str(institution.id),
             "password": "a secure student passphrase",
             "re_enter_password": "a secure student passphrase",
@@ -131,17 +147,25 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
         assert registration.status == "activated"
         assert profile is not None
         assert profile.full_name == "Student One"
+        assert profile.institution_name == "Student Campus"
         assert str(profile.date_of_birth) == "2004-05-16"
+        profile.institution_name = None  # Simulate a profile created before college prefill.
+        await db.commit()
 
     loaded = client.get("/api/v1/onboarding")
     assert loaded.status_code == 200, loaded.text
     state = loaded.json()
+    assert state["institution_name"] == "Student Campus"
+    async with TestSession() as db:
+        profile = await db.scalar(select(StudentProfile))
+        assert profile is not None
+        assert profile.institution_name == "Student Campus"
     steps = [
         {
             "step": 1,
             "identity": {
                 "full_name": "Student One",
-                "prn": "PRN-001",
+                "prn": "123B1B287",
                 "department": "Computer Science",
                 "graduation_year": 2027,
             },
@@ -162,7 +186,27 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
                 }
             ],
         },
-        {"step": 3},
+        {
+            "step": 3,
+            "experience": [
+                {
+                    "organization": "Northstar Labs",
+                    "title": "Software Intern",
+                    "start_date": "2025-05-01",
+                    "end_date": "2025-07-01",
+                    "is_current": False,
+                    "responsibilities": ["Built a role-based placement dashboard."],
+                },
+                {
+                    "organization": "Juniper Tech",
+                    "title": "Backend Intern",
+                    "start_date": "2024-06-01",
+                    "end_date": None,
+                    "is_current": True,
+                    "responsibilities": ["Improved internal API reliability."],
+                },
+            ],
+        },
         {
             "step": 4,
             "projects_skills": {
@@ -170,7 +214,9 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
                     {
                         "title": "Campus Placement Portal",
                         "project_type": "academic",
-                        "description": "Built a student placement portal with role-based dashboards.",
+                        "description": (
+                            "Built a student placement portal with role-based dashboards."
+                        ),
                         "technologies": ["React", "PostgreSQL"],
                         "outcomes": ["Reduced manual placement tracking"],
                         "project_url": "https://example.edu/placement-portal",
@@ -224,13 +270,112 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
     assert state["completed"] is True
     assert state["current_step"] == 7
     assert state["identity"]["full_name"] == "Student One"  # type: ignore[index]
-    assert state["experience"] == []
+    assert [item["organization"] for item in state["experience"]] == [
+        "Northstar Labs",
+        "Juniper Tech",
+    ]
     assert state["projects"][0]["project_type"] == "academic"  # type: ignore[index]
     assert state["skills"] == [
         {"name": "React", "proficiency": "comfortable"},
         {"name": "PostgreSQL", "proficiency": "comfortable"},
     ]
     assert state["placement_participation"]["privacy_accepted"] is True  # type: ignore[index]
+
+    unverified_capability = client.get("/api/v1/auth/me").json()["placement_access"]
+    assert unverified_capability["available"] is False
+    assert unverified_capability["verification_required"] is True
+    assert client.get("/api/v1/dashboard").status_code == 403
+
+    student_session_token = client.cookies[get_settings().session_cookie_name]
+    staff_session_token = "placement-prn-verification-session-token"  # noqa: S105
+    async with TestSession() as db:
+        profile = await db.scalar(select(StudentProfile))
+        assert profile is not None and profile.institution_id is not None
+        institution = await db.get(Institution, profile.institution_id)
+        assert institution is not None
+        staff = User(
+            institution_id=institution.id,
+            email="tnp-owner@student-campus.edu",
+            password_hash="unused-for-session-test",  # noqa: S106
+            role=UserRole.TNP_OWNER.value,
+        )
+        db.add(staff)
+        await db.flush()
+        membership = InstitutionMembership(
+            institution_id=institution.id,
+            user_id=staff.id,
+            role=UserRole.TNP_OWNER.value,
+            status=MembershipStatus.ACTIVE.value,
+            verified_at=datetime.now(UTC),
+        )
+        db.add(membership)
+        await db.flush()
+        db.add(
+            Session(
+                user_id=staff.id,
+                active_membership_id=membership.id,
+                token_hash=hash_secret(staff_session_token),
+                csrf_hash=hash_secret("initial-staff-csrf"),
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+                last_activity_at=datetime.now(UTC),
+                mfa_verified_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+
+    client.cookies.set(get_settings().session_cookie_name, staff_session_token)
+    verification = client.post(
+        f"/api/v1/institutions/{institution.id}/students/{profile.user_id}/prn-verification",
+        headers=csrf_headers(client),
+        json={
+            "official_prn": "123B1B287",
+            "reason": "Compared the student record with the institution roster.",
+        },
+    )
+    assert verification.status_code == 200, verification.text
+    assert verification.json()["verified"] is True
+    client.cookies.set(get_settings().session_cookie_name, student_session_token)
+    csrf_headers(client)
+
+    async with TestSession() as db:
+        profile = await db.scalar(select(StudentProfile))
+        assert profile is not None and profile.institution_id is not None
+        institution = await db.get(Institution, profile.institution_id)
+        assert institution is not None
+        academic_year_start = current_academic_year_start(institution, now=datetime.now(UTC))
+        assert academic_year_start is not None
+        role_id = uuid4()
+        for study_year in range(1, 5):
+            admission_year = academic_year_start - study_year + 1
+            profile.prn = f"1{admission_year % 100:02d}B1B287"
+            await db.commit()
+
+            checks = [
+                client.get("/api/v1/dashboard"),
+                client.get("/api/v1/opportunities"),
+                client.get(f"/api/v1/opportunities/{role_id}"),
+                client.get(f"/api/v1/opportunities/{role_id}/preparation"),
+                client.get("/api/v1/applications"),
+                client.post(
+                    f"/api/v1/opportunities/{role_id}/application-draft",
+                    headers=csrf_headers(client),
+                ),
+            ]
+            if study_year in {1, 2}:
+                assert all(response.status_code == 403 for response in checks)
+                assert all(
+                    response.json()["error"]["code"] == "placement_access_unavailable"
+                    for response in checks
+                )
+            else:
+                assert all(response.status_code != 403 for response in checks)
+                session_user = client.get("/api/v1/auth/me").json()
+                assert session_user["placement_access"] == {
+                    "available": True,
+                    "study_year": study_year,
+                    "academic_year_start": academic_year_start,
+                    "verification_required": False,
+                }
 
 
 async def test_tnp_registration_verification_approval_and_onboarding_journey(

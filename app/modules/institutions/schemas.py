@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.auth import UserRole
+from app.modules.auth.placement_access import normalize_prn
 
 InvitationStatus = Literal["pending", "expired", "accepted", "revoked"]
 
@@ -81,6 +82,22 @@ class InstitutionProvisionResponse(BaseModel):
 class MembershipStatusUpdate(BaseModel):
     status: str = Field(pattern=r"^(active|suspended|revoked|graduated)$")
     reason: str = Field(min_length=10, max_length=500)
+
+
+class StudentPrnVerificationDecision(BaseModel):
+    official_prn: str = Field(min_length=4, max_length=64)
+    reason: str = Field(min_length=10, max_length=500)
+
+    @field_validator("official_prn")
+    @classmethod
+    def validate_official_prn(cls, value: str) -> str:
+        return normalize_prn(value)
+
+
+class StudentPrnVerificationResponse(BaseModel):
+    student_id: UUID
+    verified: bool
+    verified_at: datetime
 
 
 class RosterRowResponse(BaseModel):

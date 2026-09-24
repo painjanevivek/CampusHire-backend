@@ -31,6 +31,10 @@ class StudentProfile(Base, TimestampMixin):
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     institution_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     prn: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    prn_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    prn_verified_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     department: Mapped[str | None] = mapped_column(String(120), nullable=True)
     academic_year: Mapped[str | None] = mapped_column(String(32), nullable=True)
     graduation_year: Mapped[int | None] = mapped_column(Integer, nullable=True)

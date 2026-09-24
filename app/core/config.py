@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     auth_lockout_minutes: int = Field(default=15, ge=1, le=1440)
     mfa_max_attempts: int = Field(default=5, ge=3, le=20)
     mfa_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    pccoe_student_email_domain: str = "pccoepune.org"
     request_body_overhead_bytes: int = Field(default=65_536, ge=1024, le=1_048_576)
     roster_max_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
     mfa_encryption_key: str = "development-only-change-me"

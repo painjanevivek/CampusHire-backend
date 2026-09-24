@@ -1,12 +1,12 @@
 import asyncio
 import base64
 import hashlib
-import hmac
 import json
 import secrets
-import struct
 import time
+from datetime import UTC, datetime
 
+import pyotp
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from argon2.low_level import Type
@@ -55,30 +55,19 @@ def hash_secret(value: str) -> str:
 
 
 def new_totp_secret() -> str:
-    return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
-
-
-def _totp_key(secret: str) -> bytes:
-    padded = secret.upper() + "=" * ((8 - len(secret) % 8) % 8)
-    return base64.b32decode(padded, casefold=True)
+    return pyotp.random_base32()
 
 
 def totp_code(secret: str, *, at_time: int | None = None) -> str:
-    counter = int((at_time if at_time is not None else time.time()) // 30)
-    digest = hmac.new(_totp_key(secret), struct.pack(">Q", counter), hashlib.sha1).digest()
-    offset = digest[-1] & 0x0F
-    value = (struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF) % 1_000_000
-    return f"{value:06d}"
+    instant = datetime.fromtimestamp(at_time if at_time is not None else time.time(), UTC)
+    return pyotp.TOTP(secret, digits=6, interval=30).at(instant)
 
 
 def verify_totp(secret: str, code: str, *, at_time: int | None = None) -> bool:
     if len(code) != 6 or not code.isdigit():
         return False
-    now = at_time if at_time is not None else int(time.time())
-    return any(
-        secrets.compare_digest(totp_code(secret, at_time=now + offset * 30), code)
-        for offset in (-1, 0, 1)
-    )
+    instant = datetime.fromtimestamp(at_time if at_time is not None else time.time(), UTC)
+    return pyotp.TOTP(secret, digits=6, interval=30).verify(code, for_time=instant, valid_window=1)
 
 
 def _encryption_key() -> bytes:

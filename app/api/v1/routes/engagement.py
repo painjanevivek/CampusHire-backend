@@ -8,6 +8,7 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
+    require_student_placement_access,
     require_permissions,
     require_roles,
     verify_authenticated_csrf,
@@ -37,7 +38,12 @@ from app.modules.engagement.service import (
     update_roadmap_progress,
 )
 
-student_router = APIRouter(dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
+student_router = APIRouter(
+    dependencies=[
+        Depends(require_roles(UserRole.STUDENT.value)),
+        Depends(require_student_placement_access),
+    ]
+)
 admin_router = APIRouter(
     prefix="/admin/notifications",
     dependencies=[Depends(require_permissions("recruitment.read"))],

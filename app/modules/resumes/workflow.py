@@ -530,6 +530,30 @@ async def delete_owned_version(
     await db.commit()
 
 
+async def rename_owned_version(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    version_id: UUID,
+    name: str,
+) -> ResumeVersion:
+    version = await get_owned_version(db, user_id, version_id, lock=True)
+    application_id = await db.scalar(
+        select(Application.id).where(Application.resume_version_id == version.id).limit(1)
+    )
+    if application_id is not None:
+        raise ResumeWorkflowError("resume_version_locked_by_application")
+
+    base_name = name.strip()
+    if base_name.lower().endswith(".pdf"):
+        base_name = base_name[:-4].rstrip(" .")
+    if not base_name:
+        raise ResumeWorkflowError("resume_invalid_filename")
+    version.original_name = sanitize_filename(f"{base_name}.pdf")
+    await db.flush()
+    return version
+
+
 async def retry_job(db: AsyncSession, *, user_id: UUID, version_id: UUID) -> ResumeVersion:
     version = await get_owned_version(db, user_id, version_id)
     job = version.processing_job

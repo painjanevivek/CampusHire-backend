@@ -51,6 +51,7 @@ from app.modules.agentic.sources import (
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     Database,
+    require_student_placement_access,
     require_permissions,
     require_roles,
     verify_authenticated_csrf,
@@ -59,7 +60,10 @@ from app.modules.generative.service import GenerationUnavailableError
 
 student_router = APIRouter(
     prefix="/ai/student-copilot",
-    dependencies=[Depends(require_roles(UserRole.STUDENT.value))],
+    dependencies=[
+        Depends(require_roles(UserRole.STUDENT.value)),
+        Depends(require_student_placement_access),
+    ],
 )
 tnp_router = APIRouter(
     prefix="/ai/tnp-copilot",

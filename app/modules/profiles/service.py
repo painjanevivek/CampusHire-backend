@@ -3,8 +3,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import User
+from app.models.auth import Institution, User
 from app.models.profile import StudentProfile
+from app.modules.auth.institutional_identity import (
+    InstitutionalEmailError,
+    validate_pcco_email_prn_consistency,
+)
 from app.modules.communications.service import record_product_event
 from app.modules.profiles.schemas import (
     EducationUpdate,
@@ -31,6 +35,10 @@ class ProfileConflictError(RuntimeError):
     def __init__(self, current_revision: int) -> None:
         super().__init__("profile_revision_conflict")
         self.current_revision = current_revision
+
+
+class ProfileIdentityConflictError(ValueError):
+    pass
 
 
 def readiness(profile: StudentProfile) -> tuple[int, bool, list[ReadinessItem]]:
@@ -74,13 +82,22 @@ async def get_or_create(
     if lock:
         query = query.with_for_update()
     profile = await db.scalar(query)
+    changed = False
     if profile is None:
         profile = StudentProfile(user_id=user.id, institution_id=institution_id)
         db.add(profile)
-        await db.commit()
-        await db.refresh(profile)
+        changed = True
     elif profile.institution_id is None and institution_id is not None:
         profile.institution_id = institution_id
+        changed = True
+    if profile.institution_id is not None:
+        institution_name = await db.scalar(
+            select(Institution.name).where(Institution.id == profile.institution_id)
+        )
+        if institution_name is not None and profile.institution_name != institution_name:
+            profile.institution_name = institution_name
+            changed = True
+    if changed:
         await db.commit()
         await db.refresh(profile)
     return profile
@@ -98,6 +115,14 @@ async def update_profile(
     expected_revision = data.pop("expected_revision", None)
     if expected_revision is not None and expected_revision != profile.revision:
         raise ProfileConflictError(profile.revision)
+    if "prn" in data and data["prn"]:
+        try:
+            validate_pcco_email_prn_consistency(user.email, str(data["prn"]))
+        except InstitutionalEmailError as error:
+            raise ProfileIdentityConflictError(str(error)) from error
+    if "prn" in data and profile.prn != data["prn"]:
+        profile.prn_verified_at = None
+        profile.prn_verified_by_user_id = None
     links = dict(profile.external_links)
     for key in ("github_url", "portfolio_url"):
         if key in data:

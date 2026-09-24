@@ -9,6 +9,7 @@ from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentTenant,
     Database,
+    require_student_placement_access,
     require_roles,
     verify_authenticated_csrf,
 )
@@ -36,7 +37,12 @@ from app.modules.recruitment.service import (
     withdraw_application,
 )
 
-router = APIRouter(dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
+router = APIRouter(
+    dependencies=[
+        Depends(require_roles(UserRole.STUDENT.value)),
+        Depends(require_student_placement_access),
+    ]
+)
 
 
 def _http_error(error: RecruitmentError) -> HTTPException:

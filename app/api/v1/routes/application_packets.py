@@ -49,6 +49,7 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
+    require_student_placement_access,
     require_permissions,
     require_recent_reauthentication,
     require_roles,
@@ -58,7 +59,12 @@ from app.modules.communications.service import record_product_event
 from app.modules.recruitment.schemas import ApplicationResponse
 from app.modules.recruitment.service import response_for_application
 
-student_router = APIRouter(dependencies=[Depends(require_roles(UserRole.STUDENT.value))])
+student_router = APIRouter(
+    dependencies=[
+        Depends(require_roles(UserRole.STUDENT.value)),
+        Depends(require_student_placement_access),
+    ]
+)
 admin_router = APIRouter(
     prefix="/admin/recruitment",
     dependencies=[Depends(require_permissions("recruitment.read"))],

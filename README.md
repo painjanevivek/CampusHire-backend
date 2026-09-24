@@ -33,6 +33,8 @@ The service is a modular FastAPI application with a separately supervised worker
 | Intelligence | Versioned semantic relevance, reviewed role extraction proposals and grounded policy evidence |
 | Operations | Durable jobs, notifications, audit records, dependency states and recovery controls |
 
+Student placement workspace access is limited by the backend-derived year 3/4 capability. See [Student Placement Access Policy](docs/placement-access-policy.md); role-specific opportunity eligibility remains a separate check.
+
 ## Architecture
 
 ```mermaid

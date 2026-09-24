@@ -69,6 +69,7 @@ class Institution(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(default=True)
     roadmaps_enabled: Mapped[bool] = mapped_column(default=True)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata")
+    academic_year_start_month: Mapped[int] = mapped_column(Integer, default=6, nullable=False)
 
 
 class InstitutionDomain(Base, TimestampMixin):
