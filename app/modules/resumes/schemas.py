@@ -13,6 +13,7 @@ ResumePipelineStage = Literal[
     "parsing",
     "parser_retry",
     "review",
+    "generating",
     "generated",
     "ready",
     "failed",
@@ -65,6 +66,13 @@ class ResumeVersionResponse(BaseModel):
     extracted_data: dict[str, Any] = Field(default_factory=dict)
     job: ResumeJobResponse | None = None
     suggestions: list[ResumeSuggestionResponse] = Field(default_factory=list)
+
+
+class ResumeReadinessResponse(BaseModel):
+    ready: bool
+    blocking: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    informational: list[str] = Field(default_factory=list)
 
 
 class ResumeRenameRequest(BaseModel):

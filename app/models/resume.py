@@ -39,6 +39,11 @@ class JobStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class ResumeJobType(StrEnum):
+    UPLOAD_PROCESSING = "upload_processing"
+    PDF_GENERATION = "pdf_generation"
+
+
 class SuggestionStatus(StrEnum):
     PENDING = "pending"
     ACCEPTED = "accepted"
@@ -108,9 +113,11 @@ class ResumeVersion(Base):
     )
     resume: Mapped[Resume | None] = relationship(back_populates="versions")
     processing_job: Mapped["ResumeProcessingJob | None"] = relationship(
-        back_populates="resume_version", uselist=False
+        back_populates="resume_version", uselist=False, cascade="all, delete-orphan"
     )
-    suggestions: Mapped[list["ResumeSuggestion"]] = relationship(back_populates="resume_version")
+    suggestions: Mapped[list["ResumeSuggestion"]] = relationship(
+        back_populates="resume_version", cascade="all, delete-orphan"
+    )
 
 
 class ResumeProcessingJob(Base, TimestampMixin):
@@ -119,6 +126,12 @@ class ResumeProcessingJob(Base, TimestampMixin):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     resume_version_id: Mapped[UUID] = mapped_column(
         ForeignKey("resume_versions.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    job_type: Mapped[str] = mapped_column(
+        String(32),
+        default=ResumeJobType.UPLOAD_PROCESSING.value,
+        server_default=ResumeJobType.UPLOAD_PROCESSING.value,
+        index=True,
     )
     status: Mapped[str] = mapped_column(String(24), default=JobStatus.QUEUED.value, index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)

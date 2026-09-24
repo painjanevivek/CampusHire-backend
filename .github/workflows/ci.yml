@@ -28,6 +28,8 @@ jobs:
     env:
       APP_ENV: test
       DATABASE_URL: postgresql+asyncpg://campushire:campushire@127.0.0.1:5432/campushire_ci
+      RESUME_LATEX_ENGINE: xelatex
+      RESUME_LATEX_DISTRIBUTION: texlive
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -38,6 +40,10 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
+      - name: Install the local LaTeX renderer toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends fonts-lmodern texlive-latex-extra texlive-xetex
       - name: Build the credential-free PDF parser image
         run: docker build --file Dockerfile.parser --tag campushire-pdf-parser:test .
       - name: Build the multi-architecture ClamAV runtime source
@@ -51,10 +57,10 @@ jobs:
           pytest tests/test_resume_parser.py
           python scripts/verify_parser_sandbox.py --image campushire-pdf-parser:test
           docker run --rm --entrypoint python campushire-pdf-parser:test -m pip check
-      - name: Verify parser separation and legitimate PDF generation
+      - name: Verify the LaTeX worker image generates a PDF
         run: |
-          docker build --tag campushire-backend:test .
-          docker run --rm --entrypoint python campushire-backend:test -c "from app.modules.resumes.builder import ResumeContent, generate_pdf; assert generate_pdf(ResumeContent(full_name='Test Student', email='test@example.edu')).startswith(b'%PDF-')"
+          docker build --target worker --tag campushire-backend-worker:test .
+          docker run --rm --entrypoint python campushire-backend-worker:test -c "from app.modules.resumes.builder import ResumeContent, generate_pdf; assert generate_pdf(ResumeContent(full_name='Test Student', email='test@example.edu')).startswith(b'%PDF-')"
       - run: ruff check .
       - run: mypy app parser_runtime/main.py scripts/verify_parser_sandbox.py scripts/seed_staging_synthetic.py scripts/seed_recovery_fixture.py scripts/seed_performance_fixture.py scripts/smoke_staging.py scripts/rehearse_dependency_failures.py scripts/measure_pilot_http.py scripts/estimate_pilot_cost.py scripts/build_release_candidate_manifest.py scripts/hash_release_configuration.py scripts/validate_oci_environment.py scripts/validate_shared_vm_environment.py scripts/validate_production_environment.py scripts/check_pilot_activation.py
       - run: pytest
@@ -70,7 +76,7 @@ jobs:
           alembic upgrade head
           alembic downgrade 20260902_0017
           alembic upgrade head
-          test "$(alembic current | awk '{print $1}')" = "20260902_0018"
+          test "$(alembic current | awk '{print $1}')" = "20260924_0041"
       - name: Reject committed private keys
         run: '! git grep -n -E "BEGIN (RSA|OPENSSH) PRIVATE KEY" -- .'
       - name: Check out the mirrored Frontend phase-10 controls

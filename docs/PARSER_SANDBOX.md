@@ -4,7 +4,7 @@
 
 The API accepts only a bounded PDF envelope and stores it under an opaque quarantine key. The privileged worker reads the object and requires a clean malware result, but it never imports or invokes PyMuPDF. It streams the scanned bytes to one ephemeral parser container and accepts only a versioned, size-bounded JSON result.
 
-The parser image contains only Python, pinned PyMuPDF, and `parser_runtime/main.py`. It contains no CampusHire application package, database driver, Redis/Qdrant/Gemini client, object-store adapter, session code, or application credentials. The application retains PyMuPDF solely for deterministic PDF generation from reviewed structured fields; the privileged upload-processing path never imports or calls the native parser.
+The parser image contains only Python, pinned PyMuPDF, and `parser_runtime/main.py`. It contains no CampusHire application package, database driver, Redis/Qdrant/Gemini client, object-store adapter, session code, or application credentials. The privileged upload-processing path never imports or calls the native parser. Resume PDFs are generated from reviewed structured fields by the separately configured, local LaTeX renderer; PyMuPDF is used by the application to validate generated output and read its page count.
 
 ## Runtime policy
 
@@ -46,7 +46,9 @@ $env:RUN_PARSER_CONTAINER_TESTS = "1"
 python -m pytest tests/test_resume_parser.py
 python scripts/verify_parser_sandbox.py --image campushire-pdf-parser:test
 docker build --tag campushire-backend:test .
-docker run --rm --entrypoint python campushire-backend:test -c "from app.modules.resumes.builder import ResumeContent, generate_pdf; assert generate_pdf(ResumeContent(full_name='Test Student', email='test@example.edu')).startswith(b'%PDF-')"
+docker run --rm --entrypoint python campushire-backend:test -c "from app.modules.resumes.builder import ResumeContent; assert ResumeContent(full_name='Test Student', email='test@example.edu').full_name == 'Test Student'"
 ```
+
+The XeLaTeX smoke check must run in the backend worker environment where the local TeX distribution is installed; see `docs/RESUME_GENERATION.md`.
 
 CI runs the same image, container-policy, functional, timeout-cleanup, and dependency-separation checks.

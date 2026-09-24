@@ -27,11 +27,11 @@ from app.models.onboarding import (
 )
 from app.models.profile import StudentProfile
 from app.modules.audit.service import record_audit_event
-from app.modules.auth.security import hash_secret, new_secret, normalize_email
 from app.modules.auth.institutional_identity import (
     InstitutionalEmailError,
     validate_pcco_email_prn_consistency,
 )
+from app.modules.auth.security import hash_secret, new_secret, normalize_email
 from app.modules.communications.service import enqueue_email, record_product_event
 from app.modules.onboarding.schemas import (
     InstitutionOnboardingResponse,

@@ -773,6 +773,65 @@
         }
       }
     },
+    "/api/v1/auth/mfa/recovery-codes/regenerate": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Regenerate Recovery Codes",
+        "operationId": "regenerate_recovery_codes_api_v1_auth_mfa_recovery_codes_regenerate_post",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaRecoveryRegenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaConfirmResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/mfa/disable": {
       "post": {
         "tags": [
@@ -5823,12 +5882,71 @@
           }
         },
         "responses": {
-          "201": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResumeVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/resumes/readiness": {
+      "post": {
+        "tags": [
+          "resumes"
+        ],
+        "summary": "Read Resume Readiness",
+        "operationId": "read_resume_readiness_api_v1_resumes_readiness_post",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeContent"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeReadinessResponse"
                 }
               }
             }
@@ -6129,7 +6247,7 @@
           }
         },
         "responses": {
-          "201": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -6885,7 +7003,7 @@
           }
         },
         "responses": {
-          "201": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -22498,6 +22616,28 @@
         ],
         "title": "MfaDisableRequest"
       },
+      "MfaRecoveryRegenerateRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 6,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password",
+          "code"
+        ],
+        "title": "MfaRecoveryRegenerateRequest"
+      },
       "MfaSetupResponse": {
         "properties": {
           "secret": {
@@ -26210,7 +26350,7 @@
           },
           "email": {
             "type": "string",
-            "maxLength": 320,
+            "format": "email",
             "title": "Email"
           },
           "phone": {
@@ -26236,6 +26376,18 @@
               }
             ],
             "title": "Github Url"
+          },
+          "linkedin_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linkedin Url"
           },
           "portfolio_url": {
             "anyOf": [
@@ -26265,11 +26417,26 @@
             "maxItems": 40,
             "title": "Skills"
           },
+          "skill_groups": {
+            "items": {
+              "$ref": "#/components/schemas/SkillGroup"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Skill Groups"
+          },
           "projects": {
             "items": {
-              "type": "string",
-              "maxLength": 1200,
-              "minLength": 1
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1200,
+                  "minLength": 1
+                }
+              ]
             },
             "type": "array",
             "maxItems": 10,
@@ -26277,9 +26444,16 @@
           },
           "education": {
             "items": {
-              "type": "string",
-              "maxLength": 800,
-              "minLength": 1
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 800,
+                  "minLength": 1
+                }
+              ]
             },
             "type": "array",
             "maxItems": 6,
@@ -26287,9 +26461,16 @@
           },
           "experience": {
             "items": {
-              "type": "string",
-              "maxLength": 1200,
-              "minLength": 1
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1200,
+                  "minLength": 1
+                }
+              ]
             },
             "type": "array",
             "maxItems": 10,
@@ -26305,6 +26486,57 @@
             "maxItems": 12,
             "title": "Credentials"
           },
+          "research": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1000,
+                  "minLength": 1
+                }
+              ]
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Research"
+          },
+          "publications": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1000,
+                  "minLength": 1
+                }
+              ]
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Publications"
+          },
+          "certifications": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1000,
+                  "minLength": 1
+                }
+              ]
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Certifications"
+          },
           "achievements": {
             "items": {
               "type": "string",
@@ -26314,6 +26546,60 @@
             "type": "array",
             "maxItems": 12,
             "title": "Achievements"
+          },
+          "positions": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1000,
+                  "minLength": 1
+                }
+              ]
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Positions"
+          },
+          "extracurricular": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ResumeEntry"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1000,
+                  "minLength": 1
+                }
+              ]
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Extracurricular"
+          },
+          "section_order": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "experience",
+                "projects",
+                "education",
+                "research",
+                "publications",
+                "certifications",
+                "skills",
+                "achievements",
+                "positions",
+                "extracurricular"
+              ]
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Section Order"
           }
         },
         "type": "object",
@@ -26371,6 +26657,106 @@
         "additionalProperties": false,
         "type": "object",
         "title": "ResumeDraft"
+      },
+      "ResumeEntry": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1200,
+            "title": "Description",
+            "default": ""
+          },
+          "bullets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Bullets"
+          },
+          "technologies": {
+            "items": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Technologies"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ResumeEntry",
+        "description": "Structured resume evidence used by the renderer; it is not stored as raw LaTeX."
       },
       "ResumeEvidenceResponse": {
         "properties": {
@@ -26711,6 +27097,7 @@
               "parsing",
               "parser_retry",
               "review",
+              "generating",
               "generated",
               "ready",
               "failed",
@@ -26760,6 +27147,40 @@
         },
         "type": "object",
         "title": "ResumeProposalCreate"
+      },
+      "ResumeReadinessResponse": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "blocking": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocking"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "informational": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Informational"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "title": "ResumeReadinessResponse"
       },
       "ResumeRenameRequest": {
         "properties": {
@@ -26935,6 +27356,7 @@
               "parsing",
               "parser_retry",
               "review",
+              "generating",
               "generated",
               "ready",
               "failed",
@@ -28583,6 +29005,40 @@
           "privacy_version"
         ],
         "title": "SignupRequest"
+      },
+      "SkillGroup": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "Programming",
+              "Frontend",
+              "Backend",
+              "Databases",
+              "AI/ML",
+              "Cloud & DevOps",
+              "Analytics & SEO",
+              "Tools",
+              "Other"
+            ],
+            "title": "Category"
+          },
+          "items": {
+            "items": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "title": "SkillGroup"
       },
       "SkillItem": {
         "properties": {

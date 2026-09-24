@@ -41,6 +41,7 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+artifacts = ["app/modules/resumes/templates/*.tex"]
 
 [tool.vercel]
 entrypoint = "app.main:app"

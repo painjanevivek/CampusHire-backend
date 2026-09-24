@@ -25,7 +25,17 @@ USER campushire
 EXPOSE 8000
 
 FROM application AS worker
+USER root
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        fonts-lmodern \
+        texlive-latex-extra \
+        texlive-xetex \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+ENV RESUME_LATEX_ENGINE=xelatex \
+    RESUME_LATEX_DISTRIBUTION=texlive
+USER campushire
 CMD ["python", "-m", "app.worker"]
 
 FROM application AS api

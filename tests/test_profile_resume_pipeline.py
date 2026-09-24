@@ -256,7 +256,7 @@ async def test_resume_pipeline_requires_review_and_rejects_unsupported_claims(
                         suggestion_id=suggestion.id,
                         action="accept",
                     )
-                ]
+                ],
             ),
         )
         assert completed.status == ResumeStatus.COMPLETED.value
@@ -344,11 +344,25 @@ async def test_generated_versions_are_immutable_and_ownership_scoped(tmp_path: P
             user_id=owner.id,
             institution_id=None,
             content=resume_content(),
-            store=store,
             settings=settings,
         )
         assert generated.version_number == 1
+        assert generated.status == ResumeStatus.QUEUED.value
+        assert generated.processing_job is not None
+        assert generated.processing_job.job_type == "pdf_generation"
+
+        job_id = await claim_next_job(db)
+        assert job_id is not None
+        await process_job(
+            db,
+            job_id,
+            store=store,
+            scanner=MarkerScanner(),
+            settings=settings,
+        )
+        generated = await get_owned_version(db, owner.id, generated.id)
         assert generated.status == ResumeStatus.COMPLETED.value
+        assert generated.page_count == 1
         assert store.read(generated.storage_key).startswith(b"%PDF-")
 
         with pytest.raises(ResumeWorkflowError, match="resume_not_found"):
@@ -432,7 +446,15 @@ async def test_resume_download_route_fails_closed_for_another_student(
                 user_id=owner.id,
                 institution_id=None,
                 content=resume_content(),
+                settings=settings,
+            )
+            job_id = await claim_next_job(db)
+            assert job_id is not None
+            await process_job(
+                db,
+                job_id,
                 store=LocalObjectStore(settings.resume_storage_path),
+                scanner=MarkerScanner(),
                 settings=settings,
             )
             resume_id = str(generated.id)
@@ -457,3 +479,40 @@ async def test_resume_download_route_fails_closed_for_another_student(
         assert denied.status_code == 404
     finally:
         settings.resume_storage_path = original_storage_path
+
+
+@pytest.mark.asyncio
+async def test_generate_endpoint_returns_accepted_job_and_readiness_error(
+    client: TestClient,
+) -> None:
+    settings = get_settings()
+    async with TestSession() as db:
+        user = await create_user(db, "generation-route@example.edu")
+        await create_session(db, user, "generation-session", "generation-csrf")
+
+    client.cookies.set(settings.session_cookie_name, "generation-session")
+    client.cookies.set(settings.csrf_cookie_name, "generation-csrf")
+    headers = {
+        "Origin": "http://localhost:3000",
+        "X-CSRF-Token": "generation-csrf",
+    }
+    payload = resume_content().model_dump(mode="json")
+
+    readiness = client.post("/api/v1/resumes/readiness", headers=headers, json=payload)
+    assert readiness.status_code == 200
+    assert readiness.json()["ready"] is True
+
+    generated = client.post("/api/v1/resumes/generate", headers=headers, json=payload)
+    assert generated.status_code == 202
+    assert generated.json()["status"] == ResumeStatus.QUEUED.value
+    assert generated.json()["processing_stage"] == "generating"
+    assert generated.json()["generator_version"] == "campushire-modern-v1"
+
+    blocked = client.post(
+        "/api/v1/resumes/generate",
+        headers=headers,
+        json={**payload, "education": []},
+    )
+    assert blocked.status_code == 422
+    assert blocked.json()["error"]["code"] == "resume_not_ready"
+    assert "education entry" in blocked.json()["error"]["details"]["blocking"][0]

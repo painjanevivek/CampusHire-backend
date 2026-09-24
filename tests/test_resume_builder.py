@@ -6,6 +6,7 @@ from app.modules.resumes.builder import (
     generate_pdf,
     suggestion_is_supported,
 )
+from app.modules.resumes.latex_renderer import latex_escape, render_latex
 
 
 def content() -> ResumeContent:
@@ -13,6 +14,7 @@ def content() -> ResumeContent:
         full_name="Asha Patil",
         email="asha@example.edu",
         github_url="https://github.com/asha",
+        linkedin_url="https://linkedin.com/in/asha",
         summary=(
             "Computer science student building reliable data products with Python, SQL, "
             "thoughtful testing, and clear documentation for campus projects."
@@ -26,63 +28,85 @@ def content() -> ResumeContent:
     )
 
 
-def test_generated_pdf_has_selectable_identity_and_links() -> None:
-    generated = generate_pdf(content())
-    document = pymupdf.open(stream=generated, filetype="pdf")
-    assert "Asha Patil" in document[0].get_text()
-    assert document[0].get_links()
-    assert document.metadata["producer"] == "CampusHire PDF Generator v2"
-    assert document.metadata["keywords"] == (
-        f"campushire-evidence-sha256:{evidence_digest(content())}"
+def test_latex_escape_covers_control_characters() -> None:
+    assert latex_escape("50% & $10_#1 {x} ~ ^ \\") == (
+        r"50\% \& \$10\_\#1 \{x\} \textasciitilde{} "
+        r"\textasciicircum{} \textbackslash{}"
     )
-    assert "Evidence" in document[-1].get_text()
-    document.close()
-    assert generated == generate_pdf(content())
 
 
-def test_generated_pdf_uses_classic_template_section_order() -> None:
+def test_template_uses_structured_sections_and_safe_links() -> None:
+    source = render_latex(content())
+    assert r"\href{https://github.com/asha}{GitHub}" in source
+    assert r"\sectionline{Experience}" in source
+    assert r"\sectionline{Projects}" in source
+    assert source.index(r"\sectionline{Experience}") < source.index(r"\sectionline{Projects}")
+    assert r"\entryheading{Campus coding club}{Volunteer}{2025–2026}{}" in source
+    assert r"\entryheading{B.Tech Computer Science}{Campus Institute}{2027}{}" in source
+    assert "campushire-evidence-sha256:" + evidence_digest(content()) in source
+
+
+def test_template_omits_empty_sections_and_escapes_untrusted_text() -> None:
+    value = ResumeContent(
+        full_name="Asha & Dev_#1",
+        email="asha@example.edu",
+        summary=r"Built a 50% reliable tool & shipped code_1.",
+        github_url="javascript:alert(1)",
+    )
+    source = render_latex(value)
+    assert r"Asha \& Dev\_\#1" in source
+    assert r"50\% reliable tool \& shipped code\_1" in source
+    assert r"\href{javascript:" not in source
+    assert r"\sectionline{Projects}" not in source
+    assert r"\sectionline{Skills}" not in source
+
+
+def test_template_preserves_explicit_section_order_and_optional_fields() -> None:
+    value = ResumeContent(
+        full_name="Asha Patil",
+        email="asha@example.edu",
+        research=["Campus accessibility survey"],
+        publications=["Student computing journal, 2026"],
+        positions=["Secretary — Computing Society"],
+        extracurricular=["Robotics club — volunteer"],
+        section_order=["positions", "research", "publications", "extracurricular"],
+    )
+    source = render_latex(value)
+    headings = [
+        r"\sectionline{Positions of Responsibility}",
+        r"\sectionline{Research}",
+        r"\sectionline{Publications}",
+        r"\sectionline{Extracurricular}",
+    ]
+    offsets = [source.index(heading) for heading in headings]
+    assert offsets == sorted(offsets)
+
+
+def test_generated_pdf_has_selectable_identity_links_and_metadata() -> None:
     document = pymupdf.open(stream=generate_pdf(content()), filetype="pdf")
     text = "\n".join(page.get_text() for page in document)
-
-    headings = [
-        "PROJECTS",
-        "EDUCATION",
-        "EXPERIENCE",
-        "OPEN SOURCE, RESEARCH, AND CERTIFICATION",
-        "SKILLS AND ACHIEVEMENTS",
-    ]
-    offsets = [text.index(heading) for heading in headings]
-
-    assert offsets == sorted(offsets)
-    assert "Phone:" not in text
-    assert "Email: asha@example.edu" in text
+    assert "Asha Patil" in text
+    assert "Placement matcher" in text
     assert "Campus coding club" in text
-    assert "AWS Foundations" in text
-    assert "Winner, inter-college engineering hackathon" in text
+    assert document[0].get_links()
+    assert document.metadata["producer"] == "CampusHire LaTeX Resume Generator v1"
+    assert evidence_digest(content()) in document.metadata["keywords"]
     document.close()
 
 
-def test_generated_pdf_omits_empty_optional_sections() -> None:
-    minimal = ResumeContent(full_name="Asha Patil", email="asha@example.edu")
-    document = pymupdf.open(stream=generate_pdf(minimal), filetype="pdf")
-    text = "\n".join(page.get_text() for page in document)
-
-    assert "PROJECTS" not in text
-    assert "SKILLS AND ACHIEVEMENTS" not in text
-    assert document.page_count == 1
-    document.close()
-
-
-def test_generated_pdf_paginates_without_clipping_reviewed_content() -> None:
+def test_generated_pdf_paginates_without_clipping_optional_content() -> None:
     long_content = content().model_copy(
         update={
-            "projects": [f"Project {index}: " + "verified detail " * 45 for index in range(8)],
-            "education": ["Reviewed education evidence " * 20],
+            "projects": [f"Project {index}: " + "verified detail " * 40 for index in range(1, 11)],
+            "education": ["Reviewed education evidence " * 15],
+            "experience": ["Reviewed work evidence " * 30],
         }
     )
     document = pymupdf.open(stream=generate_pdf(long_content), filetype="pdf")
-    assert 1 < document.page_count <= 3
-    assert "Project 7" in "".join(page.get_text() for page in document)
+    text = "\n".join(page.get_text() for page in document)
+    assert document.page_count > 1
+    assert "Project 10" in text
+    assert "Reviewed work evidence" in text
     document.close()
 
 

@@ -1,6 +1,6 @@
 import hashlib
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from app.models.recruitment import Application
 from app.models.resume import (
     JobStatus,
     Resume,
+    ResumeJobType,
     ResumeProcessingJob,
     ResumeSource,
     ResumeStatus,
@@ -20,12 +21,11 @@ from app.models.resume import (
 )
 from app.modules.communications.service import record_product_event
 from app.modules.resumes.builder import (
-    ResumeBuildError,
     ResumeContent,
     evidence_digest,
-    generate_pdf,
     suggestion_is_supported,
 )
+from app.modules.resumes.latex_renderer import GENERATOR_VERSION, TEMPLATE_ID, TEMPLATE_VERSION
 from app.modules.resumes.pipeline import RETRYABLE_ERRORS, record_job_event
 from app.modules.resumes.schemas import (
     ExtractionReviewRequest,
@@ -78,6 +78,8 @@ def _pipeline_stage(version: ResumeVersion, job: ResumeProcessingJob | None) -> 
         return "review"
     if version.status == ResumeStatus.COMPLETED.value:
         return "generated" if version.source == ResumeSource.GENERATED.value else "ready"
+    if job is not None and job.job_type == ResumeJobType.PDF_GENERATION.value:
+        return "generating"
     if version.scan_status == ScanStatus.FAILED.value:
         return "scan_retry"
     if version.scan_status == ScanStatus.QUARANTINED.value:
@@ -225,63 +227,80 @@ async def create_generated_version(
     user_id: UUID,
     institution_id: UUID | None,
     content: ResumeContent,
-    store: ObjectStore,
     settings: Settings,
     parent_version_id: UUID | None = None,
     purpose_role_id: UUID | None = None,
     artifact_id: str | None = None,
     generated_provenance: dict[str, object] | None = None,
 ) -> ResumeVersion:
-    try:
-        data = generate_pdf(content, artifact_id=artifact_id)
-    except ResumeBuildError as error:
-        raise ResumeWorkflowError(str(error)) from error
-    checksum = hashlib.sha256(data).hexdigest()
-    existing = await get_owned_version_by_checksum(db, user_id, checksum)
-    if existing is not None:
-        return existing
-    quarantine_key = store.put_quarantined(data)
-    clean_key: str | None = None
-    try:
-        clean_key = store.promote_clean(quarantine_key)
-        resume, version_number = await _next_version_number(
-            db, user_id, institution_id, settings.resume_max_versions
-        )
-        version = ResumeVersion(
-            resume_id=resume.id,
-            user_id=user_id,
-            institution_id=institution_id,
-            parent_version_id=parent_version_id,
-            purpose_role_id=purpose_role_id,
-            version_number=version_number,
-            source=ResumeSource.GENERATED.value,
-            storage_key=clean_key,
-            original_name=f"campushire-resume-v{version_number}.pdf",
-            checksum=checksum,
-            content_type="application/pdf",
-            size_bytes=len(data),
-            status=ResumeStatus.COMPLETED.value,
-            scan_status=ScanStatus.CLEAN.value,
-            scan_engine="campushire-generator-v2",
-            scanned_at=datetime.now(UTC),
-            extracted_data={
-                "accepted": content.model_dump(mode="json"),
-                "evidence_digest": evidence_digest(content),
-                "generator_version": "campushire-generator-v2",
-                "provenance": generated_provenance or {},
-            },
-            review_completed_at=datetime.now(UTC),
-            created_at=datetime.now(UTC),
-        )
-        db.add(version)
-        await db.commit()
-        return await get_owned_version(db, user_id, version.id)
-    except Exception:
-        await db.rollback()
-        store.delete(quarantine_key)
-        if clean_key is not None:
-            store.delete(clean_key)
-        raise
+    digest = evidence_digest(content)
+    existing_versions = list(
+        (
+            await db.scalars(
+                select(ResumeVersion)
+                .options(selectinload(ResumeVersion.processing_job))
+                .where(
+                    ResumeVersion.user_id == user_id,
+                    ResumeVersion.source == ResumeSource.GENERATED.value,
+                )
+                .order_by(ResumeVersion.created_at.desc())
+                .limit(settings.resume_max_versions)
+            )
+        ).all()
+    )
+    for existing in existing_versions:
+        if (
+            existing.extracted_data.get("evidence_digest") == digest
+            and existing.extracted_data.get("template_id") == TEMPLATE_ID
+            and existing.extracted_data.get("template_version") == TEMPLATE_VERSION
+        ):
+            return existing
+
+    version_id = uuid4()
+    checksum = hashlib.sha256(f"resume-generation:{version_id}:{digest}".encode()).hexdigest()
+    resume, version_number = await _next_version_number(
+        db, user_id, institution_id, settings.resume_max_versions
+    )
+    version = ResumeVersion(
+        id=version_id,
+        resume_id=resume.id,
+        user_id=user_id,
+        institution_id=institution_id,
+        parent_version_id=parent_version_id,
+        purpose_role_id=purpose_role_id,
+        version_number=version_number,
+        source=ResumeSource.GENERATED.value,
+        storage_key=f"generated-pending/{version_id.hex}",
+        original_name=f"campushire-resume-v{version_number}.pdf",
+        checksum=checksum,
+        content_type="application/pdf",
+        size_bytes=0,
+        status=ResumeStatus.QUEUED.value,
+        scan_status=ScanStatus.QUARANTINED.value,
+        extracted_data={
+            "accepted": content.model_dump(mode="json"),
+            "evidence_digest": digest,
+            "generator_version": GENERATOR_VERSION,
+            "template_id": TEMPLATE_ID,
+            "template_version": TEMPLATE_VERSION,
+            "generation_status": "queued",
+            "provenance": generated_provenance or {},
+            **({"artifact_id": artifact_id} if artifact_id else {}),
+        },
+        created_at=datetime.now(UTC),
+    )
+    db.add(version)
+    await db.flush()
+    job = ResumeProcessingJob(
+        resume_version_id=version.id,
+        job_type=ResumeJobType.PDF_GENERATION.value,
+        max_attempts=settings.resume_job_max_attempts,
+    )
+    db.add(job)
+    await db.flush()
+    record_job_event(db, job, "generation_queued")
+    await db.commit()
+    return await get_owned_version(db, user_id, version.id)
 
 
 async def get_owned_version_by_checksum(

@@ -1,0 +1,51 @@
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[margin=0.50in]{geometry}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{needspace}
+\usepackage{xurl}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\tabcolsep}{0pt}
+\urlstyle{same}
+\setlength{\emergencystretch}{3em}
+\setlist[itemize]{leftmargin=18pt,itemsep=1pt,topsep=3pt,parsep=0pt,partopsep=0pt}
+
+\newcommand{\sectionline}[1]{%
+  \needspace{4\baselineskip}%
+  \vspace{7pt}%
+  {\large\bfseries #1}\par%
+  \vspace{1pt}%
+  {\color{gray!45}\rule{\textwidth}{1.2pt}}%
+  \vspace{4pt}%
+}
+
+\newcommand{\entryheading}[4]{%
+  \begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}Xr@{}}%
+    \textbf{#1} & {\color{gray!70}#3}\\[-1pt]%
+    \textit{#2} & {\color{gray!70}#4}%
+  \end{tabularx}%
+  \vspace{1pt}%
+}
+
+\hypersetup{
+  pdfcreator={CampusHire},
+  pdfproducer={CampusHire LaTeX Resume Generator v1},
+  pdfcreationdate={D:20000101000000Z},
+  pdfmoddate={D:20000101000000Z},
+  pdftrapped={False}
+}
+
+\begin{document}
+%%RESUME_METADATA%%
+%%RESUME_HEADER%%
+%%RESUME_SUMMARY%%
+%%RESUME_SECTIONS%%
+\end{document}

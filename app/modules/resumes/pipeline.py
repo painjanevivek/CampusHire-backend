@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 import logging
 import re
 from datetime import UTC, datetime, timedelta
@@ -11,6 +13,7 @@ from app.core.config import Settings
 from app.models.resume import (
     JobStatus,
     ResumeJobEvent,
+    ResumeJobType,
     ResumeProcessingJob,
     ResumeStatus,
     ResumeSuggestion,
@@ -18,6 +21,8 @@ from app.models.resume import (
     ScanStatus,
 )
 from app.modules.communications.service import record_product_event
+from app.modules.resumes.builder import ResumeBuildError, ResumeContent, generate_pdf
+from app.modules.resumes.latex_renderer import GENERATOR_VERSION, generated_pdf_page_count
 from app.modules.resumes.parser import (
     InvalidResumeError,
     ParserUnavailableError,
@@ -32,6 +37,19 @@ RETRYABLE_ERRORS = {
     "resume_parser_timeout",
     "resume_parser_unavailable",
     "resume_storage_unavailable",
+    "resume_latex_compiler_unavailable",
+    "resume_latex_compile_failed",
+    "resume_latex_dependency_missing",
+    "resume_template_unavailable",
+    "resume_latex_timeout",
+    "resume_worker_interrupted",
+}
+AUTOMATIC_RETRYABLE_ERRORS = {
+    "resume_scan_unavailable",
+    "resume_parser_timeout",
+    "resume_parser_unavailable",
+    "resume_storage_unavailable",
+    "resume_latex_timeout",
     "resume_worker_interrupted",
 }
 logger = logging.getLogger(__name__)
@@ -271,8 +289,71 @@ async def process_job(
         await db.commit()
     version.status = ResumeStatus.PROCESSING.value
     await db.commit()
+    generated_quarantine_key: str | None = None
+    generated_clean_key: str | None = None
 
     try:
+        if job.job_type == ResumeJobType.PDF_GENERATION.value:
+            accepted = version.extracted_data.get("accepted")
+            if not isinstance(accepted, dict):
+                raise ResumeBuildError("resume_invalid_render_context")
+            try:
+                content = ResumeContent.model_validate(accepted)
+            except Exception as error:
+                raise ResumeBuildError("resume_invalid_render_context") from error
+            artifact_id = version.extracted_data.get("artifact_id")
+            data = await asyncio.to_thread(
+                generate_pdf,
+                content,
+                settings=settings,
+                artifact_id=artifact_id if isinstance(artifact_id, str) else None,
+            )
+            await db.refresh(job)
+            if job.status == JobStatus.CANCELLATION_REQUESTED.value:
+                await _cancel_job(
+                    db, job, event_type="cancelled_after_generation", correlation_id=correlation_id
+                )
+                return
+            page_count = generated_pdf_page_count(data)
+            if page_count > settings.resume_generated_max_pages:
+                raise ResumeBuildError("resume_pdf_too_many_pages")
+            generated_quarantine_key = store.put_quarantined(data)
+            generated_clean_key = store.promote_clean(generated_quarantine_key)
+            finished_at = datetime.now(UTC)
+            version.storage_key = generated_clean_key
+            version.checksum = hashlib.sha256(data).hexdigest()
+            version.size_bytes = len(data)
+            version.page_count = page_count
+            version.scan_status = ScanStatus.CLEAN.value
+            version.scan_engine = GENERATOR_VERSION
+            version.scanned_at = finished_at
+            version.status = ResumeStatus.COMPLETED.value
+            version.safe_error_code = None
+            version.review_completed_at = finished_at
+            version.extracted_data = {
+                **version.extracted_data,
+                "generation_status": "completed",
+                "page_count": page_count,
+            }
+            job.status = JobStatus.COMPLETED.value
+            job.finished_at = finished_at
+            job.duration_ms = _duration_ms(job, finished_at)
+            job.claimed_by = None
+            job.lease_expires_at = None
+            job.safe_error_code = None
+            record_job_event(db, job, "generation_completed", correlation_id=correlation_id)
+            await record_product_event(
+                db,
+                event_name="resume_completed",
+                route_group="resume_generation",
+                institution_id=version.institution_id,
+                dedupe_key=f"resume-generation-completed:{version.id}",
+            )
+            await db.commit()
+            generated_quarantine_key = None
+            generated_clean_key = None
+            return
+
         data = store.read(version.storage_key)
         now = datetime.now(UTC)
         job.heartbeat_at = now
@@ -331,15 +412,25 @@ async def process_job(
         record_job_event(db, job, "completed", correlation_id=correlation_id)
         await db.commit()
     except (
+        ResumeBuildError,
         InvalidResumeError,
         ObjectStoreError,
         ParserUnavailableError,
         ScannerUnavailableError,
     ) as error:
-        code = str(error)
-        retryable = code in RETRYABLE_ERRORS and job.attempts < job.max_attempts
+        code = error.code if isinstance(error, ResumeBuildError) else str(error)
+        if generated_quarantine_key is not None:
+            store.delete(generated_quarantine_key)
+        if generated_clean_key is not None:
+            store.delete(generated_clean_key)
+        retryable = code in AUTOMATIC_RETRYABLE_ERRORS and job.attempts < job.max_attempts
         version.safe_error_code = code
         job.safe_error_code = code
+        if job.job_type == ResumeJobType.PDF_GENERATION.value:
+            version.extracted_data = {
+                **version.extracted_data,
+                "generation_status": "queued" if retryable else "failed",
+            }
         if isinstance(error, ScannerUnavailableError):
             version.scan_status = ScanStatus.FAILED.value
         if retryable:
@@ -382,6 +473,11 @@ async def process_job(
         job.lease_expires_at = None
         job.safe_error_code = "resume_processing_unexpected"
         version.status = ResumeStatus.FAILED.value
+        if job.job_type == ResumeJobType.PDF_GENERATION.value:
+            version.extracted_data = {
+                **version.extracted_data,
+                "generation_status": "failed",
+            }
         version.safe_error_code = "resume_processing_unexpected"
         record_job_event(db, job, "failed_unexpected", correlation_id=correlation_id)
         await record_product_event(

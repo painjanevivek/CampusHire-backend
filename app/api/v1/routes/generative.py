@@ -207,7 +207,7 @@ async def review_resume_proposal(
 @router.post(
     "/proposals/{proposal_id}/versions",
     response_model=ResumeVersionResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(verify_authenticated_csrf)],
 )
 async def create_resume_from_proposal(

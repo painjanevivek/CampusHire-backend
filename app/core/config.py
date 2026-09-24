@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     resume_job_max_attempts: int = Field(default=3, ge=1, le=10)
     resume_worker_poll_seconds: float = Field(default=2.0, ge=0.2, le=30)
     resume_worker_lease_seconds: int = Field(default=300, ge=30, le=3_600)
+    resume_latex_engine: Literal["xelatex", "pdflatex"] = "xelatex"
+    resume_latex_distribution: Literal["miktex", "texlive"] = "miktex"
+    resume_latex_timeout_seconds: float = Field(default=20.0, ge=1.0, le=120.0)
+    resume_generated_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    resume_generated_max_pages: int = Field(default=5, ge=1, le=20)
     resume_parser_backend: Literal["subprocess", "docker"] = "subprocess"
     resume_parser_image: str = "campushire-pdf-parser:local"
     resume_parser_timeout_seconds: float = Field(default=20.0, ge=1, le=120)

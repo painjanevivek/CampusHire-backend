@@ -12,14 +12,15 @@ from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     Database,
-    require_student_placement_access,
     require_roles,
+    require_student_placement_access,
     verify_authenticated_csrf,
 )
-from app.modules.communications.service import record_product_event
 from app.modules.resumes.builder import ResumeContent
+from app.modules.resumes.readiness import resume_readiness
 from app.modules.resumes.schemas import (
     ExtractionReviewRequest,
+    ResumeReadinessResponse,
     ResumeRenameRequest,
     ResumeVersionResponse,
     SuggestionDecisionRequest,
@@ -88,7 +89,7 @@ async def list_resumes(db: Database, principal: CurrentPrincipal) -> list[Resume
 @router.post(
     "/generate",
     response_model=ResumeVersionResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(verify_authenticated_csrf)],
 )
 async def generate_resume_version(
@@ -97,20 +98,25 @@ async def generate_resume_version(
     db: Database,
     principal: CurrentPrincipal,
 ) -> ResumeVersionResponse:
+    readiness = resume_readiness(payload)
+    if readiness["blocking"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "resume_not_ready", **readiness},
+        )
     try:
         version = await create_generated_version(
             db,
             user_id=principal.user.id,
             institution_id=principal.institution_id,
             content=payload,
-            store=_store(),
             settings=get_settings(),
         )
     except ResumeWorkflowError as error:
         raise _workflow_http_error(error) from error
     record_audit_event(
         db,
-        event_type="resume.generated",
+        event_type="resume.generation_queued",
         actor_user_id=principal.user.id,
         institution_id=principal.institution_id,
         resource_type="resume_version",
@@ -118,15 +124,13 @@ async def generate_resume_version(
         correlation_id=request.state.correlation_id,
         details={"version_number": version.version_number},
     )
-    await record_product_event(
-        db,
-        event_name="resume_completed",
-        route_group="resume",
-        institution_id=principal.institution_id,
-        dedupe_key=f"resume-completed:{principal.user.id}",
-    )
     await db.commit()
     return to_response(version)
+
+
+@router.post("/readiness", response_model=ResumeReadinessResponse)
+async def read_resume_readiness(payload: ResumeContent) -> ResumeReadinessResponse:
+    return ResumeReadinessResponse(**resume_readiness(payload))
 
 
 @router.get("/{resume_id}", response_model=ResumeVersionResponse)
@@ -194,7 +198,7 @@ async def read_editable_resume_content(
 @router.post(
     "/{resume_id}/tailored-versions",
     response_model=ResumeVersionResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(verify_authenticated_csrf), Depends(require_student_placement_access)],
 )
 async def create_tailored_resume_version(
@@ -219,7 +223,6 @@ async def create_tailored_resume_version(
             user_id=principal.user.id,
             institution_id=principal.institution_id,
             content=payload.content,
-            store=_store(),
             settings=get_settings(),
             parent_version_id=parent.id,
             purpose_role_id=role.id,

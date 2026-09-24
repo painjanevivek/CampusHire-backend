@@ -11,7 +11,6 @@ from app.models.resume import ResumeVersion
 from app.modules.generative.schemas import ResumeDraft
 from app.modules.generative.service import ProposalValidationError, get_owned_proposal
 from app.modules.resumes.builder import ResumeContent
-from app.modules.resumes.storage import build_object_store
 from app.modules.resumes.workflow import create_generated_version
 
 
@@ -83,7 +82,6 @@ async def materialize_resume_version(
         user_id=user_id,
         institution_id=institution_id,
         content=content,
-        store=build_object_store(get_settings()),
         settings=get_settings(),
         parent_version_id=parent_version_id,
         purpose_role_id=proposal.purpose_role_id,
