@@ -67,6 +67,7 @@ class RegistrationStartResponse(BaseModel):
 class SignupInstitution(BaseModel):
     id: UUID
     name: str
+    signup_enabled: bool
 
 
 class InstitutionRegistrationRequestCreate(BaseModel):

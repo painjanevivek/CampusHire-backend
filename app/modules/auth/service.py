@@ -193,7 +193,7 @@ async def authenticate(
     bypasses_mfa = requires_mfa and demo_mfa_bypass
     next_step = "terms_acceptance" if user.requires_terms_acceptance else "complete"
     if requires_mfa and not bypasses_mfa and not user.requires_terms_acceptance:
-        next_step = "mfa_challenge" if enrollment is not None else "mfa_setup"
+        next_step = "mfa_challenge"
     session = Session(
         user_id=user.id,
         active_membership_id=membership.id if membership is not None else None,
@@ -593,9 +593,14 @@ async def is_mfa_enabled(db: AsyncSession, user_id: UUID) -> bool:
     return enrollment_id is not None
 
 
-async def begin_mfa_setup(db: AsyncSession, session: Session) -> str:
+async def begin_mfa_setup(db: AsyncSession, session: Session, *, refresh: bool = False) -> str:
+    # Serialize setup for this account so two page-load requests cannot replace
+    # a secret that has already been shown in a QR code.
+    await db.scalar(select(User.id).where(User.id == session.user_id).with_for_update())
     enrollment = await db.scalar(
-        select(MfaEnrollment).where(MfaEnrollment.user_id == session.user_id)
+        select(MfaEnrollment)
+        .where(MfaEnrollment.user_id == session.user_id)
+        .with_for_update()
     )
     now = datetime.now(UTC)
     active_enrollment = (
@@ -612,6 +617,19 @@ async def begin_mfa_setup(db: AsyncSession, session: Session) -> str:
         )
         if normalized is None or now - normalized > timedelta(minutes=10):
             raise MfaReauthenticationRequiredError
+        if (
+            not refresh
+            and enrollment is not None
+            and enrollment.pending_encrypted_secret is not None
+        ):
+            return decrypt_totp_secret(enrollment.pending_encrypted_secret)
+    elif (
+        enrollment is not None
+        and enrollment.enrolled_at is None
+        and enrollment.disabled_at is None
+    ):
+        if not refresh:
+            return decrypt_totp_secret(enrollment.encrypted_secret)
     secret = new_totp_secret()
     if enrollment is None:
         enrollment = MfaEnrollment(
@@ -624,6 +642,15 @@ async def begin_mfa_setup(db: AsyncSession, session: Session) -> str:
         enrollment.encrypted_secret = encrypt_totp_secret(secret)
         enrollment.enrolled_at = None
         enrollment.disabled_at = None
+    if refresh:
+        record_audit_event(
+            db,
+            actor_user_id=session.user_id,
+            institution_id=session.user.institution_id,
+            event_type="auth.mfa_setup_refreshed",
+            resource_type="user",
+            resource_id=str(session.user_id),
+        )
     await db.commit()
     return secret
 

@@ -363,15 +363,15 @@ async def publish_notification(
 
 
 async def list_notifications(
-    db: AsyncSession, institution_id: UUID, student_user_id: UUID
+    db: AsyncSession, institution_id: UUID | None, student_user_id: UUID
 ) -> NotificationPage:
+    filters = [InAppNotification.recipient_user_id == student_user_id]
+    if institution_id is not None:
+        filters.append(InAppNotification.institution_id == institution_id)
     items = (
         await db.scalars(
             select(InAppNotification)
-            .where(
-                InAppNotification.institution_id == institution_id,
-                InAppNotification.recipient_user_id == student_user_id,
-            )
+            .where(*filters)
             .order_by(InAppNotification.created_at.desc())
             .limit(100)
         )
@@ -385,7 +385,8 @@ async def list_notifications(
                 await db.scalars(
                     select(CorrectionRequest.id).where(
                         CorrectionRequest.id.in_(request_ids),
-                        CorrectionRequest.institution_id == institution_id,
+                        *([CorrectionRequest.institution_id == institution_id]
+                          if institution_id is not None else []),
                         CorrectionRequest.status == "open",
                     )
                 )
@@ -407,14 +408,16 @@ async def list_notifications(
 
 
 async def mark_notification_read(
-    db: AsyncSession, institution_id: UUID, student_user_id: UUID, notification_id: UUID
+    db: AsyncSession, institution_id: UUID | None, student_user_id: UUID, notification_id: UUID
 ) -> InAppNotification:
+    filters = [
+        InAppNotification.id == notification_id,
+        InAppNotification.recipient_user_id == student_user_id,
+    ]
+    if institution_id is not None:
+        filters.append(InAppNotification.institution_id == institution_id)
     item = await db.scalar(
-        select(InAppNotification).where(
-            InAppNotification.id == notification_id,
-            InAppNotification.institution_id == institution_id,
-            InAppNotification.recipient_user_id == student_user_id,
-        )
+        select(InAppNotification).where(*filters)
     )
     if item is None:
         raise EngagementError("notification_not_found")

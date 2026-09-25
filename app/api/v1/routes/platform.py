@@ -1,7 +1,11 @@
+import csv
+import io
+from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -46,14 +50,24 @@ from app.modules.institutions.service import (
     update_membership_status,
     verify_membership,
 )
+from app.modules.platform_admin.reports import (
+    get_application_evidence,
+    list_drive_applicants,
+    list_drive_groups,
+)
 from app.modules.platform_admin.schemas import (
     InstitutionStatusChange,
     PlatformAdminAssignmentResponse,
     PlatformAdminTransferRequest,
+    PlatformApplicationEvidence,
     PlatformDashboardSummary,
+    PlatformDriveApplicantPage,
+    PlatformDriveGroupPage,
     PlatformHealthSummary,
     PlatformInstitutionDetail,
     PlatformInstitutionPage,
+    PlatformNoticeCreate,
+    PlatformNoticeDelivery,
     PlatformReportSummary,
     PlatformSettingsResponse,
     PlatformSettingsUpdate,
@@ -72,6 +86,7 @@ from app.modules.platform_admin.service import (
     platform_institution_detail,
     platform_report_summary,
     platform_settings,
+    publish_platform_notice,
     transfer_platform_admin,
     update_platform_settings,
 )
@@ -104,6 +119,30 @@ PlatformAdmin = Annotated[AuthenticatedPrincipal, Depends(require_roles("platfor
 )
 async def read_platform_dashboard(db: Database) -> PlatformDashboardSummary:
     return PlatformDashboardSummary.model_validate(await platform_dashboard_summary(db))
+
+
+@router.post(
+    "/notices",
+    response_model=PlatformNoticeDelivery,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(require_permissions("platform.notices.manage")),
+        Depends(verify_authenticated_csrf),
+        Depends(require_recent_reauthentication),
+    ],
+)
+async def send_platform_notice(
+    payload: PlatformNoticeCreate,
+    request: Request,
+    db: Database,
+    principal: PlatformAdmin,
+) -> PlatformNoticeDelivery:
+    return await publish_platform_notice(
+        db,
+        payload=payload,
+        actor_user_id=principal.user.id,
+        correlation_id=request.state.correlation_id,
+    )
 
 
 @router.get(
@@ -574,6 +613,137 @@ async def decide_platform_registration_request(
 )
 async def read_platform_report_summary(db: Database) -> PlatformReportSummary:
     return PlatformReportSummary.model_validate(await platform_report_summary(db))
+
+
+@router.get(
+    "/reports/drive-groups",
+    response_model=PlatformDriveGroupPage,
+    dependencies=[Depends(require_permissions("platform.reports.read"))],
+)
+async def read_platform_drive_groups(
+    db: Database,
+    active_only: bool = True,
+    institution_id: UUID | None = None,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> PlatformDriveGroupPage:
+    return await list_drive_groups(
+        db, active_only=active_only, institution_id=institution_id,
+        query=query, page=page, page_size=page_size,
+    )
+
+
+@router.get(
+    "/reports/drive-applicants",
+    response_model=PlatformDriveApplicantPage,
+    dependencies=[Depends(require_permissions("platform.reports.read", "platform.records.read"))],
+)
+async def read_platform_drive_applicants(
+    db: Database,
+    company_name: Annotated[str, Query(min_length=1, max_length=200)],
+    drive_title: Annotated[str, Query(min_length=1, max_length=200)],
+    cycle_year: Annotated[int, Query(ge=2000, le=2100)],
+    institution_id: UUID | None = None,
+    drive_id: UUID | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> PlatformDriveApplicantPage:
+    return await list_drive_applicants(
+        db, company_name=company_name, drive_title=drive_title, cycle_year=cycle_year,
+        institution_id=institution_id, drive_id=drive_id, page=page, page_size=page_size,
+    )
+
+
+@router.get(
+    "/reports/applications/{application_id}",
+    response_model=PlatformApplicationEvidence,
+    dependencies=[Depends(require_permissions("platform.reports.read", "platform.records.read"))],
+)
+async def read_platform_application_evidence(
+    application_id: UUID, db: Database,
+) -> PlatformApplicationEvidence:
+    evidence = await get_application_evidence(db, application_id)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return evidence
+
+
+def _safe_csv_cell(value: object | None) -> str:
+    cell = "" if value is None else str(value)
+    normalized = cell.lstrip(" \t\r\n")
+    return f"'{cell}" if normalized.startswith(("=", "+", "-", "@")) else cell
+
+
+@router.get(
+    "/reports/drive-applicants.csv",
+    dependencies=[Depends(require_permissions(
+        "platform.reports.read", "platform.records.read", "platform.reports.export"
+    ))],
+)
+async def export_platform_drive_applicants(
+    request: Request,
+    db: Database,
+    principal: PlatformAdmin,
+    company_name: Annotated[str, Query(min_length=1, max_length=200)],
+    drive_title: Annotated[str, Query(min_length=1, max_length=200)],
+    cycle_year: Annotated[int, Query(ge=2000, le=2100)],
+    institution_id: UUID | None = None,
+    drive_id: UUID | None = None,
+) -> StreamingResponse:
+    async def stream_csv() -> AsyncIterator[str]:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow([
+            "Student name", "PRN", "PRN verified", "Institution", "Company", "Drive",
+            "Role", "Application status", "Submitted at", "Application ID", "Drive ID",
+        ])
+        yield output.getvalue()
+        page = 1
+        total = 0
+        completed = False
+        try:
+            while True:
+                result = await list_drive_applicants(
+                    db, company_name=company_name, drive_title=drive_title,
+                    cycle_year=cycle_year, institution_id=institution_id,
+                    drive_id=drive_id, page=page, page_size=500,
+                )
+                for item in result.items:
+                    output.seek(0)
+                    output.truncate(0)
+                    writer.writerow([_safe_csv_cell(value) for value in (
+                        item.student_name, item.prn, "yes" if item.prn_verified else "no",
+                        item.institution_name, company_name, drive_title, item.role_title,
+                        item.application_status, item.submitted_at.isoformat(),
+                        item.application_id, item.drive_id,
+                    )])
+                    total += 1
+                    yield output.getvalue()
+                if page * 500 >= result.total:
+                    break
+                page += 1
+            completed = True
+        finally:
+            record_audit_event(
+                db, actor_user_id=principal.user.id, institution_id=institution_id,
+                event_type="platform.report.exported", resource_type="drive_applicants",
+                resource_id=str(drive_id) if drive_id else None,
+                correlation_id=request.state.correlation_id,
+                outcome="success" if completed else "failure",
+                details={"row_count": total, "cycle_year": cycle_year,
+                         "institution_id": str(institution_id) if institution_id else None},
+            )
+            await db.commit()
+
+    return StreamingResponse(
+        stream_csv(), media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="campushire-drive-applicants.csv"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get(

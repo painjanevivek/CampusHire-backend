@@ -91,6 +91,96 @@ class PlatformReportSummary(BaseModel):
     provisional: bool = True
 
 
+class PlatformDriveInstance(BaseModel):
+    id: UUID
+    opens_at: datetime
+    deadline_at: datetime
+    status: str
+
+
+class PlatformDriveInstitutionBreakdown(BaseModel):
+    institution_id: UUID
+    institution_name: str
+    drive_ids: list[UUID]
+    drives: list[PlatformDriveInstance]
+    application_count: int
+    student_count: int
+
+
+class PlatformDriveGroup(BaseModel):
+    company_name: str
+    drive_title: str
+    cycle_year: int
+    drive_count: int
+    application_count: int
+    student_count: int
+    institutions: list[PlatformDriveInstitutionBreakdown]
+
+
+class PlatformDriveGroupPage(BaseModel):
+    items: list[PlatformDriveGroup]
+    page: int
+    page_size: int
+    total: int
+    generated_at: datetime
+
+
+class PlatformDriveApplicant(BaseModel):
+    application_id: UUID
+    drive_id: UUID
+    institution_id: UUID
+    institution_name: str
+    student_user_id: UUID
+    student_name: str
+    prn: str | None
+    prn_verified: bool
+    role_title: str
+    application_status: str
+    submitted_at: datetime
+
+
+class PlatformDriveApplicantPage(BaseModel):
+    items: list[PlatformDriveApplicant]
+    page: int
+    page_size: int
+    total: int
+
+
+class PlatformApplicationEvidence(BaseModel):
+    applicant: PlatformDriveApplicant
+    profile_snapshot: dict[str, object]
+    resume_snapshot: dict[str, object]
+    facts_snapshot: dict[str, object]
+    eligibility_snapshot: dict[str, object]
+    application_form_snapshot: dict[str, object]
+    acknowledgment_snapshot: dict[str, object]
+    disclosure_status: str
+    evidence_provenance: str
+
+
+class PlatformNoticeCreate(BaseModel):
+    subject: str = Field(min_length=3, max_length=180)
+    message: str = Field(min_length=3, max_length=2_000)
+    to_tnp: bool = False
+    to_students: bool = False
+
+    @model_validator(mode="after")
+    def require_audience(self) -> "PlatformNoticeCreate":
+        if not self.to_tnp and not self.to_students:
+            raise ValueError("Select at least one notice audience")
+        if not self.subject.strip() or not self.message.strip():
+            raise ValueError("Subject and notice cannot be blank")
+        self.subject = self.subject.strip()
+        self.message = self.message.strip()
+        return self
+
+
+class PlatformNoticeDelivery(BaseModel):
+    notice_id: UUID
+    tnp_recipients: int
+    student_recipients: int
+
+
 class ServiceQueueStatus(BaseModel):
     service: str
     pending: int

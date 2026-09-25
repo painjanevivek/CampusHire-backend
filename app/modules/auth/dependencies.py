@@ -41,12 +41,14 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "platform.staff.manage",
             "platform.records.read",
             "platform.reports.read",
+            "platform.reports.export",
             "platform.operations.read",
             "platform.operations.manage",
             "platform.audit.read",
             "platform.audit.export",
             "platform.settings.read",
             "platform.settings.manage",
+            "platform.notices.manage",
         }
     ),
     "tnp_owner": frozenset(

@@ -121,6 +121,7 @@ async def test_student_mfa_challenge_is_server_enforced_and_recovery_is_single_u
     )
     assert signed_in.status_code == 200, signed_in.text
     assert signed_in.json()["next_step"] == "complete"
+    assert client.get("/api/v1/auth/mfa/status").json() == {"enabled": False}
 
     mismatch = client.patch(
         "/api/v1/profile",
@@ -141,6 +142,7 @@ async def test_student_mfa_challenge_is_server_enforced_and_recovery_is_single_u
         json={"code": totp_code(setup.json()["secret"])},
     )
     assert confirmed.status_code == 200, confirmed.text
+    assert client.get("/api/v1/auth/mfa/status").json() == {"enabled": True}
     recovery_code = confirmed.json()["recovery_codes"][0]
     secret = setup.json()["secret"]
     profile = client.get("/api/v1/profile")

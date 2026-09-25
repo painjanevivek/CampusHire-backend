@@ -13,6 +13,7 @@ from app.api.v1.routes.auth import router as auth_router
 from app.api.v1.routes.communications import router as communications_router
 from app.api.v1.routes.copilot import student_router as student_copilot_router
 from app.api.v1.routes.copilot import tnp_router as tnp_copilot_router
+from app.api.v1.routes.engagement import account_router as account_engagement_router
 from app.api.v1.routes.engagement import admin_router as admin_engagement_router
 from app.api.v1.routes.engagement import student_router as student_engagement_router
 from app.api.v1.routes.experience import admin_router as admin_experience_router
@@ -83,6 +84,7 @@ api_router.include_router(compliance_router, tags=["application compliance"])
 api_router.include_router(audit_router, tags=["audit"])
 api_router.include_router(admin_intelligence_router, tags=["reviewed intelligence"])
 api_router.include_router(admin_engagement_router, tags=["placement communication"])
+api_router.include_router(account_engagement_router, tags=["account communication"])
 api_router.include_router(operations_router, tags=["operations"])
 api_router.include_router(
     admin_experience_router, prefix="/tnp", tags=["placement experience"]

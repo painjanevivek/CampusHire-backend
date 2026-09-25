@@ -8,9 +8,9 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
-    require_student_placement_access,
     require_permissions,
     require_roles,
+    require_student_placement_access,
     verify_authenticated_csrf,
 )
 from app.modules.communications.service import record_product_event
@@ -48,6 +48,29 @@ admin_router = APIRouter(
     prefix="/admin/notifications",
     dependencies=[Depends(require_permissions("recruitment.read"))],
 )
+account_router = APIRouter(prefix="/account/notifications")
+
+
+@account_router.get("", response_model=NotificationPage)
+async def read_account_notifications(db: Database, principal: CurrentPrincipal) -> NotificationPage:
+    return await list_notifications(db, None, principal.user.id)
+
+
+@account_router.post(
+    "/{notification_id}/read",
+    response_model=NotificationResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def read_account_notification(
+    notification_id: UUID, db: Database, principal: CurrentPrincipal
+) -> NotificationResponse:
+    try:
+        item = await mark_notification_read(db, None, principal.user.id, notification_id)
+    except EngagementError as error:
+        raise _error(error) from error
+    await db.commit()
+    await db.refresh(item)
+    return NotificationResponse.model_validate(item, from_attributes=True)
 
 
 def _error(error: EngagementError) -> HTTPException:

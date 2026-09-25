@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,14 +22,96 @@ from app.models.auth import (
     UserRole,
 )
 from app.models.communications import EmailDelivery, SupportRequest
+from app.models.engagement import InAppNotification
 from app.models.privacy import DataDeletionRequest
 from app.models.recruitment import Application, ApplicationAppeal, PlacementDrive
 from app.models.resume import ResumeProcessingJob
 from app.modules.audit.service import record_audit_event
+from app.modules.platform_admin.schemas import PlatformNoticeCreate, PlatformNoticeDelivery
 
 
 class PlatformAdminAssignmentError(Exception):
     pass
+
+
+async def publish_platform_notice(
+    db: AsyncSession,
+    *,
+    payload: PlatformNoticeCreate,
+    actor_user_id: UUID,
+    correlation_id: str | None,
+) -> PlatformNoticeDelivery:
+    """Fan out one durable inbox item per active account, scoped to its institution."""
+    audiences = []
+    if payload.to_students:
+        audiences.append(InstitutionMembership.role == UserRole.STUDENT.value)
+    if payload.to_tnp:
+        audiences.append(InstitutionMembership.role.in_(tuple(TNP_ROLE_VALUES)))
+    recipients = (
+        await db.execute(
+            select(
+                InstitutionMembership.user_id,
+                InstitutionMembership.institution_id,
+                InstitutionMembership.role,
+            )
+            .join(User, User.id == InstitutionMembership.user_id)
+            .join(Institution, Institution.id == InstitutionMembership.institution_id)
+            .where(
+                InstitutionMembership.status == MembershipStatus.ACTIVE.value,
+                User.is_active.is_(True),
+                Institution.is_active.is_(True),
+                or_(*audiences),
+            )
+            .order_by(InstitutionMembership.user_id, InstitutionMembership.id)
+        )
+    ).all()
+    notice_id = uuid4()
+    event_key = f"platform.notice.{notice_id.hex}"
+    seen_users: set[UUID] = set()
+    tnp_count = 0
+    student_count = 0
+    for user_id, institution_id, role in recipients:
+        if user_id in seen_users:
+            continue
+        seen_users.add(user_id)
+        is_student = role == UserRole.STUDENT.value
+        db.add(
+            InAppNotification(
+                institution_id=institution_id,
+                recipient_user_id=user_id,
+                event_key=event_key,
+                title=payload.subject,
+                body=payload.message,
+                deep_link="/profile" if is_student else "/tnp/account",
+                created_by_user_id=actor_user_id,
+                created_at=datetime.now(UTC),
+            )
+        )
+        if is_student:
+            student_count += 1
+        else:
+            tnp_count += 1
+    record_audit_event(
+        db,
+        actor_user_id=actor_user_id,
+        institution_id=None,
+        event_type="platform.notice.published",
+        resource_type="platform_notice",
+        resource_id=str(notice_id),
+        correlation_id=correlation_id,
+        details={
+            "to_tnp": payload.to_tnp,
+            "to_students": payload.to_students,
+            "tnp_recipients": tnp_count,
+            "student_recipients": student_count,
+        },
+    )
+    await db.commit()
+    return PlatformNoticeDelivery(
+        notice_id=notice_id,
+        tnp_recipients=tnp_count,
+        student_recipients=student_count,
+    )
 
 
 @dataclass(frozen=True)

@@ -465,6 +465,12 @@ async def test_password_only_session_cannot_replace_an_enrolled_mfa_factor(
     )
     assert replacement.status_code == 403
     assert replacement.json()["error"]["code"] == "mfa_reauthentication_required"
+    refresh = client.post(
+        "/api/v1/auth/mfa/setup/refresh",
+        headers={"Origin": "http://localhost:3000", "X-CSRF-Token": attacker_csrf},
+    )
+    assert refresh.status_code == 403
+    assert refresh.json()["error"]["code"] == "mfa_reauthentication_required"
     async with TestSession() as db:
         enrollment = await db.scalar(select(MfaEnrollment).where(MfaEnrollment.user_id == admin.id))
         assert enrollment is not None and enrollment.enrolled_at is not None
@@ -520,6 +526,62 @@ async def test_mfa_replacement_preserves_the_active_factor_until_confirmation(
         assert enrollment is not None
         assert enrollment.encrypted_secret != original_secret
         assert enrollment.pending_encrypted_secret is None
+
+
+async def test_repeated_mfa_setup_keeps_the_scanned_secret_valid(
+    client: TestClient,
+) -> None:
+    await _seed_admin()
+    await _sign_in_admin(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+
+    first = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    second = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    assert first.status_code == second.status_code == 200
+    assert first.json()["secret"] == second.json()["secret"]
+
+    confirmed = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(first.json()["secret"])},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    replacement = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    replacement_repeat = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    assert replacement.status_code == replacement_repeat.status_code == 200
+    assert replacement.json()["secret"] == replacement_repeat.json()["secret"]
+    assert replacement.json()["secret"] != first.json()["secret"]
+
+
+async def test_refreshing_mfa_setup_invalidates_the_previous_qr_secret(
+    client: TestClient,
+) -> None:
+    await _seed_admin()
+    await _sign_in_admin(client)
+    csrf = client.cookies[get_settings().csrf_cookie_name]
+    headers = {"Origin": "http://localhost:3000", "X-CSRF-Token": csrf}
+
+    initial = client.post("/api/v1/auth/mfa/setup", headers=headers)
+    assert initial.status_code == 200
+    refreshed = client.post("/api/v1/auth/mfa/setup/refresh", headers=headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json()["secret"] != initial.json()["secret"]
+    assert refreshed.json()["provisioning_uri"] != initial.json()["provisioning_uri"]
+
+    old_code = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(initial.json()["secret"])},
+    )
+    assert old_code.status_code == 422
+    new_code = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=headers,
+        json={"code": totp_code(refreshed.json()["secret"])},
+    )
+    assert new_code.status_code == 200
 
 
 async def test_repeated_invalid_mfa_codes_revoke_the_pending_session(

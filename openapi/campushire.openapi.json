@@ -662,6 +662,55 @@
         }
       }
     },
+    "/api/v1/auth/mfa/setup/refresh": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Refresh Mfa Setup",
+        "operationId": "refresh_mfa_setup_api_v1_auth_mfa_setup_refresh_post",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaSetupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/mfa/confirm": {
       "post": {
         "tags": [
@@ -4124,6 +4173,65 @@
         }
       }
     },
+    "/api/v1/platform/notices": {
+      "post": {
+        "tags": [
+          "platform administration"
+        ],
+        "summary": "Send Platform Notice",
+        "operationId": "send_platform_notice_api_v1_platform_notices_post",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformNoticeCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformNoticeDelivery"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/institutions": {
       "get": {
         "tags": [
@@ -5173,6 +5281,434 @@
                 "schema": {
                   "$ref": "#/components/schemas/PlatformReportSummary"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/reports/drive-groups": {
+      "get": {
+        "tags": [
+          "platform administration"
+        ],
+        "summary": "Read Platform Drive Groups",
+        "operationId": "read_platform_drive_groups_api_v1_platform_reports_drive_groups_get",
+        "parameters": [
+          {
+            "name": "active_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Active Only"
+            }
+          },
+          {
+            "name": "institution_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution Id"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformDriveGroupPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/reports/drive-applicants": {
+      "get": {
+        "tags": [
+          "platform administration"
+        ],
+        "summary": "Read Platform Drive Applicants",
+        "operationId": "read_platform_drive_applicants_api_v1_platform_reports_drive_applicants_get",
+        "parameters": [
+          {
+            "name": "company_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Company Name"
+            }
+          },
+          {
+            "name": "drive_title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Drive Title"
+            }
+          },
+          {
+            "name": "cycle_year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2100,
+              "minimum": 2000,
+              "title": "Cycle Year"
+            }
+          },
+          {
+            "name": "institution_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution Id"
+            }
+          },
+          {
+            "name": "drive_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformDriveApplicantPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/reports/applications/{application_id}": {
+      "get": {
+        "tags": [
+          "platform administration"
+        ],
+        "summary": "Read Platform Application Evidence",
+        "operationId": "read_platform_application_evidence_api_v1_platform_reports_applications__application_id__get",
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Application Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformApplicationEvidence"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/reports/drive-applicants.csv": {
+      "get": {
+        "tags": [
+          "platform administration"
+        ],
+        "summary": "Export Platform Drive Applicants",
+        "operationId": "export_platform_drive_applicants_api_v1_platform_reports_drive_applicants_csv_get",
+        "parameters": [
+          {
+            "name": "company_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Company Name"
+            }
+          },
+          {
+            "name": "drive_title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Drive Title"
+            }
+          },
+          {
+            "name": "cycle_year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2100,
+              "minimum": 2000,
+              "title": "Cycle Year"
+            }
+          },
+          {
+            "name": "institution_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution Id"
+            }
+          },
+          {
+            "name": "drive_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -14757,6 +15293,114 @@
         }
       }
     },
+    "/api/v1/account/notifications": {
+      "get": {
+        "tags": [
+          "account communication"
+        ],
+        "summary": "Read Account Notifications",
+        "operationId": "read_account_notifications_api_v1_account_notifications_get",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/notifications/{notification_id}/read": {
+      "post": {
+        "tags": [
+          "account communication"
+        ],
+        "summary": "Read Account Notification",
+        "operationId": "read_account_notification_api_v1_account_notifications__notification_id__read_post",
+        "parameters": [
+          {
+            "name": "notification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Notification Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/operations/resume-jobs": {
       "get": {
         "tags": [
@@ -23870,6 +24514,64 @@
         ],
         "title": "PlatformAdminTransferRequest"
       },
+      "PlatformApplicationEvidence": {
+        "properties": {
+          "applicant": {
+            "$ref": "#/components/schemas/PlatformDriveApplicant"
+          },
+          "profile_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Profile Snapshot"
+          },
+          "resume_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Resume Snapshot"
+          },
+          "facts_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Facts Snapshot"
+          },
+          "eligibility_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Eligibility Snapshot"
+          },
+          "application_form_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Application Form Snapshot"
+          },
+          "acknowledgment_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Acknowledgment Snapshot"
+          },
+          "disclosure_status": {
+            "type": "string",
+            "title": "Disclosure Status"
+          },
+          "evidence_provenance": {
+            "type": "string",
+            "title": "Evidence Provenance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "applicant",
+          "profile_snapshot",
+          "resume_snapshot",
+          "facts_snapshot",
+          "eligibility_snapshot",
+          "application_form_snapshot",
+          "acknowledgment_snapshot",
+          "disclosure_status",
+          "evidence_provenance"
+        ],
+        "title": "PlatformApplicationEvidence"
+      },
       "PlatformDashboardSummary": {
         "properties": {
           "pending_institution_approvals": {
@@ -23915,6 +24617,272 @@
           "reporting_freshness_at"
         ],
         "title": "PlatformDashboardSummary"
+      },
+      "PlatformDriveApplicant": {
+        "properties": {
+          "application_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Application Id"
+          },
+          "drive_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Drive Id"
+          },
+          "institution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Institution Id"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "student_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student User Id"
+          },
+          "student_name": {
+            "type": "string",
+            "title": "Student Name"
+          },
+          "prn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prn"
+          },
+          "prn_verified": {
+            "type": "boolean",
+            "title": "Prn Verified"
+          },
+          "role_title": {
+            "type": "string",
+            "title": "Role Title"
+          },
+          "application_status": {
+            "type": "string",
+            "title": "Application Status"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "application_id",
+          "drive_id",
+          "institution_id",
+          "institution_name",
+          "student_user_id",
+          "student_name",
+          "prn",
+          "prn_verified",
+          "role_title",
+          "application_status",
+          "submitted_at"
+        ],
+        "title": "PlatformDriveApplicant"
+      },
+      "PlatformDriveApplicantPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformDriveApplicant"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "PlatformDriveApplicantPage"
+      },
+      "PlatformDriveGroup": {
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "drive_title": {
+            "type": "string",
+            "title": "Drive Title"
+          },
+          "cycle_year": {
+            "type": "integer",
+            "title": "Cycle Year"
+          },
+          "drive_count": {
+            "type": "integer",
+            "title": "Drive Count"
+          },
+          "application_count": {
+            "type": "integer",
+            "title": "Application Count"
+          },
+          "student_count": {
+            "type": "integer",
+            "title": "Student Count"
+          },
+          "institutions": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformDriveInstitutionBreakdown"
+            },
+            "type": "array",
+            "title": "Institutions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_name",
+          "drive_title",
+          "cycle_year",
+          "drive_count",
+          "application_count",
+          "student_count",
+          "institutions"
+        ],
+        "title": "PlatformDriveGroup"
+      },
+      "PlatformDriveGroupPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformDriveGroup"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total",
+          "generated_at"
+        ],
+        "title": "PlatformDriveGroupPage"
+      },
+      "PlatformDriveInstance": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Opens At"
+          },
+          "deadline_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deadline At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "opens_at",
+          "deadline_at",
+          "status"
+        ],
+        "title": "PlatformDriveInstance"
+      },
+      "PlatformDriveInstitutionBreakdown": {
+        "properties": {
+          "institution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Institution Id"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "drive_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Drive Ids"
+          },
+          "drives": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformDriveInstance"
+            },
+            "type": "array",
+            "title": "Drives"
+          },
+          "application_count": {
+            "type": "integer",
+            "title": "Application Count"
+          },
+          "student_count": {
+            "type": "integer",
+            "title": "Student Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution_id",
+          "institution_name",
+          "drive_ids",
+          "drives",
+          "application_count",
+          "student_count"
+        ],
+        "title": "PlatformDriveInstitutionBreakdown"
       },
       "PlatformHealthSummary": {
         "properties": {
@@ -24100,6 +25068,62 @@
           "updated_at"
         ],
         "title": "PlatformInstitutionSummary"
+      },
+      "PlatformNoticeCreate": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 3,
+            "title": "Subject"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Message"
+          },
+          "to_tnp": {
+            "type": "boolean",
+            "title": "To Tnp",
+            "default": false
+          },
+          "to_students": {
+            "type": "boolean",
+            "title": "To Students",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "message"
+        ],
+        "title": "PlatformNoticeCreate"
+      },
+      "PlatformNoticeDelivery": {
+        "properties": {
+          "notice_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Notice Id"
+          },
+          "tnp_recipients": {
+            "type": "integer",
+            "title": "Tnp Recipients"
+          },
+          "student_recipients": {
+            "type": "integer",
+            "title": "Student Recipients"
+          }
+        },
+        "type": "object",
+        "required": [
+          "notice_id",
+          "tnp_recipients",
+          "student_recipients"
+        ],
+        "title": "PlatformNoticeDelivery"
       },
       "PlatformReportSummary": {
         "properties": {
@@ -28910,12 +29934,17 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "signup_enabled": {
+            "type": "boolean",
+            "title": "Signup Enabled"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "name"
+          "name",
+          "signup_enabled"
         ],
         "title": "SignupInstitution"
       },

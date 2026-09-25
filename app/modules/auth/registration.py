@@ -29,6 +29,7 @@ from app.modules.auth.invitation_scope import is_approved_student_invitation
 from app.modules.auth.security import hash_password_async, hash_secret, new_secret, normalize_email
 from app.modules.communications.service import enqueue_email
 from app.modules.institutions.lifecycle import ProvisionConflictError, provision_institution
+from app.modules.institutions.signup_catalog import SIGNUP_ENABLED_COLLEGE_CODES
 
 
 class RegistrationConflictError(Exception):
@@ -115,6 +116,12 @@ async def start_student_registration(
             )
         )
         institution_id = domain_record.institution_id if domain_record is not None else None
+    if not invitation_code and institution_id is not None:
+        institution_code = await db.scalar(
+            select(Institution.code).where(Institution.id == institution_id)
+        )
+        if institution_code not in SIGNUP_ENABLED_COLLEGE_CODES:
+            institution_id = None
     pccoe_domain_owner = await db.scalar(
         select(InstitutionDomain.institution_id)
         .join(Institution, Institution.id == InstitutionDomain.institution_id)

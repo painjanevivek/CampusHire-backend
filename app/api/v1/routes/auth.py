@@ -79,7 +79,10 @@ from app.modules.auth.service import (
     verify_mfa,
 )
 from app.modules.communications.service import email_delivery_configured
-from app.modules.institutions.signup_catalog import SIGNUP_COLLEGE_CODES
+from app.modules.institutions.signup_catalog import (
+    SIGNUP_COLLEGE_CODES,
+    SIGNUP_ENABLED_COLLEGE_CODES,
+)
 
 router = APIRouter(prefix="/auth")
 
@@ -141,7 +144,7 @@ async def csrf(request: Request, response: Response, db: Database) -> None:
 
 @router.get("/signup/institutions", response_model=list[SignupInstitution])
 async def signup_institutions(response: Response, db: Database) -> list[SignupInstitution]:
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = "no-store"
     institutions = (
         await db.scalars(
             select(Institution)
@@ -157,7 +160,14 @@ async def signup_institutions(response: Response, db: Database) -> list[SignupIn
             )
         )
     ).all()
-    return [SignupInstitution(id=item.id, name=item.name) for item in institutions]
+    return [
+        SignupInstitution(
+            id=item.id,
+            name=item.name,
+            signup_enabled=item.code in SIGNUP_ENABLED_COLLEGE_CODES,
+        )
+        for item in institutions
+    ]
 
 
 @router.post(
@@ -607,9 +617,24 @@ async def read_mfa_status(db: Database, session: CurrentSession) -> MfaStatusRes
     "/mfa/setup", response_model=MfaSetupResponse, dependencies=[Depends(verify_authenticated_csrf)]
 )
 async def setup_mfa(db: Database, session: CurrentSession) -> MfaSetupResponse:
+    return await _mfa_setup_response(db, session, refresh=False)
+
+
+@router.post(
+    "/mfa/setup/refresh",
+    response_model=MfaSetupResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def refresh_mfa_setup(db: Database, session: CurrentSession) -> MfaSetupResponse:
+    return await _mfa_setup_response(db, session, refresh=True)
+
+
+async def _mfa_setup_response(
+    db: Database, session: CurrentSession, *, refresh: bool
+) -> MfaSetupResponse:
     _require_mfa_session(session)
     try:
-        secret = await begin_mfa_setup(db, session)
+        secret = await begin_mfa_setup(db, session, refresh=refresh)
     except MfaReauthenticationRequiredError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
