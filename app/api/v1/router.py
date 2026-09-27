@@ -36,6 +36,8 @@ from app.api.v1.routes.privacy import tnp_router as tnp_privacy_router
 from app.api.v1.routes.profiles import router as profiles_router
 from app.api.v1.routes.registrations import public_router as registration_public_router
 from app.api.v1.routes.resumes import router as resumes_router
+from app.api.v1.routes.tnp_platform_appeals import platform_router as platform_appeals_router
+from app.api.v1.routes.tnp_platform_appeals import tnp_router as tnp_platform_appeals_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
@@ -57,6 +59,8 @@ api_router.include_router(
 api_router.include_router(privacy_router, tags=["privacy"])
 api_router.include_router(tnp_privacy_router, tags=["privacy administration"])
 api_router.include_router(platform_router, tags=["platform administration"])
+api_router.include_router(platform_appeals_router, tags=["platform administration"])
+api_router.include_router(tnp_platform_appeals_router, tags=["T&P appeals"])
 api_router.include_router(platform_outcomes_router, tags=["placement outcomes"])
 api_router.include_router(resumes_router, tags=["resumes"])
 api_router.include_router(generative_router, tags=["generative resume studio"])

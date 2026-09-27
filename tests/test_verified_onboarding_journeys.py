@@ -108,7 +108,7 @@ def save_step(
 
 async def test_student_signup_without_invitation_and_onboarding_journey(client: TestClient) -> None:
     async with TestSession() as db:
-        institution = Institution(code="student-campus", name="Student Campus", is_active=True)
+        institution = Institution(code="pccoe-pune", name="Student Campus", is_active=True)
         db.add(institution)
         await db.flush()
         db.add(
@@ -183,7 +183,25 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
                     "score": 8.4,
                     "score_scale": "cgpa_10",
                     "active_backlogs": 0,
-                }
+                },
+                {
+                    "qualification_level": "class_10",
+                    "degree": "Class 10",
+                    "branch": "General",
+                    "institution": "Student School",
+                    "graduation_year": 2021,
+                    "score": 89.2,
+                    "score_scale": "percentage",
+                },
+                {
+                    "qualification_level": "class_12",
+                    "degree": "Class 12",
+                    "branch": "Science",
+                    "institution": "Student Junior College",
+                    "graduation_year": 2023,
+                    "score": 86.4,
+                    "score_scale": "percentage",
+                },
             ],
         },
         {
@@ -282,9 +300,9 @@ async def test_student_signup_without_invitation_and_onboarding_journey(client: 
     assert state["placement_participation"]["privacy_accepted"] is True  # type: ignore[index]
 
     unverified_capability = client.get("/api/v1/auth/me").json()["placement_access"]
-    assert unverified_capability["available"] is False
-    assert unverified_capability["verification_required"] is True
-    assert client.get("/api/v1/dashboard").status_code == 403
+    assert unverified_capability["available"] is True
+    assert unverified_capability["verification_required"] is False
+    assert client.get("/api/v1/dashboard").status_code == 200
 
     student_session_token = client.cookies[get_settings().session_cookie_name]
     staff_session_token = "placement-prn-verification-session-token"  # noqa: S105

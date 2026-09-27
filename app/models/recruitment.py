@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -91,6 +92,7 @@ class PlacementRole(Base, TimestampMixin):
     employment_type: Mapped[str] = mapped_column(String(40))
     location: Mapped[str] = mapped_column(String(160))
     work_mode: Mapped[str] = mapped_column(String(32))
+    is_paid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     salary_display: Mapped[str | None] = mapped_column(String(120), nullable=True)
     skills: Mapped[list[str]] = mapped_column(JSON, default=list)
     requirements: Mapped[list[str]] = mapped_column(JSON, default=list)

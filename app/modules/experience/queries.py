@@ -72,9 +72,7 @@ async def review_queue(
         filters.append(Application.status.in_(["submitted", "under_review"]))
     if application_status:
         filters.append(Application.status == application_status)
-    if actor_role == "tnp_reviewer" and actor_user_id is not None:
-        filters.append(Application.assignee_user_id == actor_user_id)
-    elif work_view == "my_work" and actor_user_id is not None:
+    if work_view == "my_work" and actor_user_id is not None:
         filters.append(Application.assignee_user_id == actor_user_id)
     elif work_view == "unassigned":
         filters.append(Application.assignee_user_id.is_(None))

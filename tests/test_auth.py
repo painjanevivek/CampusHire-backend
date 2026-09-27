@@ -201,7 +201,7 @@ async def test_signup_with_selected_college_does_not_require_an_invitation(
     client: TestClient,
 ) -> None:
     async with TestSession() as db:
-        institution = Institution(code="direct-campus", name="Direct Campus", is_active=True)
+        institution = Institution(code="pccoe-pune", name="Direct Campus", is_active=True)
         db.add(institution)
         await db.flush()
         db.add(
@@ -493,6 +493,7 @@ async def test_demo_login_configuration_is_rejected_outside_development() -> Non
     with pytest.raises(ValueError, match="Demo login is restricted"):
         Settings(
             app_env="staging",
+            interview_practice_pilot=False,
             demo_login_enabled=True,
             demo_student_email="student+demo@example.com",
             demo_student_password="a synthetic student passphrase",  # noqa: S106

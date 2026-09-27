@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 StudentIntent = Literal[
+    "ask_campushire",
     "explain_eligibility",
     "explain_role_match",
     "interview_practice",
@@ -40,6 +41,14 @@ class InterviewPracticeResult(BaseModel):
     next_question: str = Field(min_length=3, max_length=800)
 
 
+class StudentGuidanceAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = Field(min_length=3, max_length=2400)
+    source_ids: list[str] = Field(default_factory=list, max_length=5)
+    attachment_summary: str = Field(default="", max_length=3000)
+
+
 class TnpMessageCreate(BaseModel):
     intent: TnpIntent
     message: str = Field(min_length=2, max_length=4000)
@@ -55,6 +64,7 @@ class MessageResponse(BaseModel):
     id: UUID
     role: str
     content: str
+    attachment_name: str | None = None
     citations: list[Citation]
     missing_evidence: list[str]
     proposal_id: UUID | None

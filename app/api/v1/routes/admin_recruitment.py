@@ -1,7 +1,11 @@
+import csv
+import io
+from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 
 from app.core.config import get_settings
 from app.modules.application_packets.service import publish_pending_form_for_role
@@ -19,10 +23,23 @@ from app.modules.communications.service import (
     record_product_event,
 )
 from app.modules.engagement.service import upsert_notification
+from app.modules.platform_admin.reports import (
+    get_application_evidence,
+    institution_report_summary,
+    list_drive_applicants,
+    list_drive_groups,
+)
+from app.modules.platform_admin.schemas import (
+    PlatformApplicationEvidence,
+    PlatformDriveApplicantPage,
+    PlatformDriveGroupPage,
+    PlatformReportSummary,
+)
 from app.modules.recruitment.schemas import (
     AdminApplicationPage,
     ApplicationAppealResolution,
     ApplicationAppealResponse,
+    ApplicationDecisionCreate,
     ApplicationOverrideCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
@@ -73,6 +90,7 @@ from app.modules.recruitment.service import (
     preview_role_eligibility,
     publish_role,
     publish_rule_set,
+    record_application_decision,
     resolve_application_appeal,
     response_for_application,
     role_response,
@@ -957,6 +975,177 @@ async def change_application_status(
         event_key=f"application:{application.id}:{payload.status}",
         title=f"Application {payload.status.replace('_', ' ')}",
         body=payload.reason or "Your placement application status has changed.",
+        deep_link=f"/applications/{application.id}",
+        created_by_user_id=principal.user.id,
+    )
+    await _enqueue_application_update(db, response, application.institution_id, payload.reason)
+    await db.commit()
+    return response
+
+
+def _auditor_institution(principal: CurrentPrincipal) -> UUID:
+    if principal.role != "tnp_auditor" or principal.institution_id is None:
+        raise HTTPException(status_code=403, detail="Auditor access required")
+    return principal.institution_id
+
+
+@router.get("/reports/summary", response_model=PlatformReportSummary)
+async def read_auditor_report_summary(
+    db: Database, principal: CurrentPrincipal,
+) -> PlatformReportSummary:
+    return await institution_report_summary(db, _auditor_institution(principal))
+
+
+@router.get("/reports/drive-groups", response_model=PlatformDriveGroupPage)
+async def read_auditor_drive_groups(
+    db: Database,
+    principal: CurrentPrincipal,
+    active_only: bool = True,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> PlatformDriveGroupPage:
+    return await list_drive_groups(
+        db, active_only=active_only, institution_id=_auditor_institution(principal),
+        query=query, page=page, page_size=page_size,
+    )
+
+
+@router.get("/reports/drive-applicants", response_model=PlatformDriveApplicantPage)
+async def read_auditor_drive_applicants(
+    db: Database,
+    principal: CurrentPrincipal,
+    company_name: Annotated[str, Query(min_length=1, max_length=200)],
+    drive_title: Annotated[str, Query(min_length=1, max_length=200)],
+    cycle_year: Annotated[int, Query(ge=2000, le=2100)],
+    drive_id: UUID | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> PlatformDriveApplicantPage:
+    return await list_drive_applicants(
+        db, company_name=company_name, drive_title=drive_title, cycle_year=cycle_year,
+        institution_id=_auditor_institution(principal), drive_id=drive_id,
+        page=page, page_size=page_size,
+    )
+
+
+@router.get(
+    "/reports/applications/{application_id}", response_model=PlatformApplicationEvidence
+)
+async def read_auditor_application_evidence(
+    application_id: UUID, db: Database, principal: CurrentPrincipal,
+) -> PlatformApplicationEvidence:
+    evidence = await get_application_evidence(
+        db, application_id, institution_id=_auditor_institution(principal)
+    )
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return evidence
+
+
+def _safe_report_csv_cell(value: object | None) -> str:
+    cell = "" if value is None else str(value)
+    return f"'{cell}" if cell.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")) else cell
+
+
+@router.get("/reports/drive-applicants.csv")
+async def export_auditor_drive_applicants(
+    request: Request,
+    db: Database,
+    principal: CurrentPrincipal,
+    company_name: Annotated[str, Query(min_length=1, max_length=200)],
+    drive_title: Annotated[str, Query(min_length=1, max_length=200)],
+    cycle_year: Annotated[int, Query(ge=2000, le=2100)],
+    drive_id: UUID | None = None,
+) -> StreamingResponse:
+    institution_id = _auditor_institution(principal)
+
+    async def stream_csv() -> AsyncIterator[str]:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow([
+            "Student name", "PRN", "PRN verified", "Institution", "Company", "Drive",
+            "Role", "Application status", "Submitted at", "Application ID", "Drive ID",
+        ])
+        yield output.getvalue()
+        page = 1
+        total = 0
+        completed = False
+        try:
+            while True:
+                result = await list_drive_applicants(
+                    db, company_name=company_name, drive_title=drive_title,
+                    cycle_year=cycle_year, institution_id=institution_id,
+                    drive_id=drive_id, page=page, page_size=500,
+                )
+                for item in result.items:
+                    output.seek(0)
+                    output.truncate(0)
+                    writer.writerow([_safe_report_csv_cell(value) for value in (
+                        item.student_name, item.prn, "yes" if item.prn_verified else "no",
+                        item.institution_name, company_name, drive_title, item.role_title,
+                        item.application_status, item.submitted_at.isoformat(),
+                        item.application_id, item.drive_id,
+                    )])
+                    total += 1
+                    yield output.getvalue()
+                if page * 500 >= result.total:
+                    break
+                page += 1
+            completed = True
+        finally:
+            record_audit_event(
+                db, actor_user_id=principal.user.id, institution_id=institution_id,
+                event_type="institution.report.exported", resource_type="drive_applicants",
+                resource_id=str(drive_id) if drive_id else None,
+                correlation_id=request.state.correlation_id,
+                outcome="success" if completed else "failure",
+                details={"row_count": total, "cycle_year": cycle_year},
+            )
+            await db.commit()
+
+    return StreamingResponse(
+        stream_csv(), media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="campushire-drive-applicants.csv"',
+            "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post(
+    "/applications/{application_id}/decision",
+    response_model=ApplicationResponse,
+    dependencies=[
+        Depends(verify_authenticated_csrf),
+        Depends(require_permissions("applications.review")),
+    ],
+)
+async def decide_application(
+    request: Request,
+    application_id: UUID,
+    payload: ApplicationDecisionCreate,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ApplicationResponse:
+    try:
+        application = await record_application_decision(
+            db, principal.institution_id, application_id, principal.user.id, payload
+        )
+        response = await response_for_application(db, application)
+    except RecruitmentError as error:
+        raise _http_error(error) from error
+    _audit(
+        request, db, principal, event_type="application.decision_recorded",
+        resource_type="application", resource_id=application.id,
+        reason=payload.reason, details={"status": payload.status},
+    )
+    await upsert_notification(
+        db, institution_id=application.institution_id,
+        recipient_user_id=application.student_user_id,
+        event_key=f"application:{application.id}:decision:{application.revision}",
+        title="Application selected" if payload.status == "offered" else "Application rejected",
+        body=payload.reason,
         deep_link=f"/applications/{application.id}",
         created_by_user_id=principal.user.id,
     )

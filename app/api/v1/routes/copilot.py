@@ -1,19 +1,36 @@
-from typing import NoReturn
+from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from starlette.concurrency import run_in_threadpool
 
 from app.ai.providers.base import StructuredGenerator
 from app.ai.providers.factory import build_copilot_generator
+from app.core.config import get_settings
 from app.core.rate_limit import enforce_fixed_window_limit
 from app.models.auth import UserRole
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     Database,
-    require_student_placement_access,
     require_permissions,
     require_roles,
+    require_student_placement_access,
     verify_authenticated_csrf,
+)
+from app.modules.copilot.attachments import (
+    MAX_ATTACHMENT_BYTES,
+    InvalidChatAttachment,
+    prepare_chat_attachment,
 )
 from app.modules.copilot.schemas import (
     ConversationCreate,
@@ -41,6 +58,7 @@ from app.modules.generative.service import (
     ProposalConflictError,
     ProposalValidationError,
 )
+from app.modules.resumes.scanner import ScannerUnavailableError, build_scanner
 
 student_router = APIRouter(
     prefix="/ai/student-copilot",
@@ -258,6 +276,66 @@ async def send_student_message(
             role_id=payload.role_id,
             generator=_generator(),
             correlation_id=request.state.correlation_id,
+        )
+    except (
+        ConversationNotFoundError,
+        GenerationUnavailableError,
+        ProposalValidationError,
+    ) as error:
+        _raise_error(error)
+
+
+@student_router.post(
+    "/conversations/{conversation_id}/messages-with-file",
+    response_model=ConversationResponse,
+    dependencies=[Depends(verify_authenticated_csrf)],
+)
+async def send_student_message_with_file(
+    conversation_id: UUID,
+    message: Annotated[str, Form(max_length=2000)],
+    file: Annotated[UploadFile, File()],
+    request: Request,
+    db: Database,
+    principal: CurrentPrincipal,
+) -> ConversationResponse:
+    institution_id = _tenant(principal)
+    await enforce_fixed_window_limit(
+        request,
+        namespace="student-copilot",
+        identity=f"{institution_id}:{principal.user.id}",
+        limit=20,
+        unavailable_detail="Student Copilot is temporarily unavailable.",
+    )
+    try:
+        data = await file.read(MAX_ATTACHMENT_BYTES + 1)
+        if not data or len(data) > MAX_ATTACHMENT_BYTES:
+            raise InvalidChatAttachment("Choose a file smaller than 10 MB.")
+        scan = await build_scanner(get_settings()).scan(data)
+        if not scan.clean:
+            raise InvalidChatAttachment("This file did not pass the security scan.")
+        attachment = await run_in_threadpool(
+            prepare_chat_attachment, data, file.content_type or "", file.filename or ""
+        )
+    except InvalidChatAttachment as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ScannerUnavailableError as error:
+        raise HTTPException(
+            status_code=503, detail="File scanning is temporarily unavailable."
+        ) from error
+    finally:
+        await file.close()
+    try:
+        return await add_student_message(
+            db,
+            conversation_id=conversation_id,
+            institution_id=institution_id,
+            user_id=principal.user.id,
+            intent="ask_campushire",
+            message=message.strip() or "Please summarize this file and help me understand it.",
+            role_id=None,
+            generator=_generator(),
+            correlation_id=request.state.correlation_id,
+            attachment=attachment,
         )
     except (
         ConversationNotFoundError,

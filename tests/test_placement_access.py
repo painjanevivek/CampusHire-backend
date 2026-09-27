@@ -135,7 +135,7 @@ def test_institution_scope_and_calendar_configuration_fail_closed() -> None:
     ) == 2025
 
 
-def test_format_valid_but_unverified_prn_does_not_grant_placement_access() -> None:
+def test_eligible_student_does_not_wait_for_manual_prn_verification() -> None:
     institution = _institution()
     profile = _student("124B1B287", institution.id)
     profile.prn_verified_at = None
@@ -144,6 +144,6 @@ def test_format_valid_but_unverified_prn_does_not_grant_placement_access() -> No
         profile, institution, now=datetime(2026, 9, 24, tzinfo=UTC)
     )
 
-    assert state.available is False
+    assert state.available is True
     assert state.study_year == 3
-    assert state.reason == "student_prn_verification_required"
+    assert state.reason is None

@@ -33,6 +33,7 @@ from app.models.communications import (
     EmailDelivery,
     ProductEvent,
     SupportRequest,
+    TnpPlatformAppeal,
 )
 from app.models.engagement import (
     InAppNotification,
@@ -54,6 +55,7 @@ from app.models.onboarding import (
     InstitutionFeatureFlags,
     InstitutionOnboarding,
     InstitutionProgram,
+    StudentAcademicDocument,
     StudentCareerPreference,
     StudentCertification,
     StudentEducation,
@@ -168,6 +170,7 @@ __all__ = [
     "StudentCareerPreference",
     "StudentCertification",
     "StudentEducation",
+    "StudentAcademicDocument",
     "StudentExperience",
     "StudentPlacementParticipation",
     "StudentProject",
@@ -175,6 +178,7 @@ __all__ = [
     "SourceVersion",
     "StudentRoadmap",
     "SupportRequest",
+    "TnpPlatformAppeal",
     "TermsAcceptance",
     "User",
 ]

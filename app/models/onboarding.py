@@ -9,6 +9,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
     Uuid,
@@ -34,6 +35,17 @@ class StudentEducation(Base, TimestampMixin):
     score: Mapped[float] = mapped_column(Float)
     score_scale: Mapped[str] = mapped_column(String(24))
     active_backlogs: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class StudentAcademicDocument(Base, TimestampMixin):
+    __tablename__ = "student_academic_documents"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    qualification_level: Mapped[str] = mapped_column(String(32), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(40))
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
 class StudentExperience(Base, TimestampMixin):

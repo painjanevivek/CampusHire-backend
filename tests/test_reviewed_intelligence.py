@@ -116,6 +116,21 @@ async def seed_context(db: AsyncSession):  # type: ignore[no-untyped-def]
     return institution, other, admin, student, role
 
 
+async def test_hidden_role_cannot_be_scored_directly() -> None:
+    async with Session() as db:
+        institution, _, _, student, role = await seed_context(db)
+        role.skills = ["React.js"]
+        await db.flush()
+        with pytest.raises(IntelligenceError, match="opportunity_not_found"):
+            await semantic_match(
+                db,
+                institution_id=institution.id,
+                student_user_id=student.id,
+                role_id=role.id,
+                embedder=FixedEmbedder(),
+            )
+
+
 async def test_match_is_versioned_separate_and_degrades_without_provider() -> None:
     async with Session() as db:
         institution, _, _, student, role = await seed_context(db)

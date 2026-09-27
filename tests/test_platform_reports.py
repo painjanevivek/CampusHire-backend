@@ -210,3 +210,49 @@ async def test_drive_report_groups_colleges_and_exports_scoped_applicants(
     client.cookies.clear()
     sign_in(client, "student0@example.edu", "a student passphrase")
     assert client.get("/api/v1/platform/reports/drive-groups").status_code == 403
+
+
+async def test_auditor_reports_match_platform_ui_data_with_institution_scope(
+    client: TestClient,  # noqa: F811
+) -> None:
+    colleges, application_ids, _ = await seed_report()
+    async with TestSession() as db:
+        auditor = User(
+            institution_id=colleges[0].id,
+            email="auditor@example.edu",
+            username="auditor",
+            password_hash=hash_password("an auditor passphrase"),
+            role=UserRole.TNP_AUDITOR.value,
+        )
+        db.add(auditor)
+        await db.flush()
+        db.add(InstitutionMembership(
+            institution_id=colleges[0].id,
+            user_id=auditor.id,
+            role=UserRole.TNP_AUDITOR.value,
+            status=MembershipStatus.ACTIVE.value,
+        ))
+        await db.commit()
+    sign_in(client, "auditor", "an auditor passphrase")
+    base = "/api/v1/tnp/recruitment/reports"
+    summary = client.get(f"{base}/summary")
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["institution_count"] == 1
+    assert summary.json()["application_count"] == 1
+    groups = client.get(f"{base}/drive-groups")
+    assert groups.status_code == 200, groups.text
+    assert groups.json()["items"][0]["drive_count"] == 1
+    params = {"company_name": "NVIDIA", "drive_title": "Graduate Engineer", "cycle_year": 2026,
+              "institution_id": str(colleges[1].id)}
+    applicants = client.get(f"{base}/drive-applicants", params=params)
+    assert applicants.status_code == 200, applicants.text
+    assert applicants.json()["total"] == 1
+    assert applicants.json()["items"][0]["institution_id"] == str(colleges[0].id)
+    assert client.get(f"{base}/applications/{application_ids[0]}").status_code == 200
+    assert client.get(f"{base}/applications/{application_ids[1]}").status_code == 404
+    csv_response = client.get(f"{base}/drive-applicants.csv", params=params)
+    assert csv_response.status_code == 200, csv_response.text
+    assert "124B1B280" in csv_response.text and "124B1B281" not in csv_response.text
+    client.cookies.clear()
+    sign_in(client, "officer", "an officer passphrase")
+    assert client.get(f"{base}/summary").status_code == 403

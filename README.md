@@ -35,6 +35,8 @@ The service is a modular FastAPI application with a separately supervised worker
 
 Student placement workspace access is limited by the backend-derived year 3/4 capability. See [Student Placement Access Policy](docs/placement-access-policy.md); role-specific opportunity eligibility remains a separate check.
 
+Student opportunity discovery also uses a deterministic, institution-scoped profile-skill filter. A published role with listed skills appears when at least one matches a recorded student skill; a broad `Frontend` tag matches specific skills such as React.js or Next.js. Roles without listed skills remain visible. The same check applies to role details and new application drafts, while formal eligibility rules and advisory semantic relevance remain separate. Students can update their profile skills as their experience changes.
+
 ## Architecture
 
 ```mermaid
@@ -88,10 +90,18 @@ CampusHire deliberately uses the smallest mechanism appropriate to each task. No
 | Resume wording suggestions | Conservative deterministic wording transformations | No invented outcomes or metrics; explicit student acceptance |
 | Role extraction proposals | Proposal/review workflow in intelligence services | An authorized reviewer must approve before a draft role changes |
 | Role-specific preparation | Reviewed profile/resume evidence and approved roadmap mappings | No automatic provider call on page visit; absent mappings remain explicit |
+| Student career roadmap | CampusHire-curated, versioned role paths with context from student-saved profile skills and projects | No T&P-authored milestones or approval loop; saved completion is student-reported, not skill verification or eligibility |
+| Student Copilot guidance | Structured generation over the student's currently open, published institution roles, an allowlisted site guide, and an optional student-uploaded file | Conversational answers cite role, page, or attachment sources; Copilot cannot decide eligibility or change records |
 | Agentic preparation pilot | Bounded Gemini structured generation for student opportunity preparation and T&P drive review | Explicit launch, versioned evidence, finite budgets, interruption/resume, and human review; accepted drive fields require a separate authorized apply action |
 | Next-action guidance | Ordered server-side priority rules | Not model planning and not an autonomous agent |
 
-**Do not describe the current implementation as an autonomous recruiting agent or a general-purpose generative chatbot.** The Gemini provider supports embeddings and configured structured generation for the two bounded pilot workflows. The policy graph remains a separate retrieval-only workflow and does not call a text-generation model. See [Agentic AI pilot](docs/agentic-ai-pilot.md).
+**Do not describe the current implementation as an autonomous recruiting agent or an unrestricted chatbot.** Student Copilot answers questions from tenant-scoped, published opportunities, an allowlisted site guide, and files a student chooses to attach. It accepts PDF (unlocked, up to 80 pages), Word `.docx` text, and JPEG/PNG images, up to 10 MB per file. PDFs and images are sent to the configured Gemini model as media; `.docx` text is extracted locally before generation. Chat history retains the attachment name and a short AI-generated context summary, not the uploaded file bytes. The provider also supports configured structured generation for the two bounded pilot workflows. The policy graph remains a separate retrieval-only workflow and does not call a text-generation model. See [Agentic AI pilot](docs/agentic-ai-pilot.md).
+
+### Model routing
+
+The server chooses a model from the authorized task, never from instructions in a student message or uploaded file. Ordinary Student Copilot questions use `GEMINI_STUDENT_GUIDANCE_MODEL` (default `gemini-3.5-flash-lite`). A question with an attached file uses `GEMINI_STUDENT_DOCUMENT_MODEL` (default `gemini-3.8-flash`), with a longer provider timeout. T&P proposal drafts use `GEMINI_TNP_PROPOSAL_MODEL` (default `gemini-3.8-flash`); aggregate funnel summaries still use the database query. Explicitly enabled preparation runs, interview practice, and resume proposals retain `GEMINI_GENERATION_MODEL`. Provider and model are recorded on proposals and agent runs; student guidance model IDs are recorded in the audit event.
+
+Semantic text matching keeps `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`. Do not change a live embedding model without rebuilding its versioned Qdrant vectors: vectors from different models must not be compared. `gemini-embedding-2` is a candidate for a future multimodal retrieval index; one-turn file questions do not require that index. Eligibility, application status, permissions, and publication decisions remain database and rule driven.
 
 ### The actual LangGraph policy workflow
 

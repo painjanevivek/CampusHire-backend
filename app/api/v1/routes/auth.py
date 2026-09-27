@@ -812,9 +812,7 @@ async def me(principal: CurrentPrincipal, db: Database) -> UserResponse:
                 available=capability.available,
                 study_year=capability.study_year,
                 academic_year_start=capability.academic_year_start,
-                verification_required=(
-                    capability.reason == "student_prn_verification_required"
-                ),
+                verification_required=False,
             )
         }
     )

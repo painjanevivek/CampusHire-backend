@@ -49,15 +49,15 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
-    require_student_placement_access,
     require_permissions,
     require_recent_reauthentication,
     require_roles,
+    require_student_placement_access,
     verify_authenticated_csrf,
 )
 from app.modules.communications.service import record_product_event
 from app.modules.recruitment.schemas import ApplicationResponse
-from app.modules.recruitment.service import response_for_application
+from app.modules.recruitment.service import RecruitmentError, response_for_application
 
 student_router = APIRouter(
     dependencies=[
@@ -75,7 +75,7 @@ compliance_router = APIRouter(
 )
 
 
-def _http_error(error: ApplicationPacketError) -> HTTPException:
+def _http_error(error: ApplicationPacketError | RecruitmentError) -> HTTPException:
     code = str(error)
     if code.endswith("_not_found"):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=code)
@@ -84,6 +84,7 @@ def _http_error(error: ApplicationPacketError) -> HTTPException:
         "profile_revision_conflict",
         "submitted_application_draft_immutable",
         "application_material_terms_changed",
+        "application_already_exists",
     }:
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=code)
     if code == "application_draft_expired":
@@ -272,7 +273,7 @@ async def submit_application_draft(
             payload.acknowledgment,
         )
         response = await response_for_application(db, application)
-    except ApplicationPacketError as error:
+    except (ApplicationPacketError, RecruitmentError) as error:
         raise _http_error(error) from error
     if not replayed:
         await record_product_event(

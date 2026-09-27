@@ -9,8 +9,8 @@ from app.modules.audit.service import record_audit_event
 from app.modules.auth.dependencies import (
     CurrentTenant,
     Database,
-    require_student_placement_access,
     require_roles,
+    require_student_placement_access,
     verify_authenticated_csrf,
 )
 from app.modules.communications.service import record_product_event

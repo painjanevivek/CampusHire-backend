@@ -67,7 +67,7 @@ async def test_pccoe_student_signup_enforces_email_without_paid_verification(
     client: TestClient,
 ) -> None:
     async with TestSession() as db:
-        institution = Institution(code="pccoe-public-signup", name="PCCOE")
+        institution = Institution(code="pccoe-pune", name="PCCOE")
         db.add(institution)
         await db.flush()
         db.add(

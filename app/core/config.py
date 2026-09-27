@@ -88,7 +88,13 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_generation_model: str | None = None
+    gemini_resume_model: str = "gemini-3.5-flash-lite"
+    gemini_agent_model: str | None = None
+    gemini_student_guidance_model: str = "gemini-3.5-flash-lite"
+    gemini_student_document_model: str = "gemini-3.8-flash"
+    gemini_tnp_proposal_model: str = "gemini-3.8-flash"
     gemini_timeout_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    gemini_complex_timeout_ms: int = Field(default=60_000, ge=1_000, le=120_000)
     copilot_generation_provider: Literal["gemini", "openrouter"] = "gemini"
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = None
@@ -144,6 +150,10 @@ class Settings(BaseSettings):
     maintenance_message: str | None = None
     application_wizard_v1: bool = False
     application_packet_cleanup_seconds: int = Field(default=3600, ge=60, le=86_400)
+
+    @property
+    def agent_generation_model(self) -> str | None:
+        return self.gemini_agent_model or self.gemini_generation_model
 
     @model_validator(mode="after")
     def production_requires_real_malware_scanning(self) -> "Settings":

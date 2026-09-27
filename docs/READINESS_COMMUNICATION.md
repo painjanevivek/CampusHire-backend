@@ -8,17 +8,15 @@ A selected template version is preserved with the student roadmap. Switching pat
 
 ## One-next-action policy
 
-`GET /api/v1/dashboard` evaluates `readiness-v1` with deterministic priority and tie-breaking:
+`GET /api/v1/dashboard` evaluates `readiness-v2` with deterministic priority and tie-breaking:
 
 1. required profile facts;
-2. reviewed resume extraction;
-3. completed clean resume;
-4. project evidence;
-5. selected curated roadmap;
-6. first prerequisite-ready roadmap milestone;
-7. eligible opportunity review.
+2. project evidence from the student profile;
+3. selected curated roadmap;
+4. first prerequisite-ready roadmap milestone;
+5. eligible opportunity review.
 
-The response contains exactly one action, its reason, internal destination, policy version, and source facts. The readiness percentage is component completion—not a hiring probability or skill score. Eligibility and semantic relevance remain separate.
+The response contains exactly one action, its reason, internal destination, policy version, and source facts. The readiness percentage is component completion—not a hiring probability or skill score. A reviewed resume is not a readiness step or a prerequisite for browsing published opportunities. Application submission still uses its own resume requirements. Eligibility and semantic relevance remain separate.
 
 ## Notification safety
 

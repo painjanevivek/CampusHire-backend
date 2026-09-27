@@ -41,6 +41,7 @@ from app.modules.application_packets.schemas import (
 from app.modules.auth.security import decrypt_sensitive_payload, encrypt_sensitive_payload
 from app.modules.recruitment.schemas import ApplicationCreate
 from app.modules.recruitment.service import create_application
+from app.modules.recruitment.skill_visibility import matches_role_skills, student_skill_items
 
 
 class ApplicationPacketError(ValueError):
@@ -450,6 +451,9 @@ async def create_or_resume_draft(
     if row is None:
         raise ApplicationPacketError("opportunity_not_available")
     role, drive = row
+    student_skills = await student_skill_items(db, institution, student_user_id)
+    if not matches_role_skills(role.skills, student_skills):
+        raise ApplicationPacketError("opportunity_not_available")
     existing = await db.scalar(
         select(ApplicationDraft).where(
             ApplicationDraft.institution_id == institution,
@@ -603,7 +607,6 @@ def _profile_complete(profile: StudentProfile) -> bool:
             profile.department,
             profile.academic_year,
             profile.city,
-            profile.country_code,
         ]
     )
 

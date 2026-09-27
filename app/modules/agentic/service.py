@@ -217,7 +217,7 @@ async def _create_run(
         source_projection_version=settings.agent_source_projection_version,
         evaluation_run_id=settings.agent_evaluation_run_id,
         provider_name="gemini",
-        model_version=settings.gemini_generation_model or "unconfigured",
+        model_version=settings.agent_generation_model or "unconfigured",
         target_kind=target_kind,
         target_id=target_id,
         status="queued",

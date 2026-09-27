@@ -19,6 +19,7 @@ def content() -> ResumeContent:
             "Computer science student building reliable data products with Python, SQL, "
             "thoughtful testing, and clear documentation for campus projects."
         ),
+        strengths=["Problem solving", "Clear documentation"],
         skills=["Python", "SQL", "FastAPI", "React"],
         projects=["Placement matcher with deterministic eligibility", "Student roadmap dashboard"],
         education=["B.Tech Computer Science · Campus Institute · 2027"],
@@ -39,6 +40,9 @@ def test_template_uses_structured_sections_and_safe_links() -> None:
     source = render_latex(content())
     assert r"\href{https://github.com/asha}{GitHub}" in source
     assert r"\sectionline{Experience}" in source
+    assert r"\sectionline{Professional Summary}" in source
+    assert r"\sectionline{Strengths}" in source
+    assert r"\item Problem solving" in source
     assert r"\sectionline{Projects}" in source
     assert source.index(r"\sectionline{Experience}") < source.index(r"\sectionline{Projects}")
     assert r"\entryheading{Campus coding club}{Volunteer}{2025–2026}{}" in source
@@ -89,7 +93,7 @@ def test_generated_pdf_has_selectable_identity_links_and_metadata() -> None:
     assert "Placement matcher" in text
     assert "Campus coding club" in text
     assert document[0].get_links()
-    assert document.metadata["producer"] == "CampusHire LaTeX Resume Generator v1"
+    assert document.metadata["producer"] == "CampusHire LaTeX Resume Generator v2"
     assert evidence_digest(content()) in document.metadata["keywords"]
     document.close()
 

@@ -11,9 +11,9 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     CurrentTenant,
     Database,
-    require_student_placement_access,
     require_permissions,
     require_roles,
+    require_student_placement_access,
     verify_authenticated_csrf,
 )
 from app.modules.experience import queries, service
@@ -104,11 +104,8 @@ async def admin_requests(
     application_id: UUID, db: Database, principal: CurrentPrincipal
 ) -> list[CorrectionResponse]:
     try:
-        application = await service.owned_application(
+        await service.owned_application(
             db, institution(principal), application_id
-        )
-        require_assigned_review_access(
-            application, actor_user_id=principal.user.id, actor_role=principal.role
         )
         return await service.request_page(db, institution(principal), application_id)
     except (service.ExperienceError, RecruitmentError) as error:
@@ -218,9 +215,6 @@ async def supplemental_resume(
 
     try:
         application = await service.owned_application(db, institution(principal), application_id)
-        require_assigned_review_access(
-            application, actor_user_id=principal.user.id, actor_role=principal.role
-        )
     except (service.ExperienceError, RecruitmentError) as error:
         raise failure(error) from error
     version = await db.scalar(
@@ -260,9 +254,6 @@ async def review_detail(
 ) -> ApplicationResponse:
     try:
         application = await service.owned_application(db, institution(principal), application_id)
-        require_assigned_review_access(
-            application, actor_user_id=principal.user.id, actor_role=principal.role
-        )
         return await response_for_application(db, application)
     except (service.ExperienceError, RecruitmentError) as error:
         raise failure(error) from error

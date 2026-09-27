@@ -1,4 +1,5 @@
 import math
+import re
 from dataclasses import dataclass
 
 
@@ -9,6 +10,33 @@ class MatchResult:
     skill_coverage: float
     project_evidence: float
     version: str
+
+
+def profile_compatibility(
+    *, student_skills: set[str], resume_skills: set[str],
+    target_roles: list[str], role_skills: list[str], role_title: str,
+) -> int | None:
+    """A bounded, explainable dashboard estimate; never an eligibility decision."""
+    required = {skill.strip().casefold() for skill in role_skills if skill.strip()}
+    if not required:
+        return None
+    evidence = {
+        skill.strip().casefold()
+        for skill in student_skills | resume_skills
+        if skill.strip()
+    }
+    skill_coverage = len(required & evidence) / len(required)
+    title_tokens = set(re.findall(r"[a-z0-9]+", role_title.casefold()))
+    target_overlap = max(
+        (
+            len(title_tokens & set(re.findall(r"[a-z0-9]+", target.casefold())))
+            / len(title_tokens)
+            for target in target_roles
+            if title_tokens
+        ),
+        default=0.0,
+    )
+    return round(100 * (0.8 * skill_coverage + 0.2 * target_overlap))
 
 
 def cosine(left: list[float], right: list[float]) -> float:

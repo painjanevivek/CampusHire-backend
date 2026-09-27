@@ -16,7 +16,7 @@ def test_required_readiness_is_separate_from_recommendations() -> None:
     )
     score, complete, checklist = readiness(profile)
     assert complete is True
-    assert score == 50
+    assert score == 60
     assert any(not item.required and not item.complete for item in checklist)
 
 

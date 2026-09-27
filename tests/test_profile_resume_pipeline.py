@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 import pymupdf
 import pytest
@@ -379,6 +380,39 @@ async def test_generated_versions_are_immutable_and_ownership_scoped(tmp_path: P
 
 
 @pytest.mark.asyncio
+async def test_failed_generated_version_can_be_deleted_without_a_pdf(tmp_path: Path) -> None:
+    settings = Settings(
+        app_env="test",
+        database_url="sqlite+aiosqlite://",
+        resume_storage_path=str(tmp_path / "resumes"),
+        resume_parser_backend="subprocess",
+    )
+    store = LocalObjectStore(settings.resume_storage_path)
+    async with TestSession() as db:
+        owner = await create_user(db, "failed-pdf-owner@example.edu")
+        generated = await create_generated_version(
+            db,
+            user_id=owner.id,
+            institution_id=None,
+            content=resume_content(),
+            settings=settings,
+        )
+        generated.status = ResumeStatus.FAILED.value
+        assert generated.processing_job is not None
+        generated.processing_job.status = "failed"
+        await db.commit()
+
+        await delete_owned_version(
+            db,
+            user_id=owner.id,
+            version_id=generated.id,
+            store=store,
+        )
+
+        assert await db.get(ResumeVersion, generated.id) is None
+
+
+@pytest.mark.asyncio
 async def test_scanner_outage_retries_without_losing_the_authoritative_job(
     tmp_path: Path,
 ) -> None:
@@ -506,7 +540,26 @@ async def test_generate_endpoint_returns_accepted_job_and_readiness_error(
     assert generated.status_code == 202
     assert generated.json()["status"] == ResumeStatus.QUEUED.value
     assert generated.json()["processing_stage"] == "generating"
-    assert generated.json()["generator_version"] == "campushire-modern-v1"
+    assert generated.json()["generator_version"] == "campushire-modern-v2"
+
+    repeated = client.post("/api/v1/resumes/generate", headers=headers, json=payload)
+    assert repeated.status_code == 202
+    assert repeated.json()["id"] == generated.json()["id"]
+
+    async with TestSession() as db:
+        failed = await db.get(ResumeVersion, UUID(generated.json()["id"]))
+        assert failed is not None
+        failed.status = ResumeStatus.FAILED.value
+        await db.commit()
+
+    replacement = client.post("/api/v1/resumes/generate", headers=headers, json=payload)
+    assert replacement.status_code == 202
+    assert replacement.json()["id"] != generated.json()["id"]
+
+    deleted = client.delete(f"/api/v1/resumes/{generated.json()['id']}", headers=headers)
+    assert deleted.status_code == 204
+    async with TestSession() as db:
+        assert await db.get(ResumeVersion, UUID(generated.json()["id"])) is None
 
     blocked = client.post(
         "/api/v1/resumes/generate",

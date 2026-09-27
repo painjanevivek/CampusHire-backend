@@ -86,9 +86,16 @@ class RoleCreate(BaseModel):
     employment_type: Literal["full-time", "internship", "contract"]
     location: str = Field(min_length=2, max_length=160)
     work_mode: Literal["on-site", "hybrid", "remote"]
+    is_paid: bool | None = None
     salary_display: str | None = Field(default=None, max_length=120)
     skills: list[str] = Field(default_factory=list, max_length=30)
     requirements: list[str] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode="after")
+    def unpaid_roles_have_no_stipend(self) -> "RoleCreate":
+        if self.is_paid is False and self.salary_display:
+            raise ValueError("Unpaid roles cannot have a stipend")
+        return self
 
     @field_validator("skills", "requirements")
     @classmethod
@@ -105,9 +112,16 @@ class RoleUpdate(BaseModel):
     employment_type: Literal["full-time", "internship", "contract"] | None = None
     location: str | None = Field(default=None, min_length=2, max_length=160)
     work_mode: Literal["on-site", "hybrid", "remote"] | None = None
+    is_paid: bool | None = None
     salary_display: str | None = Field(default=None, max_length=120)
     skills: list[str] | None = Field(default=None, max_length=30)
     requirements: list[str] | None = Field(default=None, max_length=30)
+
+    @model_validator(mode="after")
+    def unpaid_roles_have_no_stipend(self) -> "RoleUpdate":
+        if self.is_paid is False and self.salary_display:
+            raise ValueError("Unpaid roles cannot have a stipend")
+        return self
 
 
 class RoleResponse(BaseModel):
@@ -120,6 +134,7 @@ class RoleResponse(BaseModel):
     employment_type: str
     location: str
     work_mode: str
+    is_paid: bool | None
     salary_display: str | None
     skills: list[str]
     requirements: list[str]
@@ -197,7 +212,10 @@ class OpportunityPage(BaseModel):
     page_size: int
     total: int
     empty_reason: (
-        Literal["no_published_drive", "filters_exclude_results", "profile_incomplete"] | None
+        Literal[
+            "no_published_drive", "filters_exclude_results", "profile_incomplete",
+            "no_matching_skills",
+        ] | None
     ) = None
 
 
@@ -216,6 +234,7 @@ class StatusEventResponse(BaseModel):
     from_status: str | None
     to_status: str
     actor_user_id: UUID
+    actor_display_name: str | None = None
     reason: str | None
     created_at: datetime
 
@@ -401,3 +420,17 @@ class ApplicationOverrideCreate(BaseModel):
     status: Literal["shortlisted", "rejected"]
     reason: str = Field(min_length=10, max_length=500)
     policy_reference: str = Field(min_length=3, max_length=300)
+
+
+class ApplicationDecisionCreate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    status: Literal["offered", "rejected"]
+    reason: str = Field(min_length=10, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def meaningful_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("A reason of at least 10 non-whitespace characters is required")
+        return normalized

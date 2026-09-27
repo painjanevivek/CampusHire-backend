@@ -14,7 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.ai.providers.base import StructuredGenerationResult
-from app.ai.workflows.campus_agent import _validate_artifact
+from app.ai.workflows.campus_agent import (
+    _check_artifact,
+    _provider_response_schema,
+    _validate_artifact,
+)
 from app.core.config import Settings
 from app.models import Base
 from app.models.agentic import (
@@ -26,13 +30,17 @@ from app.models.agentic import (
     SourceVersion,
 )
 from app.models.auth import Institution, User, UserRole
+from app.models.profile import StudentProfile
 from app.models.recruitment import Company, PlacementDrive, PlacementRole, PublicationStatus
 from app.modules.agentic.evaluation import EvaluationAttempt, score_attempts
 from app.modules.agentic.schemas import (
     ArtifactApply,
     ArtifactDecision,
     ArtifactEdit,
+    DrivePreparationContent,
+    PlannerDecision,
     PracticeConsentUpdate,
+    PreparationPlanContent,
     RunResume,
     StudentRunCreate,
     TnpRunCreate,
@@ -108,6 +116,14 @@ async def seed_recruitment_context(
     company = Company(institution_id=institution.id, name=f"{code} Labs")
     db.add_all((user, company))
     await db.flush()
+    if role == UserRole.STUDENT.value:
+        db.add(
+            StudentProfile(
+                user_id=user.id,
+                institution_id=institution.id,
+                skills=[{"name": "Python"}],
+            )
+        )
     drive = PlacementDrive(
         institution_id=institution.id,
         company_id=company.id,
@@ -142,6 +158,7 @@ async def seed_recruitment_context(
 
 def agent_settings() -> Settings:
     return Settings(
+        interview_practice_pilot=False,
         gemini_generation_model="test-model",
         agent_workflow_version="campus-agent-test-v2",
         agent_source_projection_version="source-projection-test-v2",
@@ -149,6 +166,56 @@ def agent_settings() -> Settings:
         ai_input_cost_cents_per_million_tokens=1,
         ai_output_cost_cents_per_million_tokens=1,
     )
+
+
+def test_agent_model_can_be_selected_without_changing_interview_practice_model() -> None:
+    settings = Settings(
+        gemini_generation_model="gemini-3.8-flash",
+        gemini_agent_model="gemini-3.5-flash-lite",
+    )
+    assert settings.agent_generation_model == "gemini-3.5-flash-lite"
+    assert settings.gemini_generation_model == "gemini-3.8-flash"
+
+
+def test_agent_provider_schema_preserves_structure_and_nullable_fields() -> None:
+    for model in (PlannerDecision, PreparationPlanContent, DrivePreparationContent):
+        schema = _provider_response_schema(model)
+        assert schema["type"] == "object"
+        assert schema["required"] == list(schema["properties"])
+        encoded = json.dumps(schema)
+        assert "$ref" not in encoded
+        assert "maxLength" not in encoded
+        assert "maxItems" not in encoded
+    planner = _provider_response_schema(PlannerDecision)
+    assert planner["properties"]["clarification_question"]["type"] == ["string", "null"]
+    drive = _provider_response_schema(DrivePreparationContent)
+    assert drive["properties"]["blockers"]["items"]["properties"]["owner_role"]["enum"] == [
+        "recruiter", "tnp", "student", "institution"
+    ]
+
+
+def test_invalid_agent_draft_is_reported_for_bounded_correction() -> None:
+    candidate = {
+        "announcement_draft": "A synthetic announcement for an existing placement drive.",
+        "blockers": [
+            {
+                "key": "review",
+                "description": "Review needed",
+                "owner_role": "Recruiter",
+                "next_action": "Review the draft",
+            }
+        ],
+    }
+    artifact, errors = _check_artifact(
+        DrivePreparationContent,
+        SimpleNamespace(workflow="prepare_drive"),  # type: ignore[arg-type]
+        candidate,
+        [],
+        {},
+    )
+    assert artifact == candidate
+    assert any("owner_role" in error for error in errors)
+    assert all("input_value" not in error for error in errors)
 
 
 def test_drive_run_requires_an_authorized_brief_or_source() -> None:
@@ -208,7 +275,10 @@ def test_preparation_validation_preserves_deterministic_eligibility() -> None:
     ]
     artifact = {
         "title": "Prepare for Python role",
-        "summary": "A focused preparation plan for the published opportunity.",
+        "summary": (
+            "A focused preparation plan for the published opportunity. "
+            "The tyrueidfujghbvjncm requirement is unclear."
+        ),
         "eligibility": {
             "status": "eligible",
             "rule_version": "1",
@@ -237,6 +307,7 @@ def test_preparation_validation_preserves_deterministic_eligibility() -> None:
         "limitations": [],
     }
     context = {
+        "available_minutes_per_week": 300,
         "eligibility": {
             "status": "ineligible",
             "rule_version": "1",
@@ -245,6 +316,9 @@ def test_preparation_validation_preserves_deterministic_eligibility() -> None:
     }
     errors = _validate_artifact(run, artifact, evidence, context)  # type: ignore[arg-type]
     assert "Eligibility status must match the deterministic result." in errors
+    assert "The plan needs at least two distinct preparation priorities." in errors
+    assert "The plan needs more concrete preparation activities." in errors
+    assert any("Remove garbled role text" in error for error in errors)
 
 
 @pytest.mark.asyncio
@@ -494,7 +568,12 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                     },
                     {
                         "title": "Prepare for the Python Engineer role",
-                        "summary": "A bounded plan based on the published Python requirement.",
+                        "summary": (
+                            "The published Python Engineer role calls for Python services. "
+                            "Start by building a small API, then review its reliability and "
+                            "practice explaining the implementation. Missing resume details "
+                            "remain unknown rather than being treated as missing ability."
+                        ),
                         "eligibility": {
                             "status": "unavailable",
                             "rule_version": None,
@@ -503,25 +582,70 @@ async def test_student_run_recovers_interrupts_resumes_and_accepts_with_evidence
                         },
                         "priorities": [
                             {
-                                "skill": "Python",
+                                "skill": "Python API foundations",
                                 "evidence_state": "unknown",
-                                "rationale": "Python is a published role skill.",
+                                "rationale": (
+                                    "Python is a published role skill, so a small API gives the "
+                                    "student a concrete way to practice the role's service work."
+                                ),
                                 "source_ids": [f"role:{role.id}"],
                                 "activities": [
                                     {
-                                        "title": "Python API exercise",
+                                        "title": "Sketch the API",
                                         "objective": (
-                                            "Complete one role-focused Python API exercise."
+                                            "Outline two Python API endpoints, list their inputs "
+                                            "and responses, then check that each has a purpose."
                                         ),
                                         "minutes": 60,
                                         "due_offset_days": 2,
                                         "resource_source_ids": [],
-                                    }
+                                    },
+                                    {
+                                        "title": "Build the endpoints",
+                                        "objective": (
+                                            "Implement the Python API endpoints, try valid and "
+                                            "invalid inputs, and record the responses as evidence."
+                                        ),
+                                        "minutes": 90,
+                                        "due_offset_days": 4,
+                                        "resource_source_ids": [],
+                                    },
                                 ],
-                            }
+                            },
+                            {
+                                "skill": "Python service review",
+                                "evidence_state": "unknown",
+                                "rationale": (
+                                    "The published role describes reliable Python services, "
+                                    "making review and explanation useful preparation tasks."
+                                ),
+                                "source_ids": [f"role:{role.id}"],
+                                "activities": [
+                                    {
+                                        "title": "Review failure cases",
+                                        "objective": (
+                                            "Add checks for invalid Python API requests, run "
+                                            "each case, and confirm the service responds clearly."
+                                        ),
+                                        "minutes": 75,
+                                        "due_offset_days": 6,
+                                        "resource_source_ids": [],
+                                    },
+                                    {
+                                        "title": "Explain the implementation",
+                                        "objective": (
+                                            "Write a short Python service walkthrough, explain "
+                                            "one design choice, and review it against the code."
+                                        ),
+                                        "minutes": 75,
+                                        "due_offset_days": 8,
+                                        "resource_source_ids": [],
+                                    },
+                                ],
+                            },
                         ],
                         "unresolved_questions": [],
-                        "total_minutes": 60,
+                        "total_minutes": 300,
                         "limitations": [
                             "No proficiency was inferred from missing resume evidence."
                         ],

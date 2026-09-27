@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.providers.base import StructuredGenerationResult, StructuredGenerator
+from app.ai.providers.schema import provider_response_schema as _provider_response_schema
 from app.core.config import Settings
 from app.models.agentic import (
     AgentRun,
@@ -119,9 +120,14 @@ async def process_agent_run(
     except AgentBudgetExhausted:
         if await _claim_is_current(db, run, lease_owner, lock=True):
             await _fail(db, run, "run_budget_exhausted", "The run reached its configured limit.")
-    except (AgentValidationFailure, ValidationError) as error:
+    except AgentValidationFailure as error:
         if await _claim_is_current(db, run, lease_owner, lock=True):
             await _fail(db, run, str(error), "The proposal could not be validated safely.")
+    except ValidationError:
+        if await _claim_is_current(db, run, lease_owner, lock=True):
+            await _fail(
+                db, run, "artifact_validation_failed", "The proposal could not be validated safely."
+            )
     except Exception:
         if await _claim_is_current(db, run, lease_owner, lock=True):
             await _fail(db, run, "agent_execution_failed", "The task could not be completed.")
@@ -213,10 +219,15 @@ def _build_graph(
             settings,
             prompt=prompt,
             schema=schema,
-            prompt_version=f"{run.workflow}-v1",
+            prompt_version=(
+                "prepare_opportunity-v2"
+                if run.workflow == "prepare_opportunity"
+                else f"{run.workflow}-v1"
+            ),
         )
-        artifact = schema.model_validate(result.content).model_dump(mode="json")
-        errors = _validate_artifact(run, artifact, state["evidence"], state["context"])
+        artifact, errors = _check_artifact(
+            schema, run, result.content, state["evidence"], state["context"]
+        )
         if errors:
             if run.correction_attempts >= settings.agent_max_correction_attempts:
                 raise AgentValidationFailure("artifact_validation_failed")
@@ -230,10 +241,15 @@ def _build_graph(
                 settings,
                 prompt=correction_prompt,
                 schema=schema,
-                prompt_version=f"{run.workflow}-repair-v1",
+                prompt_version=(
+                    "prepare_opportunity-repair-v2"
+                    if run.workflow == "prepare_opportunity"
+                    else f"{run.workflow}-repair-v1"
+                ),
             )
-            artifact = schema.model_validate(corrected.content).model_dump(mode="json")
-            errors = _validate_artifact(run, artifact, state["evidence"], state["context"])
+            artifact, errors = _check_artifact(
+                schema, run, corrected.content, state["evidence"], state["context"]
+            )
             if errors:
                 raise AgentValidationFailure("artifact_validation_failed_after_correction")
         return {"artifact": artifact, "validation_errors": errors}
@@ -244,6 +260,24 @@ def _build_graph(
     graph.add_edge("decide", "draft")
     graph.add_edge("draft", END)
     return graph.compile()
+
+
+def _check_artifact(
+    schema: type[BaseModel],
+    run: AgentRun,
+    candidate: dict[str, Any],
+    evidence: list[dict[str, Any]],
+    context: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    try:
+        artifact = schema.model_validate(candidate).model_dump(mode="json")
+    except ValidationError as error:
+        errors = [
+            f"{'.'.join(str(part) for part in item['loc'])}: {item['msg']}"
+            for item in error.errors(include_input=False, include_url=False)
+        ]
+        return candidate, errors
+    return artifact, _validate_artifact(run, artifact, evidence, context)
 
 
 async def _collect_context(
@@ -500,7 +534,7 @@ async def _model_call(
         institution_id=run.institution_id,
         attempt=attempt,
         provider="gemini",
-        model=settings.gemini_generation_model or "unconfigured",
+        model=settings.agent_generation_model or "unconfigured",
         prompt_version=prompt_version,
         status="dispatched",
         created_at=datetime.now(UTC),
@@ -511,7 +545,7 @@ async def _model_call(
     try:
         result = await to_thread.run_sync(
             lambda: generator.generate_structured(
-                prompt=prompt, response_schema=schema.model_json_schema()
+                prompt=prompt, response_schema=_provider_response_schema(schema)
             )
         )
     except Exception as error:
@@ -580,11 +614,19 @@ def _draft_prompt(
     )
     if run.workflow == "prepare_opportunity":
         instructions = (
-            "Create a realistic plan within the weekly time and target date. Copy the "
+            "Create a detailed, student-friendly preparation plan within the weekly time and "
+            "target date. For 120 or more available minutes, use at least two distinct priorities "
+            "and four activities in total; for less time, use at least two activities. Make the "
+            "summary explain the role connection, what is known versus unknown, and the first "
+            "useful action. For each priority, explain why it matters using cited evidence. Each "
+            "activity objective must give a concrete deliverable, how to work on it, and how the "
+            "student can check completion. Order activities from foundations to practice, with "
+            "realistic durations and due offsets. Describe interview or assessment practice as "
+            "preparation, never as a claimed employer requirement without role evidence. Do not "
+            "repeat garbled or meaningless role text as a student-facing question. Copy the "
             "deterministic eligibility status and missing evidence exactly. Set absent skill "
             "evidence to unknown, never incapable. Resource IDs may only reference approved "
-            "source records. total_minutes "
-            "must equal the sum of activity minutes."
+            "source records. total_minutes must equal the sum of activity minutes."
         )
     else:
         instructions = (
@@ -620,6 +662,26 @@ def _validate_artifact(
     by_id = {item["source_id"]: item for item in evidence}
     if run.workflow == "prepare_opportunity":
         plan = PreparationPlanContent.model_validate(artifact)
+        student_facing_text = [
+            plan.title,
+            plan.summary,
+            *plan.unresolved_questions,
+            *(
+                text
+                for priority in plan.priorities
+                for text in (
+                    priority.skill,
+                    priority.rationale,
+                    *(activity.title for activity in priority.activities),
+                    *(activity.objective for activity in priority.activities),
+                )
+            ),
+        ]
+        if any(_contains_garbled_word(text) for text in student_facing_text):
+            errors.append(
+                "Remove garbled role text from student-facing wording; describe the uncertainty "
+                "without repeating the unreadable token."
+            )
         expected = context["eligibility"]
         if plan.eligibility.status != expected["status"]:
             errors.append("Eligibility status must match the deterministic result.")
@@ -632,7 +694,17 @@ def _validate_artifact(
         )
         if total != plan.total_minutes:
             errors.append("total_minutes must equal the sum of activity minutes.")
+        available_minutes = int(context["available_minutes_per_week"])
+        activity_count = sum(len(priority.activities) for priority in plan.priorities)
+        if available_minutes >= 120 and len(plan.priorities) < 2:
+            errors.append("The plan needs at least two distinct preparation priorities.")
+        if activity_count < (4 if available_minutes >= 120 else 2):
+            errors.append("The plan needs more concrete preparation activities.")
+        if len(plan.summary.strip()) < 120:
+            errors.append("The summary needs to explain the role connection and first action.")
         for priority in plan.priorities:
+            if len(priority.rationale.strip()) < 60:
+                errors.append(f"Priority {priority.skill} needs a fuller evidence-based rationale.")
             if any(source_id not in by_id for source_id in priority.source_ids):
                 errors.append(f"Priority {priority.skill} has an unavailable citation.")
             if not _supported(
@@ -646,6 +718,11 @@ def _validate_artifact(
                 for source_id in priority.source_ids
             ):
                 errors.append(f"Recorded skill {priority.skill} lacks student evidence.")
+            for activity in priority.activities:
+                if len(activity.objective.strip()) < 60:
+                    errors.append(
+                        f"Activity {activity.title} needs a concrete method and completion check."
+                    )
     else:
         drive_artifact = DrivePreparationContent.model_validate(artifact)
         for proposal in drive_artifact.field_proposals:
@@ -677,6 +754,14 @@ def _supported(text: str, source_ids: list[str], by_id: dict[str, dict[str, Any]
         "practice", "prepare", "improve", "learn", "build", "review",
     }
     return bool(meaningful & source_tokens)
+
+
+def _contains_garbled_word(text: str) -> bool:
+    """Catch long consonant runs typical of corrupted role text without judging skill names."""
+    return any(
+        re.search(r"[bcdfghjklmnpqrstvwxyz]{6,}", word, re.IGNORECASE)
+        for word in re.findall(r"[A-Za-z]{14,}", text)
+    )
 
 
 async def _store_artifact(

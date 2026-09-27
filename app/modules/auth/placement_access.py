@@ -49,7 +49,11 @@ def current_academic_year_start(
     except (ZoneInfoNotFoundError, ValueError):
         return None
     local_now = (now or datetime.now(UTC)).astimezone(timezone)
-    return local_now.year if local_now.month >= institution.academic_year_start_month else local_now.year - 1
+    return (
+        local_now.year
+        if local_now.month >= institution.academic_year_start_month
+        else local_now.year - 1
+    )
 
 
 def derive_placement_access(
@@ -75,13 +79,11 @@ def derive_placement_access(
         )
     study_year = academic_year_start - admission_year + 1
     if study_year < 1:
-        return PlacementAccessCapability(False, study_year, academic_year_start, "future_admission_year")
+        return PlacementAccessCapability(
+            False, study_year, academic_year_start, "future_admission_year"
+        )
     if study_year > STANDARD_PROGRAM_DURATION_YEARS:
         return PlacementAccessCapability(False, study_year, academic_year_start, "program_complete")
-    if profile.prn_verified_at is None:
-        return PlacementAccessCapability(
-            False, study_year, academic_year_start, "student_prn_verification_required"
-        )
     return PlacementAccessCapability(
         study_year in PLACEMENT_ACCESS_STUDY_YEARS,
         study_year,

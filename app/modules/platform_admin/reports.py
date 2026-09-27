@@ -9,7 +9,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
-from app.models.auth import Institution, User
+from app.models.auth import Institution, InstitutionMembership, User
 from app.models.profile import StudentProfile
 from app.models.recruitment import Application, Company, PlacementDrive, PlacementRole
 from app.modules.platform_admin.schemas import (
@@ -20,6 +20,7 @@ from app.modules.platform_admin.schemas import (
     PlatformDriveGroupPage,
     PlatformDriveInstance,
     PlatformDriveInstitutionBreakdown,
+    PlatformReportSummary,
 )
 
 
@@ -28,7 +29,7 @@ def _drive_key(company: str, title: str, year: int) -> tuple[str, str, int]:
 
 
 async def _drive_rows(
-    db: AsyncSession, *, active_only: bool
+    db: AsyncSession, *, active_only: bool, institution_id: UUID | None = None
 ) -> list[tuple[PlacementDrive, str, str]]:
     statement = (
         select(PlacementDrive, Company.name, Institution.name)
@@ -41,6 +42,8 @@ async def _drive_rows(
         )
         .join(Institution, Institution.id == PlacementDrive.institution_id)
     )
+    if institution_id is not None:
+        statement = statement.where(PlacementDrive.institution_id == institution_id)
     if active_only:
         now = datetime.now(UTC)
         statement = statement.where(
@@ -63,7 +66,7 @@ async def list_drive_groups(
     page: int,
     page_size: int,
 ) -> PlatformDriveGroupPage:
-    rows = await _drive_rows(db, active_only=active_only)
+    rows = await _drive_rows(db, active_only=active_only, institution_id=institution_id)
     groups: dict[tuple[str, str, int], list[tuple[PlacementDrive, str, str]]] = defaultdict(list)
     needle = (query or "").strip().casefold()
     for drive, company, institution in rows:
@@ -269,8 +272,12 @@ async def list_drive_applicants(
 async def get_application_evidence(
     db: AsyncSession,
     application_id: UUID,
+    institution_id: UUID | None = None,
 ) -> PlatformApplicationEvidence | None:
-    row = (await db.execute(_applicant_statement().where(Application.id == application_id))).first()
+    statement = _applicant_statement().where(Application.id == application_id)
+    if institution_id is not None:
+        statement = statement.where(Application.institution_id == institution_id)
+    row = (await db.execute(statement)).first()
     if row is None:
         return None
     application = row[0]
@@ -284,4 +291,41 @@ async def get_application_evidence(
         acknowledgment_snapshot=application.acknowledgment_snapshot or {},
         disclosure_status=application.disclosure_status,
         evidence_provenance=application.evidence_provenance,
+    )
+
+
+async def institution_report_summary(
+    db: AsyncSession, institution_id: UUID
+) -> PlatformReportSummary:
+    student_count = await db.scalar(
+        select(func.count(func.distinct(InstitutionMembership.user_id))).where(
+            InstitutionMembership.institution_id == institution_id,
+            InstitutionMembership.role == "student",
+        )
+    )
+    drive_count = await db.scalar(
+        select(func.count()).select_from(PlacementDrive).where(
+            PlacementDrive.institution_id == institution_id
+        )
+    )
+    application_count = await db.scalar(
+        select(func.count()).select_from(Application).where(
+            Application.institution_id == institution_id
+        )
+    )
+    status_rows = (
+        await db.execute(
+            select(Application.status, func.count(Application.id))
+            .where(Application.institution_id == institution_id)
+            .group_by(Application.status)
+        )
+    ).all()
+    return PlatformReportSummary(
+        institution_count=1,
+        student_count=student_count or 0,
+        drive_count=drive_count or 0,
+        application_count=application_count or 0,
+        applications_by_status={status: count for status, count in status_rows},
+        generated_at=datetime.now(UTC),
+        provisional=True,
     )

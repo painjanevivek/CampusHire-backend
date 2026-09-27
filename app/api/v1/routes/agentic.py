@@ -51,9 +51,9 @@ from app.modules.agentic.sources import (
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     Database,
-    require_student_placement_access,
     require_permissions,
     require_roles,
+    require_student_placement_access,
     verify_authenticated_csrf,
 )
 from app.modules.generative.service import GenerationUnavailableError

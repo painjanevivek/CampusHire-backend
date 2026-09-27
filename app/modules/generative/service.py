@@ -10,8 +10,9 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.prompts import RESUME_CONTENT_V1
+from app.ai.prompts import RESUME_CONTENT_V2
 from app.ai.providers.base import StructuredGenerator
+from app.ai.providers.schema import provider_response_schema
 from app.core.config import get_settings
 from app.models.generative_ai import (
     AiAcceptedFieldProvenance,
@@ -195,7 +196,7 @@ def _content_claims(content: ResumeDraft) -> list[tuple[str, Any]]:
     claims: list[tuple[str, Any]] = []
     if content.professional_summary:
         claims.append(("professional_summary", content.professional_summary))
-    for field in ("education", "project_bullets", "experience_bullets", "skills"):
+    for field in ("strengths", "education", "project_bullets", "experience_bullets", "skills"):
         claims.extend(
             (f"{field}.{index}", claim) for index, claim in enumerate(getattr(content, field))
         )
@@ -344,7 +345,7 @@ async def create_resume_proposal(
     canonical = json.dumps(evidence_payload, sort_keys=True, separators=(",", ":"))
     evidence_digest = hashlib.sha256(canonical.encode()).hexdigest()
     prompt = (
-        f"{RESUME_CONTENT_V1.instructions}\n\n"
+        f"{RESUME_CONTENT_V2.instructions}\n\n"
         f"ROLE_CONTEXT={json.dumps(role_context, sort_keys=True)}\n"
         f"EVIDENCE={canonical}"
     )
@@ -355,7 +356,7 @@ async def create_resume_proposal(
         try:
             generated = await to_thread.run_sync(
                 lambda: generator.generate_structured(
-                    prompt=prompt, response_schema=ResumeDraft.model_json_schema()
+                    prompt=prompt, response_schema=provider_response_schema(ResumeDraft)
                 )
             )
             draft = ResumeDraft.model_validate(generated.content)
@@ -377,7 +378,7 @@ async def create_resume_proposal(
         evidence_digest=evidence_digest,
         provider_name=generated.provider_name,
         model_version=generated.model_version,
-        prompt_version=RESUME_CONTENT_V1.version,
+        prompt_version=RESUME_CONTENT_V2.version,
         latency_ms=generated.latency_ms,
         input_tokens=generated.input_tokens,
         output_tokens=generated.output_tokens,

@@ -28,6 +28,14 @@ require HTTPS, an allowlisted hostname, a public resolved address, no redirect, 
 Changed metadata creates a pending version for human review. Campus policy always has higher
 authority than external career information.
 
+`GEMINI_AGENT_MODEL` may select a model for these two agent workflows independently of
+`GEMINI_GENERATION_MODEL`, which remains the interview-practice model. When unset, agent runs use
+`GEMINI_GENERATION_MODEL`. Restart both the API and worker after changing model or global switches;
+the institution flag and monthly budget still gate each run.
+The agent sends a minimal structural JSON schema to Gemini for compatibility, then applies the
+complete Pydantic and evidence validation locally. A provider error remains a recorded failed
+attempt and is never silently replayed.
+
 Student runs are owner-scoped. T&P drive runs and artifacts are institution and drive scoped for
 authorized reviewers. Applying accepted fields additionally requires `recruitment.manage` and both
 artifact and drive revisions. During review, students may edit only the plan summary and T&P may

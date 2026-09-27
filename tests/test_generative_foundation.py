@@ -4,9 +4,12 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.ai.providers.schema import provider_response_schema
+from app.api.v1.routes.generative import _generator, _raise_ai_error
 from app.models import Base
 from app.models.auth import Institution, User, UserRole
 from app.models.generative_ai import AiConversation, AiGenerationProposal, AiMessage
@@ -24,7 +27,12 @@ from app.modules.copilot.service import (
     read_copilot_proposal,
     validate_copilot_draft,
 )
-from app.modules.generative.schemas import EvidenceReference, GroundedClaim, ResumeDraft
+from app.modules.generative.schemas import (
+    EvidenceReference,
+    GroundedClaim,
+    ResumeDraft,
+    ResumeProposalCreate,
+)
 from app.modules.generative.service import (
     GenerationUnavailableError,
     ProposalValidationError,
@@ -44,6 +52,18 @@ def evidence(facts: str) -> list[EvidenceReference]:
             facts=facts,
         )
     ]
+
+
+def test_resume_proposal_requires_explicit_provider_data_consent() -> None:
+    with pytest.raises(ValueError):
+        ResumeProposalCreate.model_validate({"selected_evidence_ids": ["project:1"]})
+    with pytest.raises(ValueError):
+        ResumeProposalCreate.model_validate(
+            {"selected_evidence_ids": [], "provider_data_consent": True}
+        )
+    assert ResumeProposalCreate.model_validate(
+        {"selected_evidence_ids": ["project:1"], "provider_data_consent": True}
+    ).provider_data_consent is True
 
 
 def test_every_resume_claim_requires_known_evidence() -> None:
@@ -79,6 +99,45 @@ def test_supported_claim_is_accepted() -> None:
         ]
     )
     validate_grounding(draft, records)
+
+
+def test_resume_draft_uses_a_gemini_compatible_structural_schema() -> None:
+    schema = provider_response_schema(ResumeDraft)
+    assert "$defs" not in str(schema)
+    assert "$ref" not in str(schema)
+    assert "maxLength" not in str(schema)
+    assert schema["required"] == [
+        "professional_summary",
+        "strengths",
+        "education",
+        "project_bullets",
+        "experience_bullets",
+        "skills",
+    ]
+    assert schema["properties"]["professional_summary"]["type"] == ["object", "null"]
+
+
+def test_resume_generator_uses_its_configured_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_provider(**kwargs: object) -> object:
+        calls.append(kwargs)
+        return object()
+
+    monkeypatch.setattr("app.api.v1.routes.generative.get_settings", lambda: SimpleNamespace(
+        gemini_resume_model="gemini-3.5-flash-lite", gemini_complex_timeout_ms=60_000,
+    ))
+    monkeypatch.setattr("app.api.v1.routes.generative.GeminiProvider", fake_provider)
+    assert _generator() is not None
+    assert calls == [{"generation_model": "gemini-3.5-flash-lite", "timeout_ms": 60_000}]
+
+
+def test_disabled_resume_studio_reports_an_actionable_error() -> None:
+    with pytest.raises(HTTPException) as captured:
+        _raise_ai_error(GenerationUnavailableError("capability_disabled"))
+    assert captured.value.status_code == 503
+    assert "not enabled" in captured.value.detail["message"]
+    assert "manual" in captured.value.detail["message"]
 
 
 def test_unrelated_qualitative_claim_is_rejected() -> None:

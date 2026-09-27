@@ -3546,6 +3546,249 @@
         }
       }
     },
+    "/api/v1/onboarding/academic-documents": {
+      "get": {
+        "tags": [
+          "student onboarding"
+        ],
+        "summary": "List Academic Documents",
+        "operationId": "list_academic_documents_api_v1_onboarding_academic_documents_get",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response List Academic Documents Api V1 Onboarding Academic Documents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding/academic-documents/{level}": {
+      "put": {
+        "tags": [
+          "student onboarding"
+        ],
+        "summary": "Upload Academic Document",
+        "operationId": "upload_academic_document_api_v1_onboarding_academic_documents__level__put",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "class_10",
+                "class_12",
+                "diploma"
+              ],
+              "type": "string",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_academic_document_api_v1_onboarding_academic_documents__level__put"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Upload Academic Document Api V1 Onboarding Academic Documents  Level  Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "student onboarding"
+        ],
+        "summary": "Download Academic Document",
+        "operationId": "download_academic_document_api_v1_onboarding_academic_documents__level__get",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "class_10",
+                "class_12",
+                "diploma"
+              ],
+              "type": "string",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "student onboarding"
+        ],
+        "summary": "Remove Academic Document",
+        "operationId": "remove_academic_document_api_v1_onboarding_academic_documents__level__delete",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "class_10",
+                "class_12",
+                "diploma"
+              ],
+              "type": "string",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tnp/onboarding": {
       "get": {
         "tags": [
@@ -6077,6 +6320,230 @@
         }
       }
     },
+    "/api/v1/platform/tnp-appeals": {
+      "get": {
+        "tags": [
+          "platform administration"
+        ],
+        "summary": "Read Platform Appeals",
+        "operationId": "read_platform_appeals_api_v1_platform_tnp_appeals_get",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TnpAppealPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tnp-appeals/{appeal_id}": {
+      "patch": {
+        "tags": [
+          "platform administration"
+        ],
+        "summary": "Update Platform Appeal",
+        "operationId": "update_platform_appeal_api_v1_platform_tnp_appeals__appeal_id__patch",
+        "parameters": [
+          {
+            "name": "appeal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Appeal Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TnpAppealStatusUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TnpAppealResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tnp/platform-appeals": {
+      "get": {
+        "tags": [
+          "T&P appeals"
+        ],
+        "summary": "Read My Appeals",
+        "operationId": "read_my_appeals_api_v1_tnp_platform_appeals_get",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TnpAppealPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "T&P appeals"
+        ],
+        "summary": "Create Appeal",
+        "operationId": "create_appeal_api_v1_tnp_platform_appeals_post",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TnpAppealCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TnpAppealResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/institutions/{institution_id}/applications/{application_id}/outcomes": {
       "get": {
         "tags": [
@@ -7827,6 +8294,75 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/StudentMessageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/student-copilot/conversations/{conversation_id}/messages-with-file": {
+      "post": {
+        "tags": [
+          "student copilot"
+        ],
+        "summary": "Send Student Message With File",
+        "operationId": "send_student_message_with_file_api_v1_ai_student_copilot_conversations__conversation_id__messages_with_file_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_send_student_message_with_file_api_v1_ai_student_copilot_conversations__conversation_id__messages_with_file_post"
               }
             }
           }
@@ -13689,6 +14225,501 @@
         }
       }
     },
+    "/api/v1/tnp/recruitment/reports/summary": {
+      "get": {
+        "tags": [
+          "placement administration"
+        ],
+        "summary": "Read Auditor Report Summary",
+        "operationId": "read_auditor_report_summary_api_v1_tnp_recruitment_reports_summary_get",
+        "parameters": [
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformReportSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tnp/recruitment/reports/drive-groups": {
+      "get": {
+        "tags": [
+          "placement administration"
+        ],
+        "summary": "Read Auditor Drive Groups",
+        "operationId": "read_auditor_drive_groups_api_v1_tnp_recruitment_reports_drive_groups_get",
+        "parameters": [
+          {
+            "name": "active_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Active Only"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformDriveGroupPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tnp/recruitment/reports/drive-applicants": {
+      "get": {
+        "tags": [
+          "placement administration"
+        ],
+        "summary": "Read Auditor Drive Applicants",
+        "operationId": "read_auditor_drive_applicants_api_v1_tnp_recruitment_reports_drive_applicants_get",
+        "parameters": [
+          {
+            "name": "company_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Company Name"
+            }
+          },
+          {
+            "name": "drive_title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Drive Title"
+            }
+          },
+          {
+            "name": "cycle_year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2100,
+              "minimum": 2000,
+              "title": "Cycle Year"
+            }
+          },
+          {
+            "name": "drive_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformDriveApplicantPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tnp/recruitment/reports/applications/{application_id}": {
+      "get": {
+        "tags": [
+          "placement administration"
+        ],
+        "summary": "Read Auditor Application Evidence",
+        "operationId": "read_auditor_application_evidence_api_v1_tnp_recruitment_reports_applications__application_id__get",
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Application Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformApplicationEvidence"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tnp/recruitment/reports/drive-applicants.csv": {
+      "get": {
+        "tags": [
+          "placement administration"
+        ],
+        "summary": "Export Auditor Drive Applicants",
+        "operationId": "export_auditor_drive_applicants_api_v1_tnp_recruitment_reports_drive_applicants_csv_get",
+        "parameters": [
+          {
+            "name": "company_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Company Name"
+            }
+          },
+          {
+            "name": "drive_title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Drive Title"
+            }
+          },
+          {
+            "name": "cycle_year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2100,
+              "minimum": 2000,
+              "title": "Cycle Year"
+            }
+          },
+          {
+            "name": "drive_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tnp/recruitment/applications/{application_id}/decision": {
+      "post": {
+        "tags": [
+          "placement administration"
+        ],
+        "summary": "Decide Application",
+        "operationId": "decide_application_api_v1_tnp_recruitment_applications__application_id__decision_post",
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Application Id"
+            }
+          },
+          {
+            "name": "campushire_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campushire Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationDecisionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tnp/recruitment/applications/{application_id}/override": {
       "post": {
         "tags": [
@@ -17352,6 +18383,36 @@
         ],
         "title": "ApplicationAppealResponse"
       },
+      "ApplicationDecisionCreate": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "offered",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "status",
+          "reason"
+        ],
+        "title": "ApplicationDecisionCreate"
+      },
       "ApplicationDisclosureResponse": {
         "properties": {
           "application_id": {
@@ -18540,6 +19601,40 @@
           "file"
         ],
         "title": "Body_preview_roster_import_api_v1_institutions__institution_id__roster_imports_preview_post"
+      },
+      "Body_send_student_message_with_file_api_v1_ai_student_copilot_conversations__conversation_id__messages_with_file_post": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Message"
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "file"
+        ],
+        "title": "Body_send_student_message_with_file_api_v1_ai_student_copilot_conversations__conversation_id__messages_with_file_post"
+      },
+      "Body_upload_academic_document_api_v1_onboarding_academic_documents__level__put": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_academic_document_api_v1_onboarding_academic_documents__level__put"
       },
       "Body_upload_photo_api_v1_profile_photo_put": {
         "properties": {
@@ -19774,6 +20869,10 @@
             "type": "string",
             "title": "Company"
           },
+          "drive_title": {
+            "type": "string",
+            "title": "Drive Title"
+          },
           "role": {
             "type": "string",
             "title": "Role"
@@ -19797,6 +20896,32 @@
             ],
             "title": "Match"
           },
+          "match_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "semantic",
+                  "profile"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Basis"
+          },
+          "application_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Status"
+          },
           "href": {
             "type": "string",
             "title": "Href"
@@ -19806,6 +20931,7 @@
         "required": [
           "id",
           "company",
+          "drive_title",
           "role",
           "location",
           "eligibility",
@@ -22930,6 +24056,17 @@
             "type": "string",
             "title": "Content"
           },
+          "attachment_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Name"
+          },
           "citations": {
             "items": {
               "$ref": "#/components/schemas/Citation"
@@ -23616,7 +24753,8 @@
                 "enum": [
                   "no_published_drive",
                   "filters_exclude_results",
-                  "profile_incomplete"
+                  "profile_incomplete",
+                  "no_matching_skills"
                 ]
               },
               {
@@ -23674,6 +24812,17 @@
           "work_mode": {
             "type": "string",
             "title": "Work Mode"
+          },
+          "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Paid"
           },
           "salary_display": {
             "anyOf": [
@@ -23768,6 +24917,7 @@
           "employment_type",
           "location",
           "work_mode",
+          "is_paid",
           "salary_display",
           "skills",
           "requirements",
@@ -27053,6 +28203,17 @@
             "type": "string",
             "title": "Work Mode"
           },
+          "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Paid"
+          },
           "salary_display": {
             "anyOf": [
               {
@@ -27101,6 +28262,7 @@
           "description",
           "location",
           "work_mode",
+          "is_paid",
           "salary_display",
           "requirements",
           "rules",
@@ -27431,6 +28593,16 @@
             "title": "Summary",
             "default": ""
           },
+          "strengths": {
+            "items": {
+              "type": "string",
+              "maxLength": 500,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Strengths"
+          },
           "skills": {
             "items": {
               "type": "string",
@@ -27609,6 +28781,7 @@
             "items": {
               "type": "string",
               "enum": [
+                "strengths",
                 "experience",
                 "projects",
                 "education",
@@ -27622,7 +28795,7 @@
               ]
             },
             "type": "array",
-            "maxItems": 10,
+            "maxItems": 11,
             "title": "Section Order"
           }
         },
@@ -27644,6 +28817,14 @@
                 "type": "null"
               }
             ]
+          },
+          "strengths": {
+            "items": {
+              "$ref": "#/components/schemas/GroundedClaim"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Strengths"
           },
           "education": {
             "items": {
@@ -28154,6 +29335,7 @@
             },
             "type": "array",
             "maxItems": 100,
+            "minItems": 1,
             "title": "Selected Evidence Ids"
           },
           "purpose_role_id": {
@@ -28167,9 +29349,18 @@
               }
             ],
             "title": "Purpose Role Id"
+          },
+          "provider_data_consent": {
+            "type": "boolean",
+            "const": true,
+            "title": "Provider Data Consent"
           }
         },
         "type": "object",
+        "required": [
+          "selected_evidence_ids",
+          "provider_data_consent"
+        ],
         "title": "ResumeProposalCreate"
       },
       "ResumeReadinessResponse": {
@@ -28501,6 +29692,23 @@
             "type": "string",
             "title": "Reason"
           },
+          "match_basis": {
+            "type": "string",
+            "enum": [
+              "target_role",
+              "self_selected",
+              "none"
+            ],
+            "title": "Match Basis",
+            "default": "none"
+          },
+          "target_roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Target Roles"
+          },
           "guidance_provider_status": {
             "type": "string",
             "enum": [
@@ -28525,6 +29733,24 @@
           "templates"
         ],
         "title": "RoadmapAvailabilityResponse"
+      },
+      "RoadmapMilestonePreview": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "completion": {
+            "type": "string",
+            "title": "Completion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "completion"
+        ],
+        "title": "RoadmapMilestonePreview"
       },
       "RoadmapNodeResponse": {
         "properties": {
@@ -28560,6 +29786,30 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Evidence"
+          },
+          "why": {
+            "type": "string",
+            "title": "Why",
+            "default": ""
+          },
+          "practice": {
+            "type": "string",
+            "title": "Practice",
+            "default": ""
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/RoadmapTaskResponse"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "recorded_context": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recorded Context"
           }
         },
         "type": "object",
@@ -28677,6 +29927,24 @@
         ],
         "title": "RoadmapSelection"
       },
+      "RoadmapTaskResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "detail"
+        ],
+        "title": "RoadmapTaskResponse"
+      },
       "RoadmapTemplateResponse": {
         "properties": {
           "id": {
@@ -28703,6 +29971,13 @@
           "node_count": {
             "type": "integer",
             "title": "Node Count"
+          },
+          "milestones": {
+            "items": {
+              "$ref": "#/components/schemas/RoadmapMilestonePreview"
+            },
+            "type": "array",
+            "title": "Milestones"
           }
         },
         "type": "object",
@@ -28753,6 +30028,17 @@
               "remote"
             ],
             "title": "Work Mode"
+          },
+          "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Paid"
           },
           "salary_display": {
             "anyOf": [
@@ -28833,6 +30119,17 @@
             "type": "string",
             "title": "Work Mode"
           },
+          "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Paid"
+          },
           "salary_display": {
             "anyOf": [
               {
@@ -28896,6 +30193,7 @@
           "employment_type",
           "location",
           "work_mode",
+          "is_paid",
           "salary_display",
           "skills",
           "requirements",
@@ -28977,6 +30275,17 @@
               }
             ],
             "title": "Work Mode"
+          },
+          "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Paid"
           },
           "salary_display": {
             "anyOf": [
@@ -30410,6 +31719,17 @@
             "format": "uuid",
             "title": "Actor User Id"
           },
+          "actor_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Display Name"
+          },
           "reason": {
             "anyOf": [
               {
@@ -30506,6 +31826,7 @@
           "intent": {
             "type": "string",
             "enum": [
+              "ask_campushire",
               "explain_eligibility",
               "explain_role_match",
               "interview_practice",
@@ -31086,6 +32407,116 @@
           "privacy_version"
         ],
         "title": "TermsAcceptanceRequest"
+      },
+      "TnpAppealCreate": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 4,
+            "title": "Subject"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 10,
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "description"
+        ],
+        "title": "TnpAppealCreate"
+      },
+      "TnpAppealPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TnpAppealResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "TnpAppealPage"
+      },
+      "TnpAppealResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "submitted_by": {
+            "type": "string",
+            "title": "Submitted By"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "institution_name",
+          "submitted_by",
+          "subject",
+          "description",
+          "status",
+          "created_at",
+          "resolved_at"
+        ],
+        "title": "TnpAppealResponse"
+      },
+      "TnpAppealStatusUpdate": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "pattern": "^resolved$",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "TnpAppealStatusUpdate"
       },
       "TnpMessageCreate": {
         "properties": {

@@ -32,6 +32,7 @@ SkillCategory = Literal[
     "Other",
 ]
 ResumeSection = Literal[
+    "strengths",
     "experience",
     "projects",
     "education",
@@ -47,6 +48,7 @@ ResumeSection = Literal[
 
 def _default_section_order() -> list[ResumeSection]:
     return [
+        "strengths",
         "experience",
         "projects",
         "education",
@@ -104,6 +106,7 @@ class ResumeContent(BaseModel):
     linkedin_url: str | None = Field(default=None, max_length=500)
     portfolio_url: str | None = Field(default=None, max_length=500)
     summary: str = Field(default="", max_length=900)
+    strengths: list[AchievementText] = Field(default_factory=list, max_length=12)
     skills: list[SkillText] = Field(default_factory=list, max_length=40)
     skill_groups: list[SkillGroup] = Field(default_factory=list, max_length=12)
     projects: list[ResumeEntry | ProjectText] = Field(default_factory=list, max_length=10)
@@ -118,7 +121,7 @@ class ResumeContent(BaseModel):
     extracurricular: list[ResumeEntry | CredentialText] = Field(default_factory=list, max_length=10)
     section_order: list[ResumeSection] = Field(
         default_factory=_default_section_order,
-        max_length=10,
+        max_length=11,
     )
 
     @field_validator("full_name", "email")

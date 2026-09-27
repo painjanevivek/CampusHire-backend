@@ -33,7 +33,10 @@ async def run_worker(*, once: bool = False, worker_id: str | None = None) -> Non
     agent_generator = None
     if settings.agent_runs:
         try:
-            agent_generator = GeminiProvider()
+            agent_generator = GeminiProvider(
+                generation_model=settings.agent_generation_model,
+                timeout_ms=settings.gemini_complex_timeout_ms,
+            )
         except RuntimeError:
             logger.warning("agent_generation_provider_unavailable")
     worker_identity = worker_id or f"resume-worker-{uuid4().hex[:12]}"

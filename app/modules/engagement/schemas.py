@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field, field_validator
 from app.modules.notifications.domain import safe_deep_link
 
 
+class RoadmapMilestonePreview(BaseModel):
+    title: str
+    completion: str
+
+
 class RoadmapTemplateResponse(BaseModel):
     id: UUID
     slug: str
@@ -14,6 +19,12 @@ class RoadmapTemplateResponse(BaseModel):
     version: int
     summary: str
     node_count: int
+    milestones: list[RoadmapMilestonePreview] = Field(default_factory=list)
+
+
+class RoadmapTaskResponse(BaseModel):
+    title: str
+    detail: str
 
 
 class RoadmapNodeResponse(BaseModel):
@@ -23,6 +34,10 @@ class RoadmapNodeResponse(BaseModel):
     prerequisites: list[str]
     state: Literal["completed", "next", "locked"]
     evidence: dict[str, object]
+    why: str = ""
+    practice: str = ""
+    tasks: list[RoadmapTaskResponse] = Field(default_factory=list)
+    recorded_context: list[str] = Field(default_factory=list)
 
 
 class RoadmapResponse(BaseModel):
@@ -45,6 +60,8 @@ class RoadmapAvailabilityResponse(BaseModel):
         "available", "no_target_role", "no_approved_template", "institution_restriction"
     ]
     reason: str
+    match_basis: Literal["target_role", "self_selected", "none"] = "none"
+    target_roles: list[str] = Field(default_factory=list)
     guidance_provider_status: Literal["available", "unavailable"]
     templates: list[RoadmapTemplateResponse]
 
@@ -109,10 +126,13 @@ class DashboardReadinessSummary(BaseModel):
 class DashboardOpportunity(BaseModel):
     id: UUID
     company: str
+    drive_title: str
     role: str
     location: str
     eligibility: str
     match: int | None
+    match_basis: Literal["semantic", "profile"] | None = None
+    application_status: str | None = None
     href: str
 
 

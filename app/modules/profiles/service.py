@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import Institution, User
+from app.models.onboarding import StudentCareerPreference
 from app.models.profile import StudentProfile
 from app.modules.auth.institutional_identity import (
     InstitutionalEmailError,
@@ -64,7 +65,6 @@ def readiness(profile: StudentProfile) -> tuple[int, bool, list[ReadinessItem]]:
             complete=bool(profile.external_links),
             required=False,
         ),
-        ReadinessItem(key="resume", label="Resume", complete=False, required=False),
     ]
     score = round(sum(item.complete for item in items) / len(items) * 100)
     complete = all(item.complete for item in items if item.required)
@@ -135,6 +135,10 @@ async def update_profile(
         if key in {"education", "skills"} and value is not None:
             value = [item if isinstance(item, dict) else item.model_dump() for item in value]
         setattr(profile, key, value)
+    if "target_roles" in data:
+        career = await db.get(StudentCareerPreference, profile.id)
+        if career is not None:
+            career.target_roles = profile.target_roles or []
     profile.external_links = links
     profile.readiness, profile.is_complete, _ = readiness(profile)
     profile.revision += 1

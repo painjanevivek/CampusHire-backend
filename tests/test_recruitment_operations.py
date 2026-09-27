@@ -93,6 +93,7 @@ from app.modules.recruitment.service import (
     create_rule_set,
     delete_drive,
     duplicate_drive,
+    get_opportunity,
     get_student_application,
     list_admin_applications,
     list_case_assignment_history,
@@ -106,6 +107,7 @@ from app.modules.recruitment.service import (
     resolve_application_appeal,
     response_for_application,
     save_drive_changes,
+    toggle_saved,
     transition_drive,
     update_application_status,
     update_drive,
@@ -1023,6 +1025,45 @@ async def test_closed_or_ineligible_roles_reject_new_applications() -> None:
 
 
 @pytest.mark.asyncio
+async def test_student_opportunities_follow_profile_skill_matches() -> None:
+    async with TestSession() as db:
+        institution, admin, student = await seed_people(db, "skill-visibility")
+        role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
+        profile = await db.scalar(
+            select(StudentProfile).where(StudentProfile.user_id == student.id)
+        )
+        assert profile is not None
+        profile.skills = [{"name": "Next.js", "proficiency": "strong"}]
+        role.skills = ["Frontend"]
+        await db.commit()
+
+        async def visible_count() -> int:
+            page = await list_opportunities(
+                db, institution.id, student.id, query=None, location=None,
+                work_mode=None, skill=None, saved_only=False, page=1, page_size=20,
+            )
+            return page.total
+
+        assert await visible_count() == 1
+        assert (await get_opportunity(db, institution.id, student.id, role.id)).id == role.id
+        role.skills = ["React.js", "Next.js"]
+        await db.flush()
+        assert await visible_count() == 1
+
+        role.skills = ["React.js"]
+        await db.flush()
+        assert await visible_count() == 0
+        with pytest.raises(RecruitmentError, match="opportunity_not_found"):
+            await get_opportunity(db, institution.id, student.id, role.id)
+        with pytest.raises(RecruitmentError, match="opportunity_not_found"):
+            await toggle_saved(db, institution.id, student.id, role.id)
+
+        role.skills = []
+        await db.flush()
+        assert await visible_count() == 1
+
+
+@pytest.mark.asyncio
 async def test_http_contract_enforces_roles_and_connects_publication_to_application() -> None:
     async with TestSession() as setup_db:
         institution, admin, student = await seed_people(setup_db, "api")
@@ -1038,6 +1079,8 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
         profile.academic_year = "Final year"
         profile.city = "Pune"
         profile.country_code = "IN"
+        profile.prn = "124B1B287"
+        profile.skills = [{"name": "React.js", "proficiency": "strong"}]
         profile.revision += 1
         await setup_db.commit()
         profile_revision = profile.revision
@@ -1174,6 +1217,29 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
             opportunities = await client.get("/api/v1/opportunities")
             assert opportunities.status_code == 200, opportunities.text
             assert opportunities.json()["items"][0]["eligibility"]["status"] == "eligible"
+            async with TestSession() as skills_db:
+                student_profile = await skills_db.scalar(
+                    select(StudentProfile).where(StudentProfile.user_id == student.id)
+                )
+                assert student_profile is not None
+                student_profile.skills = [{"name": "Python", "proficiency": "strong"}]
+                await skills_db.commit()
+            hidden_list = await client.get("/api/v1/opportunities")
+            assert hidden_list.json()["items"] == []
+            assert hidden_list.json()["empty_reason"] == "no_matching_skills"
+            assert (
+                await client.get(f"/api/v1/opportunities/{role.json()['id']}")
+            ).status_code == 404
+            assert (
+                await client.post(f"/api/v1/opportunities/{role.json()['id']}/application-draft")
+            ).status_code == 422
+            async with TestSession() as skills_db:
+                student_profile = await skills_db.scalar(
+                    select(StudentProfile).where(StudentProfile.user_id == student.id)
+                )
+                assert student_profile is not None
+                student_profile.skills = [{"name": "React.js", "proficiency": "strong"}]
+                await skills_db.commit()
             forbidden = await client.get("/api/v1/admin/recruitment/companies")
             assert forbidden.status_code == 403
             legacy_submission = await client.post(
@@ -1181,6 +1247,8 @@ async def test_http_contract_enforces_roles_and_connects_publication_to_applicat
                 headers={"Idempotency-Key": "api-application-001"},
                 json={"role_id": role.json()["id"], "resume_version_id": str(resume.id)},
             )
+
+
             assert legacy_submission.status_code == 410, legacy_submission.text
             assert legacy_submission.json()["error"]["code"] == "canonical_packet_required"
 
@@ -1327,7 +1395,7 @@ async def test_application_packet_is_pinned_encrypted_idempotent_and_tenant_scop
         profile.phone = "+91 90000 00000"
         profile.academic_year = "Final year"
         profile.city = "Pune"
-        profile.country_code = "IN"
+        profile.country_code = None
         profile.revision = 2
         role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
         first_form = await upsert_application_form(
@@ -1370,6 +1438,7 @@ async def test_application_packet_is_pinned_encrypted_idempotent_and_tenant_scop
             profile.revision,
             draft.revision,
         )
+        assert draft.current_step == "disclosures"
         draft = await save_draft_disclosures(
             db,
             institution.id,

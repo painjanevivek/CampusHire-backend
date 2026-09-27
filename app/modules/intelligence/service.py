@@ -33,6 +33,7 @@ from app.modules.intelligence.schemas import (
     SemanticMatchResponse,
 )
 from app.modules.matching.scoring import score_match
+from app.modules.recruitment.skill_visibility import matches_role_skills
 
 
 class Embedder(Protocol):
@@ -52,6 +53,60 @@ def _fingerprint(payload: object) -> str:
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
+def match_fingerprint(
+    *, institution_id: UUID, student_user_id: UUID, role_id: UUID,
+    role_updated_at: datetime, resume_version_id: UUID | None,
+    profile_revision: int, embedding_model: str,
+) -> str:
+    """Identify the exact reviewed sources used by a semantic match."""
+    return _fingerprint(
+        {
+            "institution": institution_id,
+            "student": student_user_id,
+            "role": role_id,
+            "role_updated": role_updated_at,
+            "resume": resume_version_id,
+            "profile_revision": profile_revision,
+            "embedding_model": embedding_model,
+            "embedding_version": "v1",
+            "scoring_version": "match-v1",
+            "projection_version": "reviewed-resume-v2",
+        }
+    )
+
+
+def reviewed_resume_evidence(
+    resume: ResumeVersion | None,
+) -> tuple[dict[str, object], set[str]]:
+    """Read reviewed generated content without including direct identifiers."""
+    data = (
+        resume.extracted_data
+        if resume is not None and isinstance(resume.extracted_data, dict)
+        else {}
+    )
+    accepted = data.get("accepted")
+    content = accepted if isinstance(accepted, dict) else data
+    safe = {
+        key: content.get(key)
+        for key in ("summary", "skills", "skill_groups", "projects", "experience")
+    }
+    listed_skills = safe.get("skills")
+    skills = {
+        item.strip()
+        for item in (listed_skills if isinstance(listed_skills, list) else [])
+        if isinstance(item, str) and item.strip()
+    }
+    groups = safe.get("skill_groups")
+    for group in groups if isinstance(groups, list) else []:
+        if isinstance(group, dict) and isinstance(group.get("items"), list):
+            skills.update(
+                item.strip()
+                for item in group["items"]
+                if isinstance(item, str) and item.strip()
+            )
+    return safe, skills
+
+
 def _profile_projection(
     profile: StudentProfile, resume: ResumeVersion | None, project_count: int
 ) -> tuple[str, set[str], float]:
@@ -61,12 +116,8 @@ def _profile_projection(
         for item in profile.skills
         if isinstance(item, dict) and str(item.get("name", "")).strip()
     }
-    data = (
-        resume.extracted_data
-        if resume is not None and isinstance(resume.extracted_data, dict)
-        else {}
-    )
-    safe_resume = {key: data.get(key) for key in ("summary", "skills", "projects", "experience")}
+    safe_resume, resume_skills = reviewed_resume_evidence(resume)
+    skills.update(resume_skills)
     projects = safe_resume.get("projects")
     resume_project_count = len(projects) if isinstance(projects, list) else 0
     project_evidence = min(1.0, max(project_count, resume_project_count) / 2)
@@ -141,6 +192,8 @@ async def semantic_match(
     )
     if role is None:
         raise IntelligenceError("opportunity_not_found")
+    if not matches_role_skills(role.skills, profile.skills if profile else []):
+        raise IntelligenceError("opportunity_not_found")
     settings = get_settings()
     if profile is None:
         return SemanticMatchResponse(
@@ -168,18 +221,14 @@ async def semantic_match(
         profile, resume, project_count
     )
     role_text = _role_projection(role)
-    fingerprint = _fingerprint(
-        {
-            "institution": institution_id,
-            "student": student_user_id,
-            "role": role.id,
-            "role_updated": role.updated_at,
-            "resume": resume.id if resume else None,
-            "profile_revision": profile.revision,
-            "embedding_model": settings.gemini_embedding_model,
-            "embedding_version": "v1",
-            "scoring_version": "match-v1",
-        }
+    fingerprint = match_fingerprint(
+        institution_id=institution_id,
+        student_user_id=student_user_id,
+        role_id=role.id,
+        role_updated_at=role.updated_at,
+        resume_version_id=resume.id if resume else None,
+        profile_revision=profile.revision,
+        embedding_model=settings.gemini_embedding_model,
     )
     existing = await db.scalar(
         select(SemanticMatchEvidence)

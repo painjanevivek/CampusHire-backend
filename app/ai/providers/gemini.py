@@ -2,23 +2,25 @@ import json
 import time
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 from app.ai.providers.base import StructuredGenerationResult
 from app.core.config import get_settings
 
 
 class GeminiProvider:
-    def __init__(self) -> None:
+    def __init__(
+        self, *, generation_model: str | None = None, timeout_ms: int | None = None
+    ) -> None:
         settings = get_settings()
         if not settings.gemini_api_key:
             raise RuntimeError("Gemini is not configured")
         self._client = genai.Client(
             api_key=settings.gemini_api_key,
-            http_options=types.HttpOptions(timeout=settings.gemini_timeout_ms),
+            http_options=types.HttpOptions(timeout=timeout_ms or settings.gemini_timeout_ms),
         )
         self._embedding_model = settings.gemini_embedding_model
-        self._generation_model = settings.gemini_generation_model
+        self._generation_model = generation_model or settings.gemini_generation_model
         self._max_output_tokens = settings.ai_max_output_tokens
 
     def embed(self, text: str) -> list[float]:
@@ -32,19 +34,42 @@ class GeminiProvider:
     def generate_structured(
         self, *, prompt: str, response_schema: dict[str, object]
     ) -> StructuredGenerationResult:
+        return self.generate_structured_with_media(
+            prompt=prompt, response_schema=response_schema, media=[]
+        )
+
+    def generate_structured_with_media(
+        self,
+        *,
+        prompt: str,
+        response_schema: dict[str, object],
+        media: list[tuple[bytes, str]],
+    ) -> StructuredGenerationResult:
         if not self._generation_model:
             raise RuntimeError("Gemini text generation is not configured")
         started = time.perf_counter()
-        response = self._client.models.generate_content(
-            model=self._generation_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_json_schema=response_schema,
-                max_output_tokens=self._max_output_tokens,
-                temperature=0.2,
-            ),
+        contents: str | types.Content = prompt
+        if media:
+            parts = [types.Part.from_text(text=prompt)]
+            parts.extend(
+                types.Part.from_bytes(data=data, mime_type=mime) for data, mime in media
+            )
+            contents = types.Content(parts=parts)
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_json_schema=response_schema,
+            max_output_tokens=self._max_output_tokens,
         )
+        if not self._generation_model.startswith("gemini-3"):
+            config.temperature = 0.2
+        try:
+            response = self._client.models.generate_content(
+                model=self._generation_model,
+                contents=contents,
+                config=config,
+            )
+        except errors.APIError as error:
+            raise RuntimeError("Gemini structured generation is unavailable") from error
         if not response.text:
             raise RuntimeError("Gemini returned no structured content")
         parsed = json.loads(response.text)

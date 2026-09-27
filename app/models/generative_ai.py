@@ -91,6 +91,8 @@ class AiMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)
+    attachment_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    attachment_context: Mapped[str | None] = mapped_column(Text, nullable=True)
     citations: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     missing_evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
     proposal_id: Mapped[UUID | None] = mapped_column(

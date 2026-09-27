@@ -45,6 +45,14 @@ class EducationEntry(StrictModel):
     score_scale: Literal["cgpa_10", "percentage"]
     active_backlogs: int = Field(default=0, ge=0, le=100)
 
+    @model_validator(mode="after")
+    def require_percentage_for_school_records(self) -> "EducationEntry":
+        if self.qualification_level != "degree" and self.score_scale != "percentage":
+            raise ValueError("Class 10, Class 12 and diploma marks must be percentages")
+        if self.score_scale == "cgpa_10" and self.score > 10:
+            raise ValueError("CGPA cannot exceed 10")
+        return self
+
 
 class ExperienceEntry(StrictModel):
     organization: str = Field(min_length=2, max_length=200)
@@ -146,6 +154,14 @@ class StudentOnboardingUpdate(StrictModel):
             raise ValueError(f"Step {self.step} data is required")
         if self.step == 2 and not self.education:
             raise ValueError("At least one education record is required")
+        if self.step == 2 and self.education:
+            levels = [item.qualification_level for item in self.education]
+            if "degree" not in levels or "class_10" not in levels or not (
+                "class_12" in levels or "diploma" in levels
+            ):
+                raise ValueError("Provide a degree, Class 10 marks, and Class 12 or diploma marks")
+            if len(levels) != len(set(levels)):
+                raise ValueError("Only one record per qualification level is supported")
         return self
 
 

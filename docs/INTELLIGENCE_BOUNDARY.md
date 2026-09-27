@@ -24,3 +24,21 @@ profile, resume, and role. The existing failed row is locked and refreshed with 
 and evaluation time, avoiding a unique-fingerprint collision. A successful row is never replaced
 by a later outage. This retry does not alter application snapshots or deterministic eligibility,
 and the existing endpoint rate limit still applies. Dashboard reads do not call the provider.
+
+The student dashboard shows a current cached semantic score when one exists for the exact
+profile revision, generated resume version, role revision, and embedding model. Otherwise it
+uses a local `profile-compatibility-v1` estimate when the published role lists skills: 80% role
+skill coverage from the saved profile or reviewed generated resume, plus 20% target-role title
+overlap. A role without published skills has no local score. This estimate makes no paid provider
+call, does not change formal eligibility or application access, and is identified separately
+from semantic matching in the dashboard. Scores below 60 are least compatible, 60–75 are
+moderately compatible, and above 75 are compatible. These bands are preparation guidance,
+not hiring probabilities.
+
+The reviewed-resume projection now reads the generated resume's `accepted` content, including
+skill groups, rather than expecting those fields at the top level. Its fingerprint version is
+incremented so older cached matches cannot masquerade as scores from the corrected inputs.
+
+The dashboard prioritizes currently published, formally eligible roles with an existing
+application before other eligible roles. Closed roles and application history remain in the
+Applications workspace.

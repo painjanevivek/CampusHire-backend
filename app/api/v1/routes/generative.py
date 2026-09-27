@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.ai.providers.base import StructuredGenerator
 from app.ai.providers.gemini import GeminiProvider
+from app.core.config import get_settings
 from app.core.rate_limit import enforce_fixed_window_limit
 from app.models.auth import UserRole
 from app.modules.auth.dependencies import (
@@ -44,7 +45,11 @@ router = APIRouter(
 
 def _generator() -> StructuredGenerator | None:
     try:
-        return GeminiProvider()
+        settings = get_settings()
+        return GeminiProvider(
+            generation_model=settings.gemini_resume_model,
+            timeout_ms=settings.gemini_complex_timeout_ms,
+        )
     except RuntimeError:
         return None
 
@@ -60,11 +65,33 @@ def _raise_ai_error(error: Exception) -> NoReturn:
             },
         ) from error
     if isinstance(error, GenerationUnavailableError):
+        messages = {
+            "capability_disabled": (
+                "AI resume drafting is not enabled for this institution. "
+                "You can still use the manual builder."
+            ),
+            "provider_unavailable": (
+                "AI resume drafting is not configured. You can still use the manual builder."
+            ),
+            "budget_not_configured": (
+                "AI resume drafting has no configured usage budget. "
+                "You can still use the manual builder."
+            ),
+            "tenant_budget_exhausted": (
+                "This institution has reached its monthly AI drafting limit. "
+                "You can still use the manual builder."
+            ),
+            "generation_validation_failed": (
+                "AI could not produce a supported draft. Try again or use the manual builder."
+            ),
+        }
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": str(error),
-                "message": "AI drafting is unavailable. Manual resume creation remains available.",
+                "message": messages.get(
+                    str(error), "AI drafting is unavailable. You can still use the manual builder."
+                ),
             },
         ) from error
     if isinstance(error, ResumeWorkflowError):
@@ -86,6 +113,9 @@ async def read_resume_evidence(db: Database, principal: CurrentPrincipal) -> Res
     institution_id = _tenant(principal)
     try:
         await require_capability(db, institution_id, "ai_resume_studio")
+        await require_capability(db, institution_id, "ai_generation")
+        if _generator() is None:
+            raise GenerationUnavailableError("provider_unavailable")
     except GenerationUnavailableError as error:
         _raise_ai_error(error)
     return ResumeEvidenceResponse(

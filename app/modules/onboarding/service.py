@@ -220,6 +220,7 @@ async def update_student_onboarding(
         )
         profile.education = [
             {
+                "qualification_level": item.qualification_level,
                 "degree": item.degree,
                 "branch": item.branch,
                 "institution": item.institution,
@@ -312,7 +313,7 @@ async def update_student_onboarding(
         if not all(required):
             raise OnboardingValidationError("Complete all required onboarding fields before review")
         profile.onboarding_completed_at = datetime.now(UTC)
-    profile.onboarding_step = min(payload.step + 1, 7)
+    profile.onboarding_step = max(profile.onboarding_step, min(payload.step + 1, 7))
     profile.revision += 1
     await record_product_event(
         db,

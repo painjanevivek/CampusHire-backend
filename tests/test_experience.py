@@ -115,16 +115,30 @@ async def test_http_experience_roles_and_saved_view_ownership():
     from app.core.database import get_db
     from app.main import app
     from app.models.auth import Session
+    from app.models.profile import StudentProfile
     from app.modules.auth.dependencies import (
         AuthenticatedPrincipal,
         get_current_principal,
         verify_authenticated_csrf,
     )
+    from app.modules.auth.placement_access import current_academic_year_start
     from app.modules.auth.security import hash_secret
 
     async with TestSession() as db:
         institution, admin, student = await seed_people(db, "http-experience")
-        _, _, other = await seed_people(db, "http-other")
+        profile = await db.scalar(
+            select(StudentProfile).where(StudentProfile.user_id == student.id)
+        )
+        academic_year = current_academic_year_start(institution)
+        assert profile is not None and academic_year is not None
+        profile.prn = f"1{(academic_year - 2) % 100:02d}B1B123"
+        other_institution, _, other = await seed_people(db, "http-other")
+        other_profile = await db.scalar(
+            select(StudentProfile).where(StudentProfile.user_id == other.id)
+        )
+        other_academic_year = current_academic_year_start(other_institution)
+        assert other_profile is not None and other_academic_year is not None
+        other_profile.prn = f"1{(other_academic_year - 2) % 100:02d}B1B123"
         role, _ = await publish_sample_role(db, institution, admin, include_missing_rule=False)
         resume = await db.scalar(select(ResumeVersion).where(ResumeVersion.user_id == student.id))
         application, _ = await create_application(

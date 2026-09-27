@@ -2,6 +2,32 @@
 
 CampusHire generates a student resume as a private, versioned PDF from profile details the student has reviewed. The API checks required fields and queues a durable `pdf_generation` job. The local worker compiles the checked-in `campushire-modern` LaTeX template and stores the validated PDF in the existing private resume store. PDF generation does not call an AI provider or an external service.
 
+## AI Resume Studio drafting
+
+AI Resume Studio can draft optional wording before the same local PDF workflow. It uses the
+`gemini-3.5-flash-lite` model by default because its documented free tier supports structured JSON
+outputs. The free tier has account-dependent limits and Google states that submitted data may be used
+to improve its products. Do not treat a free API key as a real-data release approval. See the
+[Gemini model documentation](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite),
+[pricing and data-use terms](https://ai.google.dev/gemini-api/docs/pricing), and
+[rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
+
+To use Studio in local development, configure `GEMINI_API_KEY`, `GEMINI_RESUME_MODEL`,
+`AI_GENERATION=true`, `AI_RESUME_STUDIO=true`, a bounded AI budget, and the institution's
+`ai_generation` and `ai_resume_studio` feature flags. The student must select profile evidence and
+explicitly consent to send it to Google Gemini for each draft. The structured name, email, and phone
+fields are not added to the model prompt, but selected free-text evidence may contain personal
+information, so the UI displays the exact evidence text before consent. Every generated claim cites
+selected evidence, is checked against
+unsupported facts and invented metrics, and must be reviewed before acceptance. If selected profile
+evidence changes, the student must generate and review a new proposal.
+
+Accepted AI wording is combined with saved profile titles, dates, links, education, and credentials
+using the manual builder's line format. Both paths create a `ResumeContent` and queue the same local
+`campushire-modern` PDF renderer. The AI model never generates a PDF or bypasses the resume worker.
+The current release status still prohibits production/real-data promotion until its separate gates
+are closed.
+
 ## Local prerequisites
 
 Install a local TeX distribution with XeLaTeX and the template dependencies before starting the API worker. The current development machine was verified with MiKTeX 24.1. MiKTeX Console should finish installing the required packages before worker startup. Compiler auto-install is disabled during each job so a missing package produces a controlled retryable error instead of an unplanned network request.
@@ -26,6 +52,13 @@ Run the API and worker as separate local processes:
 python -m uvicorn app.main:app --reload
 python -m app.worker
 ```
+
+Keep the worker running alongside the API. The API only queues PDF jobs; it does not compile
+them. If AI Resume Studio says a PDF is waiting for the worker for more than 30 seconds, check
+that `python -m app.worker` is running and can access the same database, private store, and
+XeLaTeX installation as the API. Restarting the frontend or asking Gemini for another draft
+will not advance an already-queued PDF. The accepted proposal and queued resume version remain
+saved while the worker is unavailable.
 
 The worker must run in an account that can execute the configured TeX binary and write its temporary build directory. No student content is printed to compiler logs or application logs. Temporary `.tex`, `.log`, and intermediate files are removed after compilation.
 

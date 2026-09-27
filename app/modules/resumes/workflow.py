@@ -238,7 +238,10 @@ async def create_generated_version(
         (
             await db.scalars(
                 select(ResumeVersion)
-                .options(selectinload(ResumeVersion.processing_job))
+                .options(
+                    selectinload(ResumeVersion.processing_job),
+                    selectinload(ResumeVersion.suggestions),
+                )
                 .where(
                     ResumeVersion.user_id == user_id,
                     ResumeVersion.source == ResumeSource.GENERATED.value,
@@ -249,8 +252,16 @@ async def create_generated_version(
         ).all()
     )
     for existing in existing_versions:
+        reusable = existing.status in {
+            ResumeStatus.QUEUED.value,
+            ResumeStatus.PROCESSING.value,
+        } or (
+            existing.status == ResumeStatus.COMPLETED.value
+            and existing.scan_status == ScanStatus.CLEAN.value
+        )
         if (
-            existing.extracted_data.get("evidence_digest") == digest
+            reusable
+            and existing.extracted_data.get("evidence_digest") == digest
             and existing.extracted_data.get("template_id") == TEMPLATE_ID
             and existing.extracted_data.get("template_version") == TEMPLATE_VERSION
         ):
@@ -539,10 +550,13 @@ async def delete_owned_version(
     if version.status in {ResumeStatus.QUEUED.value, ResumeStatus.PROCESSING.value}:
         raise ResumeWorkflowError("resume_processing_in_progress")
     storage_key = version.storage_key
+    pending_generation_key = f"generated-pending/{version.id.hex}"
     await db.delete(version)
     await db.flush()
     try:
-        store.delete(storage_key)
+        # Failed PDF generation has a database-only placeholder, not an object to remove.
+        if storage_key != pending_generation_key:
+            store.delete(storage_key)
     except ObjectStoreError as error:
         await db.rollback()
         raise ResumeWorkflowError("resume_storage_unavailable") from error

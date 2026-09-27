@@ -25,6 +25,7 @@ class PublishRolePreview(BaseModel):
     description: str
     location: str
     work_mode: str
+    is_paid: bool | None
     salary_display: str | None
     requirements: list[str]
     rules: list[dict[str, object]]
@@ -119,6 +120,7 @@ async def publication_preview(
                 "description",
                 "location",
                 "work_mode",
+                "is_paid",
                 "salary_display",
                 "requirements",
             )

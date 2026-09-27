@@ -36,6 +36,7 @@ from app.modules.recruitment.schemas import (
     ApplicationAppealResolution,
     ApplicationAppealResponse,
     ApplicationCreate,
+    ApplicationDecisionCreate,
     ApplicationOverrideCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
@@ -62,6 +63,7 @@ from app.modules.recruitment.schemas import (
     RuleSetResponse,
     StatusEventResponse,
 )
+from app.modules.recruitment.skill_visibility import matches_role_skills, student_skill_items
 
 
 class RecruitmentError(ValueError):
@@ -503,6 +505,7 @@ async def duplicate_drive(
             employment_type=source_role.employment_type,
             location=source_role.location,
             work_mode=source_role.work_mode,
+            is_paid=source_role.is_paid,
             salary_display=source_role.salary_display,
             skills=list(source_role.skills),
             requirements=list(source_role.requirements),
@@ -570,6 +573,7 @@ async def role_response(
         employment_type=role.employment_type,
         location=role.location,
         work_mode=role.work_mode,
+        is_paid=role.is_paid,
         salary_display=role.salary_display,
         skills=list(role.skills),
         requirements=list(role.requirements),
@@ -629,12 +633,14 @@ async def update_role(
     }:
         raise RecruitmentError("published_role_is_immutable")
     values = payload.model_dump(exclude_unset=True)
+    if values.get("is_paid") is False:
+        values["salary_display"] = None
     if (
         role.status == PublicationStatus.PUBLISHED.value
         and drive.status == PublicationStatus.PUBLISHED.value
     ):
         pending = dict(role.pending_changes)
-        pending.update(payload.model_dump(mode="json", exclude_unset=True))
+        pending.update(values)
         RoleUpdate.model_validate(pending)
         role.pending_changes = pending
     elif role.status in {
@@ -984,7 +990,11 @@ async def list_opportunities(
             )
         )
     ).all()
-    role_ids = [item[0].id for item in all_roles]
+    student_skills = await student_skill_items(db, institution, student_user_id)
+    visible_roles = [
+        item for item in all_roles if matches_role_skills(item[0].skills, student_skills)
+    ]
+    role_ids = [item[0].id for item in visible_roles]
     rules = await _published_rules(db, role_ids)
     facts = await _student_facts(db, institution, student_user_id)
     saved_ids = set(
@@ -1009,7 +1019,7 @@ async def list_opportunities(
         ).all()
     }
     candidates: list[OpportunityResponse] = []
-    for role, drive, company in all_roles:
+    for role, drive, company in visible_roles:
         base = await role_response(db, role, drive=drive, company=company)
         application = applications.get(role.id)
         candidates.append(
@@ -1027,7 +1037,11 @@ async def list_opportunities(
         if (eligibility_status is None or item.eligibility.status == eligibility_status)
         and (application_status is None or item.application_status == application_status)
     ]
-    if sort == "newest":
+    if sort == "applied":
+        filtered.sort(
+            key=lambda item: (item.application_id is None, item.deadline_at, str(item.id))
+        )
+    elif sort == "newest":
         filtered.sort(
             key=lambda item: (item.published_at or datetime.min.replace(tzinfo=UTC), str(item.id)),
             reverse=True,
@@ -1051,14 +1065,13 @@ async def list_opportunities(
             deadline_within_days,
         )
     )
-    profile_incomplete = not facts.get("degree") or not facts.get("graduation_year")
     empty_reason = None
     if not items:
         empty_reason = (
             "filters_exclude_results"
-            if filter_active
-            else "profile_incomplete"
-            if all_roles and profile_incomplete
+            if filter_active or total > 0
+            else "no_matching_skills"
+            if all_roles
             else "no_published_drive"
         )
     return OpportunityPage(
@@ -1088,6 +1101,9 @@ async def get_opportunity(
         )
     )
     if role is None:
+        raise RecruitmentError("opportunity_not_found")
+    student_skills = await student_skill_items(db, institution, student_user_id)
+    if not matches_role_skills(role.skills, student_skills):
         raise RecruitmentError("opportunity_not_found")
     rule_set = (await _published_rules(db, [role.id])).get(role.id)
     facts = await _student_facts(db, institution, student_user_id)
@@ -1152,6 +1168,14 @@ async def _application_response(db: AsyncSession, application: Application) -> A
             .order_by(ApplicationStatusEvent.created_at)
         )
     ).all()
+    actor_ids = {item.actor_user_id for item in history}
+    actors = (
+        {
+            actor.id: actor.username or actor.email
+            for actor in (await db.scalars(select(User).where(User.id.in_(actor_ids)))).all()
+        }
+        if actor_ids else {}
+    )
     overrides = (
         await db.scalars(
             select(ApplicationOverride)
@@ -1251,6 +1275,7 @@ async def _application_response(db: AsyncSession, application: Application) -> A
                 from_status=item.from_status,
                 to_status=item.to_status,
                 actor_user_id=item.actor_user_id,
+                actor_display_name=actors.get(item.actor_user_id, "Former account"),
                 reason=item.reason,
                 created_at=item.created_at,
             )
@@ -1949,6 +1974,40 @@ async def update_application_status(
             created_at=datetime.now(UTC),
         )
     )
+    await db.flush()
+    await db.refresh(application)
+    return application
+
+
+async def record_application_decision(
+    db: AsyncSession,
+    institution_id: UUID | None,
+    application_id: UUID,
+    actor_user_id: UUID,
+    payload: ApplicationDecisionCreate,
+) -> Application:
+    """Record an institution officer's reasoned selection or rejection."""
+    application = await _owned_application(db, institution_id, application_id)
+    if application.revision != payload.expected_revision:
+        raise RecruitmentError("revision_conflict")
+    if application.status == "withdrawn":
+        raise RecruitmentError("withdrawn_application_decision_invalid")
+    if application.status == payload.status:
+        raise RecruitmentError("application_decision_unchanged")
+    previous = application.status
+    application.status = payload.status
+    application.revision += 1
+    from app.modules.experience.service import close_requests
+
+    await close_requests(db, application, actor_user_id)
+    db.add(ApplicationStatusEvent(
+        application_id=application.id,
+        from_status=previous,
+        to_status=payload.status,
+        actor_user_id=actor_user_id,
+        reason=payload.reason,
+        created_at=datetime.now(UTC),
+    ))
     await db.flush()
     await db.refresh(application)
     return application

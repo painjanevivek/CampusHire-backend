@@ -16,6 +16,7 @@ class ResumeDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     professional_summary: GroundedClaim | None = None
+    strengths: list[GroundedClaim] = Field(default_factory=list, max_length=12)
     education: list[GroundedClaim] = Field(default_factory=list, max_length=12)
     project_bullets: list[GroundedClaim] = Field(default_factory=list, max_length=20)
     experience_bullets: list[GroundedClaim] = Field(default_factory=list, max_length=20)
@@ -34,8 +35,9 @@ class ResumeEvidenceResponse(BaseModel):
 
 
 class ResumeProposalCreate(BaseModel):
-    selected_evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+    selected_evidence_ids: list[str] = Field(min_length=1, max_length=100)
     purpose_role_id: UUID | None = None
+    provider_data_consent: Literal[True]
 
 
 class ProposalEditRequest(BaseModel):

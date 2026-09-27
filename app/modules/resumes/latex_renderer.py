@@ -29,9 +29,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 TEMPLATE_ID = "campushire-modern"
-TEMPLATE_VERSION = "1"
+TEMPLATE_VERSION = "2"
 GENERATOR_VERSION = f"{TEMPLATE_ID}-v{TEMPLATE_VERSION}"
-TEMPLATE_RESOURCE = "templates/campushire_modern_v1.tex"
+TEMPLATE_RESOURCE = "templates/campushire_modern_v2.tex"
 PDF_LIMIT = 5 * 1024 * 1024
 DATE_PATTERN = re.compile(r"(?i)(?:19|20)\d{2}|present|current|now")
 MISSING_DEPENDENCY_PATTERN = re.compile(
@@ -111,7 +111,7 @@ def _render_entry(item: ResumeEntry | str, section: str) -> str:
         dates = ""
         details: list[str] = []
         if section == "education":
-            metadata_source = " · ".join(parts[1:]) if len(parts) > 1 else parts[0]
+            metadata_source = parts[1] if len(parts) > 1 else parts[0]
             metadata = [_clean_text(part) for part in re.split(r"\s*[·•]\s*", metadata_source)]
             if len(parts) == 1 and metadata:
                 title = metadata.pop(0)
@@ -125,7 +125,7 @@ def _render_entry(item: ResumeEntry | str, section: str) -> str:
             details = [*metadata, *parts[2:]]
         elif section == "experience" and len(parts) > 1:
             metadata = [_clean_text(part) for part in re.split(r"\s*[·•]\s*", parts[1])]
-            if len(metadata) > 1 and DATE_PATTERN.search(metadata[-1]):
+            if metadata and DATE_PATTERN.search(metadata[-1]):
                 dates = metadata.pop()
             organization = metadata[0] if metadata else ""
             details = [*metadata[1:], *parts[2:]]
@@ -133,14 +133,25 @@ def _render_entry(item: ResumeEntry | str, section: str) -> str:
             details = parts[1:]
         entry_url = next((part for part in details if _safe_url(part)), None)
         details = [part for part in details if part != entry_url]
-        bullets = [latex_escape(detail) for detail in details]
+        notes = [
+            detail
+            for detail in details
+            if detail.lower().startswith(("technologies:", "cgpa:", "percentage:"))
+        ]
+        details = [detail for detail in details if detail not in notes]
+        bullets = [latex_escape(re.sub(r"^\d+[.)]\s*", "", detail)) for detail in details]
         heading = latex_escape(title)
+        link = ""
         if entry_url:
-            heading = _href(_safe_url(entry_url) or "", title)
+            safe_url = _safe_url(entry_url)
+            if safe_url:
+                parsed = urlsplit(safe_url)
+                link = _href(safe_url, f"{parsed.netloc}{parsed.path}".rstrip("/"))
         rendered = [
             rf"\entryheading{{{heading}}}{{{latex_escape(organization)}}}"
-            rf"{{{latex_escape(dates)}}}{{}}"
+            rf"{{{latex_escape(dates) or link}}}{{{link if dates else ''}}}"
         ]
+        rendered.extend(rf"\textit{{{latex_escape(note)}}}\par" for note in notes)
         if bullets:
             rendered.append(
                 r"\begin{itemize}"
@@ -166,11 +177,13 @@ def _render_entry(item: ResumeEntry | str, section: str) -> str:
     )
     title_rendered = latex_escape(title)
     safe_url = _safe_url(item.url)
+    link = ""
     if safe_url:
-        title_rendered = _href(safe_url, title)
+        parsed = urlsplit(safe_url)
+        link = _href(safe_url, f"{parsed.netloc}{parsed.path}".rstrip("/"))
     rendered = [
         rf"\entryheading{{{title_rendered}}}{{{latex_escape(subtitle)}}}"
-        rf"{{{latex_escape(date)}}}{{}}"
+        rf"{{{latex_escape(date) or link}}}{{{link if date else ''}}}"
     ]
     detail_items = [item.description, *item.bullets]
     technologies = ", ".join(
@@ -199,6 +212,17 @@ def _section(title: str, entries: list[str]) -> str:
 
 def _section_map(content: ResumeContent) -> dict[ResumeSection, tuple[str, list[str]]]:
     values: dict[ResumeSection, tuple[str, list[str]]] = {
+        "strengths": (
+            "Strengths",
+            [
+                "\\begin{itemize}\n"
+                + "\n".join(
+                    rf"\item {latex_escape(_clean_text(value))}"
+                    for value in content.strengths if _clean_text(value)
+                )
+                + "\n\\end{itemize}"
+            ] if any(_clean_text(value) for value in content.strengths) else [],
+        ),
         "experience": (
             "Experience",
             [_render_entry(item, "experience") for item in content.experience],
@@ -276,6 +300,20 @@ def _contact_lines(content: ResumeContent) -> list[str]:
     return lines
 
 
+def _render_summary(value: str) -> str:
+    lines = [_clean_text(line) for line in value.splitlines() if _clean_text(line)]
+    rendered: list[str] = []
+    for line in lines:
+        label, separator, detail = line.partition(":")
+        if separator and len(label) <= 30 and detail.strip():
+            rendered.append(
+                rf"\textbf{{{latex_escape(label)}}}: {latex_escape(detail.strip())}\par"
+            )
+        else:
+            rendered.append(latex_escape(line) + r"\par")
+    return _section("Professional Summary", rendered)
+
+
 def render_latex(content: ResumeContent, *, artifact_id: str | None = None) -> str:
     """Render the versioned LaTeX template using only validated structured data."""
     resource = files("app.modules.resumes").joinpath(TEMPLATE_RESOURCE)
@@ -286,20 +324,17 @@ def render_latex(content: ResumeContent, *, artifact_id: str | None = None) -> s
 
     digest = evidence_digest(content)
     links = _contact_lines(content)
+    name = latex_escape(_clean_text(content.full_name))
     header = "\n".join(
         [
             r"\begin{center}",
-            rf"{{\LARGE\bfseries {latex_escape(_clean_text(content.full_name))}}}\par",
-            r"\vspace{4pt}",
+            rf"{{\fontsize{{19}}{{22}}\selectfont\bfseries {name}}}\par",
+            r"\vspace{3pt}",
             r" \textbar{} ".join(links),
             r"\end{center}",
         ]
     )
-    summary = (
-        _section("Summary", [latex_escape(_clean_text(content.summary))])
-        if _clean_text(content.summary)
-        else ""
-    )
+    summary = _render_summary(content.summary) if _clean_text(content.summary) else ""
     sections = _section_map(content)
     order: list[ResumeSection] = list(content.section_order)
     order.extend(section for section in sections if section not in order)

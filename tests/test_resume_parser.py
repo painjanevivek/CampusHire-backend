@@ -52,6 +52,8 @@ def docker_parser() -> DockerPdfParser:
 def test_production_configuration_accepts_only_the_sandbox_backend() -> None:
     settings = Settings(
         app_env="production",
+        interview_practice_pilot=False,
+        agent_runs=False,
         malware_scanner="clamav",
         resume_parser_backend="docker",
         resume_parser_image="registry.example.edu/campushire/parser@sha256:abc123",
